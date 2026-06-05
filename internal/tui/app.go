@@ -192,7 +192,7 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 	case !it.ready:
 		a.active = newSoon(it.label)
 	case it.id == "install":
-		a.active = newInstall(a.svc, a.catalog, a.installed)
+		a.active = newDetection(a.svc, a.catalog, a.installed)
 	case it.id == "uninstall":
 		a.active = newUninstall(a.svc, a.catalog, a.installed)
 	case it.id == "sync":

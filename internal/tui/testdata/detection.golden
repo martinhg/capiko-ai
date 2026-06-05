@@ -1,0 +1,20 @@
+capiko-ai  ·  Copilot configurator
+
+System Detection
+
+  OS  darwin (arm64)
+  Shell  fish
+
+Tools
+  copilot   found
+  node      not found
+  npm       not found
+  git       found
+
+  ~/.copilot    present
+  Copilot CLI target  1.0.59
+
+▸ Continue
+  Back
+
+↑/↓ move · enter select · esc back

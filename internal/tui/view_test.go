@@ -11,6 +11,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")
@@ -60,6 +61,20 @@ func TestViewGolden(t *testing.T) {
 
 	uninstallEmpty := newUninstall(svc, testCatalog(), map[string]bool{})
 
+	// A fixed report keeps the detection golden deterministic across machines.
+	detection := &detectionScreen{
+		report: sysinfo.Report{
+			OS: "darwin", Arch: "arm64", Shell: "fish",
+			Tools: []sysinfo.Tool{
+				{Name: "copilot", Found: true},
+				{Name: "node", Found: false},
+				{Name: "npm", Found: false},
+				{Name: "git", Found: true},
+			},
+		},
+		hasConfig: true,
+	}
+
 	cases := []struct {
 		name string
 		view string
@@ -70,6 +85,7 @@ func TestViewGolden(t *testing.T) {
 		{"menu", App{state: appMenu, catalog: testCatalog()}.View()},
 		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "1.1.0"}.View()},
 		{"menu_stale", App{state: appMenu, catalog: testCatalog(), stale: []string{"capiko-hello", "capiko-pr"}}.View()},
+		{"detection", App{state: appScreen, active: detection}.View()},
 		{"install_picking", App{state: appScreen, active: installPicking}.View()},
 		{"install_done", App{state: appScreen, active: installDone}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
