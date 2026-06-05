@@ -1,0 +1,22 @@
+# Compiled binaries
+/capiko
+/capiko-ai
+*.exe
+*.test
+
+# Test / coverage output
+*.out
+coverage.*
+
+# Go workspace
+/vendor/
+go.work
+go.work.sum
+
+# Local tooling state
+.atl/
+
+# OS / editor noise
+.DS_Store
+.idea/
+*.swp
