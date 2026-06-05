@@ -25,4 +25,11 @@ func TestLoadEmbedded(t *testing.T) {
 	if !byName["capiko-hello"] {
 		t.Errorf("expected capiko-hello in catalog, got %v", byName)
 	}
+
+	// The SDD phase skills bundle must be present and parse.
+	for _, phase := range []string{"explore", "propose", "spec", "design", "tasks", "apply", "verify", "archive"} {
+		if !byName["sdd-"+phase] {
+			t.Errorf("expected sdd-%s in catalog", phase)
+		}
+	}
 }

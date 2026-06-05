@@ -86,6 +86,7 @@ func Render(assignments map[string]string) string {
 
 	b.WriteString("### Rules\n\n")
 	b.WriteString("- Delegate each phase's work to a sub-agent (Task tool); pass the phase's assigned model.\n")
+	b.WriteString("- Each phase has a matching `sdd-<phase>` skill (e.g. `sdd-spec`); load it when running that phase.\n")
 	b.WriteString("- Keep one thin orchestrator thread and synthesize the sub-agents' results.\n")
 	b.WriteString("- A phase with `default` runs on the session model.\n")
 
