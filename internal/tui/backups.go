@@ -105,7 +105,7 @@ func (s *backupsScreen) View() string {
 	for i, m := range s.items {
 		cursor := "  "
 		if i == s.cursor {
-			cursor = titleSty.Render("› ")
+			cursor = titleSty.Render(menuCursor)
 		}
 		line := fmt.Sprintf("%s  %s  (%d skills)",
 			m.CreatedAt.Local().Format("2006-01-02 15:04:05"), m.Reason, len(m.Entries))
