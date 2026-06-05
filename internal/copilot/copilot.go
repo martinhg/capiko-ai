@@ -18,16 +18,23 @@ type Host struct {
 	SkillsDir string // ~/.copilot/skills
 }
 
+// Test seams: swapped in tests so detection does not depend on the real PATH or
+// home directory.
+var (
+	lookPath    = exec.LookPath
+	userHomeDir = os.UserHomeDir
+)
+
 // Detect locates the Copilot CLI. It returns (nil, nil) when Copilot is not
 // installed or has not been initialized yet (no ~/.copilot), so callers can
 // show a friendly message instead of treating it as a hard error. A non-nil
 // error means something unexpected went wrong (e.g. no home directory).
 func Detect() (*Host, error) {
-	bin, err := exec.LookPath("copilot")
+	bin, err := lookPath("copilot")
 	if err != nil {
 		return nil, nil // not installed
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return nil, err
 	}
