@@ -29,9 +29,6 @@ type services struct {
 	backup *backup.Store
 }
 
-// Version is the capiko-ai release, overridable at build time via -ldflags.
-var Version = "0.1.0"
-
 const tagline = "Ecosystem, Frameworks, Workflows"
 
 // screen is one full-screen view routed by the App. Screens render their own
