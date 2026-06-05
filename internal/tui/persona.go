@@ -1,14 +1,47 @@
 package tui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/martinhg/capiko-ai/internal/backup"
+	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/persona"
 	"github.com/martinhg/capiko-ai/internal/skill"
+	"github.com/martinhg/capiko-ai/internal/state"
 )
+
+// applyPersona records and applies p onto Copilot's global instructions file. It
+// snapshots the file through the backup store only when the content will actually
+// change, then records the choice in state. Shared by the persona screen and the
+// post-sync re-apply (capiko's InjectForSync equivalent).
+func applyPersona(host *copilot.Host, store *state.Store, bkp *backup.Store, p persona.Persona) error {
+	if host == nil {
+		return nil
+	}
+	path := filepath.Join(host.ConfigDir, "copilot-instructions.md")
+	content, changed, err := persona.Render(path, p)
+	if err != nil {
+		return err
+	}
+	if changed {
+		if bkp != nil {
+			if _, err := bkp.CreateFiles("persona", Version, []string{path}); err != nil {
+				return fmt.Errorf("backup failed, aborting: %w", err)
+			}
+		}
+		if err := persona.Write(path, content); err != nil {
+			return err
+		}
+	}
+	if store != nil {
+		return store.SetPersona(string(p.ID))
+	}
+	return nil
+}
 
 // personaScreen lets the user pick the persona capiko writes into Copilot's
 // global instructions file. Selecting one applies it and continues to the skill
@@ -77,17 +110,9 @@ func (s *personaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 }
 
 func (s *personaScreen) applyCmd(p persona.Persona) tea.Cmd {
-	host, bkp := s.svc.host, s.svc.backup
+	host, store, bkp := s.svc.host, s.svc.state, s.svc.backup
 	return func() tea.Msg {
-		if host == nil {
-			return personaAppliedMsg{} // nowhere to write; treat as no-op
-		}
-		path := filepath.Join(host.ConfigDir, "copilot-instructions.md")
-		backupRoot := ""
-		if bkp != nil {
-			backupRoot = bkp.Dir()
-		}
-		return personaAppliedMsg{err: persona.Apply(path, backupRoot, p)}
+		return personaAppliedMsg{err: applyPersona(host, store, bkp, p)}
 	}
 }
 
