@@ -84,12 +84,13 @@ func TestViewGolden(t *testing.T) {
 			},
 			Dependencies: []sysinfo.Dependency{
 				{Name: "copilot", Required: true, Found: true, Version: "1.0.59"},
-				{Name: "node", Required: true, Found: false},
-				{Name: "npm", Required: true, Found: false},
+				{Name: "node", Required: true, Found: false, Install: "brew install node", Auto: true},
+				{Name: "npm", Required: true, Found: false, Install: "brew install node", Auto: true},
+				{Name: "pnpm", Required: true, Found: false, Install: "brew install pnpm", Auto: true},
 				{Name: "git", Required: true, Found: true, Version: "2.43.0"},
 				{Name: "curl", Required: true, Found: true, Version: "8.4.0"},
 				{Name: "brew", Required: false, Found: true, Version: "4.2.0"},
-				{Name: "go", Required: false, Found: false},
+				{Name: "go", Required: false, Found: false, Install: "see the tool's website to install go"},
 			},
 			Configs: []sysinfo.Config{
 				{Name: "~/.copilot", Exists: true},

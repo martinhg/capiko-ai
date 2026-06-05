@@ -31,6 +31,9 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
 - Strict TDD toggle — a `t` toggle on the Configure SDD screen; when on, the
   orchestrator block requires the apply/verify phases to follow strict TDD
   (failing test first). Tracked in state and re-applied on sync.
+- Dependency install hints + one-click install — System Detection shows a
+  per-OS install command for each missing dependency, and "Install missing" runs
+  the safe (non-sudo) ones. Also detects `pnpm` (company requirement) with version.
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -64,8 +67,11 @@ Ordered roughly by value for a Copilot-focused tool:
   capiko's skills toward that — add a persistence backend (engram/openspec), a
   shared status contract the phases read/write, and the orchestrator gates — so the
   cycle is resumable and cross-session, not just a set of guidance docs.
-- **Dependency install hints / one-click install** — gentle-ai offers install
-  hints (and can run them) for missing dependencies; our detection only reports.
+- **One-click install on Linux** — install hints exist for all platforms, but the
+  one-click runner only auto-runs no-sudo commands (brew on macOS, the pnpm
+  installer). Linux system packages (git/curl via apt) and node/go are shown but
+  not auto-run, partly because sudo can't prompt inside the TUI. A safe Linux
+  one-click (distro detection + a non-TUI sudo path) is future work.
 - **`copilot-instructions` directory support** — Copilot also reads
   `~/.copilot/instructions/` and `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; capiko only
   manages the single home instructions file today.

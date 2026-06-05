@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
 
 // newDetectionT builds the screen directly (no real sysinfo.Detect, which would
@@ -40,6 +41,38 @@ func TestDetectionQuitGoesToMenu(t *testing.T) {
 	_, cmd := s.Update(key("esc"))
 	if _, ok := cmd().(backMsg); !ok {
 		t.Error("esc should emit backMsg")
+	}
+}
+
+func TestDetectionInstallMissingOption(t *testing.T) {
+	s := &detectionScreen{
+		report: sysinfo.Report{Dependencies: []sysinfo.Dependency{
+			{Name: "pnpm", Required: true, Found: false, Install: "brew install pnpm", Auto: true},
+		}},
+	}
+	if opts := s.options(); opts[0] != "Install missing" {
+		t.Fatalf("options = %v, want Install missing first", opts)
+	}
+	// cursor 0 = Install missing; enter kicks off the install (don't run it here)
+	_, cmd := s.Update(key("enter"))
+	if !s.installing {
+		t.Error("enter on Install missing should set installing")
+	}
+	if cmd == nil {
+		t.Error("Install missing should return a command")
+	}
+}
+
+func TestDetectionDepsInstalledClearsInstalling(t *testing.T) {
+	s := newDetectionT(t)
+	s.installing = true
+	next, _ := s.Update(depsInstalledMsg{summary: "installed pnpm"})
+	ds := next.(*detectionScreen)
+	if ds.installing {
+		t.Error("depsInstalledMsg should clear installing")
+	}
+	if ds.status != "installed pnpm" {
+		t.Errorf("status = %q, want installed pnpm", ds.status)
 	}
 }
 

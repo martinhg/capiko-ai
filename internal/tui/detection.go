@@ -11,15 +11,18 @@ import (
 )
 
 // detectionScreen shows a System Detection summary before installation: the host
-// environment, the tools capiko relies on, its prerequisites' versions, and which
-// Copilot configs already exist. Continue leads to the skill selector; Back
-// returns to the menu.
+// environment, the tools capiko relies on, its prerequisites' versions/install
+// hints, and which Copilot configs exist. Missing dependencies show an install
+// hint; auto-installable ones can be installed via "Install missing". Continue
+// leads to the persona/skill flow; Back returns to the menu.
 type detectionScreen struct {
-	svc       services
-	catalog   []skill.Skill
-	installed map[string]bool
-	report    sysinfo.Report
-	cursor    int // 0 = Continue, 1 = Back
+	svc        services
+	catalog    []skill.Skill
+	installed  map[string]bool
+	report     sysinfo.Report
+	cursor     int
+	installing bool
+	status     string // result of the last install run
 }
 
 func newDetection(svc services, catalog []skill.Skill, installed map[string]bool) screen {
@@ -31,36 +34,90 @@ func newDetection(svc services, catalog []skill.Skill, installed map[string]bool
 	}
 }
 
-func (s *detectionScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return s, nil
+type depsInstalledMsg struct{ summary string }
+
+// installable returns the missing dependencies capiko can install via one-click.
+func (s *detectionScreen) installable() []sysinfo.Dependency {
+	var out []sysinfo.Dependency
+	for _, d := range s.report.Dependencies {
+		if !d.Found && d.Auto {
+			out = append(out, d)
+		}
 	}
-	switch key.String() {
-	case "q", "esc":
-		return s, back
-	case "up", "k":
-		if s.cursor > 0 {
-			s.cursor--
+	return out
+}
+
+func (s *detectionScreen) options() []string {
+	if len(s.installable()) > 0 {
+		return []string{"Install missing", "Continue", "Back"}
+	}
+	return []string{"Continue", "Back"}
+}
+
+func (s *detectionScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
+	switch msg := msg.(type) {
+	case depsInstalledMsg:
+		s.installing = false
+		s.status = msg.summary
+		s.report = sysinfo.Detect() // refresh after installing
+		s.cursor = 0
+		return s, nil
+	case tea.KeyMsg:
+		if s.installing {
+			return s, nil
 		}
-	case "down", "j":
-		if s.cursor < 1 {
-			s.cursor++
+		switch msg.String() {
+		case "q", "esc":
+			return s, back
+		case "up", "k":
+			if s.cursor > 0 {
+				s.cursor--
+			}
+		case "down", "j":
+			if s.cursor < len(s.options())-1 {
+				s.cursor++
+			}
+		case "enter":
+			switch s.options()[s.cursor] {
+			case "Install missing":
+				s.installing, s.status = true, ""
+				return s, s.installCmd()
+			case "Continue":
+				return newPersona(s.svc, s.catalog, s.installed), nil
+			case "Back":
+				return s, back
+			}
 		}
-	case "enter":
-		if s.cursor == 0 { // Continue → choose persona
-			return newPersona(s.svc, s.catalog, s.installed), nil
-		}
-		return s, back // Back → menu
 	}
 	return s, nil
+}
+
+func (s *detectionScreen) installCmd() tea.Cmd {
+	deps := s.installable()
+	return func() tea.Msg {
+		var ok, failed []string
+		for _, d := range deps {
+			if err := sysinfo.Install(d); err != nil {
+				failed = append(failed, d.Name)
+			} else {
+				ok = append(ok, d.Name)
+			}
+		}
+		var parts []string
+		if len(ok) > 0 {
+			parts = append(parts, "installed "+strings.Join(ok, ", "))
+		}
+		if len(failed) > 0 {
+			parts = append(parts, "failed "+strings.Join(failed, ", "))
+		}
+		return depsInstalledMsg{summary: strings.Join(parts, " · ")}
+	}
 }
 
 func (s *detectionScreen) View() string {
 	var b strings.Builder
 	b.WriteString(titleSty.Render("System Detection") + "\n\n")
 
-	// System
 	supported := errSty.Render("No")
 	if s.report.Supported {
 		supported = okSty.Render("Yes")
@@ -73,7 +130,6 @@ func (s *detectionScreen) View() string {
 	row("Supported", supported)
 	b.WriteString("\n")
 
-	// Tools
 	b.WriteString(titleSty.Render("Tools") + "\n")
 	for _, t := range s.report.Tools {
 		status := errSty.Render("not found")
@@ -84,14 +140,16 @@ func (s *detectionScreen) View() string {
 	}
 	b.WriteString("\n")
 
-	// Dependencies
 	b.WriteString(titleSty.Render("Dependencies") + "\n")
 	for _, d := range s.report.Dependencies {
-		fmt.Fprintf(&b, "  %s  %s\n", textSty.Render(pad(d.Name, 10)), dependencyStatus(d))
+		line := fmt.Sprintf("  %s  %s", textSty.Render(pad(d.Name, 10)), dependencyStatus(d))
+		if !d.Found && d.Install != "" {
+			line += dimSty.Render("  → " + d.Install)
+		}
+		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
 
-	// Detected Configs
 	b.WriteString(titleSty.Render("Detected Configs") + "\n")
 	for _, c := range s.report.Configs {
 		status := errSty.Render("missing")
@@ -102,7 +160,15 @@ func (s *detectionScreen) View() string {
 	}
 	b.WriteString("\n")
 
-	for i, opt := range []string{"Continue", "Back"} {
+	if s.installing {
+		b.WriteString("Installing missing dependencies…\n")
+		return b.String()
+	}
+	if s.status != "" {
+		b.WriteString(okSty.Render(s.status) + "\n\n")
+	}
+
+	for i, opt := range s.options() {
 		if i == s.cursor {
 			b.WriteString(titleSty.Render(menuCursor+opt) + "\n")
 		} else {
