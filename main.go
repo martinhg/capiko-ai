@@ -11,6 +11,7 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/catalog"
+	"github.com/martinhg/capiko-ai/internal/release"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/tui"
 )
@@ -45,8 +46,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, "capiko-ai: warning: backups disabled:", err)
 	}
 
-	if _, err := tea.NewProgram(tui.NewApp(cat, store, bkp)).Run(); err != nil {
+	final, err := tea.NewProgram(tui.NewApp(cat, store, bkp)).Run()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "capiko-ai:", err)
 		os.Exit(1)
+	}
+
+	// A successful self-update quits the TUI with the restart flag set; re-exec
+	// so the freshly installed binary takes over in the same terminal.
+	if app, ok := final.(tui.App); ok && app.ShouldRestart() {
+		if err := release.Restart(); err != nil {
+			fmt.Fprintln(os.Stderr, "capiko-ai: restart after update failed; please relaunch:", err)
+		}
 	}
 }
