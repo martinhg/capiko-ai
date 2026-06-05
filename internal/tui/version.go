@@ -27,15 +27,39 @@ func mainModuleVersion() string {
 }
 
 // resolveVersion keeps an ldflags-injected version as-is. Otherwise it recovers
-// the version from the module build info, which is set for `go install
-// module@vX.Y.Z` but is "(devel)" (or empty) for a plain `go build`/`go run` —
-// those stay "dev" so local builds are not mistaken for a release.
+// the version from the module build info, which is a clean tag (vX.Y.Z) for
+// `go install module@vX.Y.Z`. A plain `go build`/`go run` or `go install @branch`
+// yields "(devel)" or a pseudo-version (vX.Y.Z-0.<timestamp>-<commit>); those are
+// not releases, so they stay "dev" rather than leaking an ugly id into the UI.
 func resolveVersion(injected, build string) string {
 	if injected != devVersion {
 		return injected
 	}
-	if v := strings.TrimPrefix(strings.TrimSpace(build), "v"); v != "" && v != "(devel)" {
+	v := strings.TrimPrefix(strings.TrimSpace(build), "v")
+	if isReleaseVersion(v) {
 		return v
 	}
 	return injected
+}
+
+// isReleaseVersion reports whether v is a clean MAJOR.MINOR.PATCH triple. It
+// rejects "(devel)", empty strings, pre-releases, and pseudo-versions (which
+// carry a "-<timestamp>-<commit>" suffix, so they split into more than three
+// dot-separated parts or contain non-numeric segments).
+func isReleaseVersion(v string) bool {
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" {
+			return false
+		}
+		for _, r := range p {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
