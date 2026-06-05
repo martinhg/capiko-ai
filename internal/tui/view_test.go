@@ -101,6 +101,7 @@ func TestViewGolden(t *testing.T) {
 		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "1.1.0"}.View()},
 		{"menu_stale", App{state: appMenu, catalog: testCatalog(), stale: []string{"capiko-hello", "capiko-pr"}}.View()},
 		{"detection", App{state: appScreen, active: detection}.View()},
+		{"persona", App{state: appScreen, active: newPersona(svc, testCatalog(), map[string]bool{})}.View()},
 		{"install_picking", App{state: appScreen, active: installPicking}.View()},
 		{"install_done", App{state: appScreen, active: installDone}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},

@@ -17,12 +17,12 @@ func newDetectionT(t *testing.T) *detectionScreen {
 	}
 }
 
-func TestDetectionContinueOpensInstall(t *testing.T) {
+func TestDetectionContinueOpensPersona(t *testing.T) {
 	s := newDetectionT(t)
 	// cursor starts at 0 = Continue
 	next, _ := s.Update(key("enter"))
-	if _, ok := next.(*selector); !ok {
-		t.Errorf("Continue should open the install selector, got %T", next)
+	if _, ok := next.(*personaScreen); !ok {
+		t.Errorf("Continue should open the persona screen, got %T", next)
 	}
 }
 

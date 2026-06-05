@@ -48,8 +48,8 @@ func (s *detectionScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.cursor++
 		}
 	case "enter":
-		if s.cursor == 0 { // Continue → pick skills
-			return newInstall(s.svc, s.catalog, s.installed), nil
+		if s.cursor == 0 { // Continue → choose persona
+			return newPersona(s.svc, s.catalog, s.installed), nil
 		}
 		return s, back // Back → menu
 	}
