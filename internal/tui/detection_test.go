@@ -6,14 +6,15 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 )
 
+// newDetectionT builds the screen directly (no real sysinfo.Detect, which would
+// shell out) since these tests only exercise navigation and transitions.
 func newDetectionT(t *testing.T) *detectionScreen {
 	t.Helper()
-	svc := services{host: &copilot.Host{SkillsDir: t.TempDir()}}
-	s, ok := newDetection(svc, testCatalog(), map[string]bool{}).(*detectionScreen)
-	if !ok {
-		t.Fatal("newDetection did not return *detectionScreen")
+	return &detectionScreen{
+		svc:       services{host: &copilot.Host{SkillsDir: t.TempDir()}},
+		catalog:   testCatalog(),
+		installed: map[string]bool{},
 	}
-	return s
 }
 
 func TestDetectionContinueOpensInstall(t *testing.T) {
