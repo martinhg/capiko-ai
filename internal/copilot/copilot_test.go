@@ -1,10 +1,62 @@
 package copilot
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
+
+func TestDetect(t *testing.T) {
+	origLook, origHome := lookPath, userHomeDir
+	t.Cleanup(func() { lookPath, userHomeDir = origLook, origHome })
+
+	found := func(string) (string, error) { return "/usr/bin/copilot", nil }
+
+	t.Run("not installed", func(t *testing.T) {
+		lookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+		h, err := Detect()
+		if h != nil || err != nil {
+			t.Errorf("got (%v, %v), want (nil, nil)", h, err)
+		}
+	})
+
+	t.Run("home dir error", func(t *testing.T) {
+		lookPath = found
+		userHomeDir = func() (string, error) { return "", errors.New("no home") }
+		h, err := Detect()
+		if h != nil || err == nil {
+			t.Errorf("got (%v, %v), want (nil, error)", h, err)
+		}
+	})
+
+	t.Run("installed but never logged in", func(t *testing.T) {
+		lookPath = found
+		userHomeDir = func() (string, error) { return t.TempDir(), nil } // no .copilot inside
+		h, err := Detect()
+		if h != nil || err != nil {
+			t.Errorf("got (%v, %v), want (nil, nil)", h, err)
+		}
+	})
+
+	t.Run("detected", func(t *testing.T) {
+		home := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(home, ".copilot"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		lookPath = found
+		userHomeDir = func() (string, error) { return home, nil }
+
+		h, err := Detect()
+		if err != nil || h == nil {
+			t.Fatalf("got (%v, %v), want a host", h, err)
+		}
+		if want := filepath.Join(home, ".copilot", "skills"); h.SkillsDir != want {
+			t.Errorf("SkillsDir = %q, want %q", h.SkillsDir, want)
+		}
+	})
+}
 
 func TestInstalledSkills(t *testing.T) {
 	skillsDir := t.TempDir()
@@ -76,6 +128,22 @@ func TestUninstallRefusesNonSkill(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "random")); err != nil {
 		t.Errorf("non-skill dir must be left untouched: %v", err)
+	}
+}
+
+func TestUninstallRefusesNonDirectory(t *testing.T) {
+	dir := t.TempDir()
+	// A loose file (not a directory) must never be removed by name.
+	if err := os.WriteFile(filepath.Join(dir, "loose"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &Host{SkillsDir: dir}
+
+	if err := h.UninstallSkill("loose"); err == nil {
+		t.Error("expected refusal removing a non-directory")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "loose")); err != nil {
+		t.Errorf("the loose file must be left untouched: %v", err)
 	}
 }
 

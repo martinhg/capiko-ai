@@ -13,6 +13,12 @@ var Version = "dev"
 // devVersion is the sentinel for a build that goreleaser did not stamp.
 const devVersion = "dev"
 
+// baseVersion is the current release line, shown when no concrete version is
+// available (local `go build`, `go run`). Bump this when cutting a release so
+// dev builds report the line they are based on instead of an ugly id. Real
+// releases override it via ldflags; `go install …@vX.Y.Z` recovers the exact tag.
+const baseVersion = "1.0.0"
+
 func init() {
 	Version = resolveVersion(Version, mainModuleVersion())
 }
@@ -39,7 +45,7 @@ func resolveVersion(injected, build string) string {
 	if isReleaseVersion(v) {
 		return v
 	}
-	return injected
+	return baseVersion
 }
 
 // isReleaseVersion reports whether v is a clean MAJOR.MINOR.PATCH triple. It

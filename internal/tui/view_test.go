@@ -68,7 +68,7 @@ func TestViewGolden(t *testing.T) {
 		{"notfound", App{state: appNotFound}.View()},
 		{"failed", App{state: appFailed, err: errors.New("boom")}.View()},
 		{"menu", App{state: appMenu, catalog: testCatalog()}.View()},
-		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "0.2.0"}.View()},
+		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "1.1.0"}.View()},
 		{"menu_stale", App{state: appMenu, catalog: testCatalog(), stale: []string{"capiko-hello", "capiko-pr"}}.View()},
 		{"install_picking", App{state: appScreen, active: installPicking}.View()},
 		{"install_done", App{state: appScreen, active: installDone}.View()},
