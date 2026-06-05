@@ -179,6 +179,7 @@ func detectConfigs() []Config {
 	specs := []Config{
 		{Name: "~/.copilot", Path: cfg},
 		{Name: "~/.copilot/skills", Path: filepath.Join(cfg, "skills")},
+		{Name: "~/.copilot/instructions", Path: filepath.Join(cfg, "instructions")},
 		{Name: "settings.json", Path: filepath.Join(cfg, "settings.json")},
 		{Name: "mcp-config.json", Path: filepath.Join(cfg, "mcp-config.json")},
 	}

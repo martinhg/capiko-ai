@@ -34,6 +34,10 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
 - Dependency install hints + one-click install — System Detection shows a
   per-OS install command for each missing dependency, and "Install missing" runs
   the safe (non-sudo) ones. Also detects `pnpm` (company requirement) with version.
+- Scoped instructions — curated `*.instructions.md` files (with `applyTo` globs)
+  installed under `~/.copilot/instructions/`, which Copilot applies per matching
+  file. "Install instructions" menu item writes them (with backup); detection
+  reports the directory.
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -72,9 +76,9 @@ Ordered roughly by value for a Copilot-focused tool:
   installer). Linux system packages (git/curl via apt) and node/go are shown but
   not auto-run, partly because sudo can't prompt inside the TUI. A safe Linux
   one-click (distro detection + a non-TUI sudo path) is future work.
-- **`copilot-instructions` directory support** — Copilot also reads
-  `~/.copilot/instructions/` and `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`; capiko only
-  manages the single home instructions file today.
+- **`COPILOT_CUSTOM_INSTRUCTIONS_DIRS` support** — Copilot also honors extra
+  instruction dirs via this env var; capiko manages the home file and the
+  `~/.copilot/instructions/` dir, but not arbitrary configured dirs.
 
 ## Notes
 

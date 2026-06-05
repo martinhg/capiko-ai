@@ -95,6 +95,7 @@ func TestViewGolden(t *testing.T) {
 			Configs: []sysinfo.Config{
 				{Name: "~/.copilot", Exists: true},
 				{Name: "~/.copilot/skills", Exists: true},
+				{Name: "~/.copilot/instructions", Exists: false},
 				{Name: "settings.json", Exists: false},
 				{Name: "mcp-config.json", Exists: false},
 			},
@@ -117,6 +118,7 @@ func TestViewGolden(t *testing.T) {
 		{"install_done", App{state: appScreen, active: installDone}.View()},
 		{"review", App{state: appScreen, active: reviewView}.View()},
 		{"sdd", App{state: appScreen, active: sddView}.View()},
+		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
 		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog())}.View()},
 		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},

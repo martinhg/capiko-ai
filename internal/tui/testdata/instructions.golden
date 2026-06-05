@@ -1,0 +1,10 @@
+capiko-ai  ·  Copilot configurator
+
+Install scoped instructions
+
+Write 2 file(s) to ~/.copilot/instructions/ (applied per-file via their applyTo globs).
+
+  go.instructions.md
+  markdown.instructions.md
+
+[y to install · q to go back]
