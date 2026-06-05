@@ -68,7 +68,7 @@ var menuItems = []menuItem{
 	{"Managed uninstall", "uninstall", true},
 	{"Sync configs", "sync", true},
 	{"Manage backups", "backups", true},
-	{"Upgrade tools", "upgrade", false},
+	{"Upgrade tools", "upgrade", true},
 	{"Upgrade + sync", "upgrade-sync", false},
 	{"Quit", "quit", true},
 }
@@ -83,7 +83,12 @@ type App struct {
 	cursor    int
 	active    screen
 	latest    string // newer version if an update is available; empty otherwise
+	restart   bool   // set after a successful self-update; main re-execs on exit
 }
+
+// ShouldRestart reports whether a self-update succeeded and main should re-exec
+// into the new binary after the program exits.
+func (a App) ShouldRestart() bool { return a.restart }
 
 // NewApp builds the root model. The state and backup stores may be nil, in
 // which case operations still work but are not recorded or snapshotted.
@@ -132,6 +137,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case latestVersionMsg:
 		a.latest = msg.version
 		return a, nil
+
+	case restartMsg:
+		a.restart = true
+		return a, tea.Quit
 
 	case backMsg:
 		a.state, a.active = appMenu, nil
@@ -186,6 +195,8 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newSync(a.svc, a.catalog)
 	case it.id == "backups":
 		a.active = newBackups(a.svc)
+	case it.id == "upgrade":
+		a.active = newUpgrade(a.latest)
 	default:
 		a.active = newSoon(it.label)
 	}

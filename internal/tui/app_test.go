@@ -83,12 +83,23 @@ func TestEnterOpensReadyScreen(t *testing.T) {
 
 func TestEnterOnComingSoonOpensStub(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 4 // Upgrade tools (not ready)
+	a.cursor = 5 // Upgrade + sync (not ready)
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
 	if _, ok := app.active.(soonScreen); !ok {
 		t.Errorf("active = %T, want soonScreen", app.active)
+	}
+}
+
+func TestEnterOpensUpgrade(t *testing.T) {
+	a := readyApp(t, t.TempDir())
+	a.cursor = 4 // Upgrade tools (now ready)
+
+	next, _ := a.Update(key("enter"))
+	app := next.(App)
+	if _, ok := app.active.(*upgradeScreen); !ok {
+		t.Errorf("active = %T, want *upgradeScreen", app.active)
 	}
 }
 
