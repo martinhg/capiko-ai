@@ -57,10 +57,10 @@ func TestPersonaApplyWritesRecordsBacksUpThenOpensInstall(t *testing.T) {
 		t.Errorf("expected a persona backup, got %+v", backups)
 	}
 
-	// feeding the applied msg back transitions to the install selector
+	// feeding the applied msg back transitions to the SDD config screen
 	next, _ := s.Update(applied)
-	if _, ok := next.(*selector); !ok {
-		t.Errorf("after apply should open the selector, got %T", next)
+	if _, ok := next.(*sddScreen); !ok {
+		t.Errorf("after apply should open the SDD config screen, got %T", next)
 	}
 }
 

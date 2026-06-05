@@ -38,12 +38,19 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, store *state.Store, bkp 
 		if err := store.Apply(Version, recorded, nil); err != nil {
 			return 0, fmt.Errorf("recording state: %w", err)
 		}
-		// Re-apply the active persona so its instructions block tracks the
-		// current catalog/version (capiko's InjectForSync equivalent).
-		if st, err := store.Load(); err == nil && st.Persona != "" {
-			if p, ok := persona.ByID(persona.ID(st.Persona)); ok {
-				if err := applyPersona(host, store, bkp, p); err != nil {
-					return len(recorded), fmt.Errorf("re-applying persona: %w", err)
+		// Re-apply the managed instruction blocks so they track the current
+		// catalog/version (capiko's InjectForSync equivalent).
+		if st, err := store.Load(); err == nil {
+			if st.Persona != "" {
+				if p, ok := persona.ByID(persona.ID(st.Persona)); ok {
+					if err := applyPersona(host, store, bkp, p); err != nil {
+						return len(recorded), fmt.Errorf("re-applying persona: %w", err)
+					}
+				}
+			}
+			if len(st.SDDModels) > 0 {
+				if err := applySDD(host, store, bkp, st.SDDModels); err != nil {
+					return len(recorded), fmt.Errorf("re-applying SDD: %w", err)
 				}
 			}
 		}
