@@ -1,5 +1,7 @@
 # capiko-ai
 
+[![CI](https://github.com/martinhg/capiko-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/martinhg/capiko-ai/actions/workflows/ci.yml)
+
 A terminal configurator that supercharges the **GitHub Copilot CLI** with a
 company layer of skills, workflows, and conventions — the same pattern
 [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) uses over Claude
