@@ -3,7 +3,7 @@ module github.com/martinhg/capiko-ai
 go 1.26.4
 
 require (
-	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/charmbracelet/bubbletea/v2 v2.0.7
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/muesli/termenv v0.16.0
 	gopkg.in/yaml.v3 v3.0.1
