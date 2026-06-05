@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +14,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/catalog"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/release"
+	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/tui"
 	"github.com/martinhg/capiko-ai/internal/versions"
@@ -60,13 +62,7 @@ func main() {
 	// new embedded catalog.
 	if os.Getenv(envPostUpgradeSync) == "1" {
 		os.Unsetenv(envPostUpgradeSync)
-		if host, derr := copilot.Detect(); derr == nil && host != nil {
-			if n, serr := tui.RunSync(host, cat, store, bkp); serr != nil {
-				fmt.Fprintln(os.Stderr, "capiko-ai: post-upgrade sync failed:", serr)
-			} else {
-				fmt.Printf("capiko-ai: synced %d skill(s) after upgrade\n", n)
-			}
-		}
+		postUpgradeSync(copilot.Detect, cat, store, bkp, os.Stdout)
 	}
 
 	final, err := tea.NewProgram(tui.NewApp(cat, store, bkp)).Run()
@@ -84,5 +80,20 @@ func main() {
 		if err := release.Restart(); err != nil {
 			fmt.Fprintln(os.Stderr, "capiko-ai: restart after update failed; please relaunch:", err)
 		}
+	}
+}
+
+// postUpgradeSync detects the Copilot host and syncs the catalog into it,
+// reporting the outcome. Detection is injected so the flow is testable; a nil
+// host (Copilot not installed/initialized) is a silent no-op.
+func postUpgradeSync(detect func() (*copilot.Host, error), cat []skill.Skill, store *state.Store, bkp *backup.Store, out io.Writer) {
+	host, err := detect()
+	if err != nil || host == nil {
+		return
+	}
+	if n, err := tui.RunSync(host, cat, store, bkp); err != nil {
+		fmt.Fprintln(out, "capiko-ai: post-upgrade sync failed:", err)
+	} else {
+		fmt.Fprintf(out, "capiko-ai: synced %d skill(s) after upgrade\n", n)
 	}
 }
