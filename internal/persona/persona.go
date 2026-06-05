@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 //go:embed content/*.md
@@ -55,42 +54,38 @@ func read(p string) string {
 	return string(b)
 }
 
-// Apply writes the persona's block into the instructions file, snapshotting the
-// prior file under backupRoot first. None removes capiko's block, leaving the
-// rest of the file intact. The write is atomic.
-func Apply(instructionsPath, backupRoot string, p Persona) error {
-	existing, err := os.ReadFile(instructionsPath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	if len(existing) > 0 && backupRoot != "" {
-		if err := snapshot(backupRoot, existing); err != nil {
-			return err
+// ByID returns the persona with the given id.
+func ByID(id ID) (Persona, bool) {
+	for _, p := range Available() {
+		if p.ID == id {
+			return p, true
 		}
 	}
+	return Persona{}, false
+}
 
-	updated := injectSection(string(existing), strings.TrimRight(p.Content, "\n"))
-	if updated == string(existing) {
-		return nil // nothing changed (e.g. None with no existing block)
+// Render computes the instructions file content with the persona's marker block
+// injected (or removed, for None), without writing. changed reports whether it
+// differs from the current file, so the caller can back up only when needed.
+func Render(instructionsPath string, p Persona) (content string, changed bool, err error) {
+	existing, err := os.ReadFile(instructionsPath)
+	if err != nil && !os.IsNotExist(err) {
+		return "", false, err
 	}
+	updated := injectSection(string(existing), strings.TrimRight(p.Content, "\n"))
+	return updated, updated != string(existing), nil
+}
 
+// Write atomically writes the rendered instructions content.
+func Write(instructionsPath, content string) error {
 	if err := os.MkdirAll(filepath.Dir(instructionsPath), 0o755); err != nil {
 		return err
 	}
 	tmp := instructionsPath + ".tmp"
-	if err := os.WriteFile(tmp, []byte(updated), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
 		return err
 	}
 	return os.Rename(tmp, instructionsPath)
-}
-
-func snapshot(root string, content []byte) error {
-	dir := filepath.Join(root, "persona-"+time.Now().UTC().Format("20060102T150405.000000000"))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, "copilot-instructions.md"), content, 0o644)
 }
 
 // injectSection replaces capiko's marker-bound block in existing with block, or

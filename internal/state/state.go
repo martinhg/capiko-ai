@@ -19,6 +19,7 @@ type State struct {
 	Version   string                 `json:"version"`
 	UpdatedAt time.Time              `json:"updated_at"`
 	Skills    map[string]SkillRecord `json:"skills"`
+	Persona   string                 `json:"persona,omitempty"` // active persona id, "" = unmanaged
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -111,5 +112,16 @@ func (s *Store) Apply(version string, installed []Installed, removed []string) e
 	}
 	st.Version = version
 	st.UpdatedAt = now
+	return s.Save(st)
+}
+
+// SetPersona records the active persona id (the empty string means unmanaged).
+func (s *Store) SetPersona(id string) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.Persona = id
+	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

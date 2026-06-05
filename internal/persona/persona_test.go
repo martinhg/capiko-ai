@@ -60,17 +60,28 @@ func TestInjectSectionRemovesOnEmpty(t *testing.T) {
 	}
 }
 
-func TestApplyWritesAndBacksUp(t *testing.T) {
+func TestByID(t *testing.T) {
+	if p, ok := ByID(Capiko); !ok || p.Name != "Capiko" {
+		t.Errorf("ByID(Capiko) = %+v, %v", p, ok)
+	}
+	if _, ok := ByID("nope"); ok {
+		t.Error("unknown id should not resolve")
+	}
+}
+
+func TestRenderWritePreservesUserContent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "copilot-instructions.md")
 	if err := os.WriteFile(path, []byte("user's own notes\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	backupRoot := t.TempDir()
 
-	capiko := Available()[0]
-	if err := Apply(path, backupRoot, capiko); err != nil {
-		t.Fatalf("Apply: %v", err)
+	content, changed, err := Render(path, Available()[0]) // Capiko
+	if err != nil || !changed {
+		t.Fatalf("Render: changed=%v err=%v", changed, err)
+	}
+	if err := Write(path, content); err != nil {
+		t.Fatalf("Write: %v", err)
 	}
 
 	data, _ := os.ReadFile(path)
@@ -78,22 +89,25 @@ func TestApplyWritesAndBacksUp(t *testing.T) {
 		t.Errorf("file should contain the block and preserve user notes: %q", data)
 	}
 
-	// a backup of the prior file must exist
-	entries, _ := os.ReadDir(backupRoot)
-	if len(entries) == 0 {
-		t.Error("expected a backup snapshot of the prior instructions")
+	// Re-rendering the same persona is a no-op.
+	if _, changed, _ := Render(path, Available()[0]); changed {
+		t.Error("re-rendering the same persona should report no change")
 	}
 }
 
-func TestApplyNoneRemovesBlock(t *testing.T) {
+func TestRenderNoneRemovesBlock(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "copilot-instructions.md")
 
-	if err := Apply(path, "", Available()[0]); err != nil { // Capiko
+	content, _, _ := Render(path, Available()[0]) // Capiko
+	if err := Write(path, content); err != nil {
 		t.Fatal(err)
 	}
-	none := Available()[2]
-	if err := Apply(path, "", none); err != nil {
+	content, changed, _ := Render(path, Available()[2]) // None
+	if !changed {
+		t.Fatal("None over an existing block should change the file")
+	}
+	if err := Write(path, content); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(path)

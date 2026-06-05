@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -68,6 +69,27 @@ func TestRunSyncWritesCatalogAndRecordsState(t *testing.T) {
 		if rec.Checksum != state.Checksum(sk.Content) {
 			t.Errorf("%s checksum = %q, want content checksum", sk.Name, rec.Checksum)
 		}
+	}
+}
+
+func TestRunSyncReappliesPersona(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+	if err := store.SetPersona("capiko"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RunSync(host, testCatalog(), store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cfgDir, "copilot-instructions.md"))
+	if err != nil {
+		t.Fatalf("persona instructions not written by sync: %v", err)
+	}
+	if !strings.Contains(string(data), "capiko:persona:start") {
+		t.Errorf("sync did not re-apply the persona block: %q", data)
 	}
 }
 

@@ -74,6 +74,27 @@ func TestSaveIsAtomicAndPersists(t *testing.T) {
 	}
 }
 
+func TestSetPersona(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetPersona("capiko"); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Persona != "capiko" {
+		t.Errorf("persona = %q, want capiko", st.Persona)
+	}
+	if err := s.SetPersona(""); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.Persona != "" {
+		t.Errorf("persona = %q, want empty after clear", st.Persona)
+	}
+}
+
 func TestChecksumStable(t *testing.T) {
 	if Checksum("hello") != Checksum("hello") {
 		t.Error("checksum not deterministic")

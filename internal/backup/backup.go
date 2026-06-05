@@ -19,13 +19,22 @@ type Entry struct {
 	Existed bool   `json:"existed"` // whether it existed before the mutation
 }
 
+// FileEntry records one standalone file captured in a backup (e.g. Copilot's
+// global instructions file when a persona is applied).
+type FileEntry struct {
+	Label   string `json:"label"`   // base name used for the snapshot copy
+	Path    string `json:"path"`    // original absolute path
+	Existed bool   `json:"existed"` // whether it existed before the mutation
+}
+
 // Manifest is the metadata stored alongside a backup's files.
 type Manifest struct {
-	ID        string    `json:"id"` // timestamp id, also the backup dir name
-	CreatedAt time.Time `json:"created_at"`
-	Version   string    `json:"version"` // capiko version that created it
-	Reason    string    `json:"reason"`  // install | uninstall | sync
-	Entries   []Entry   `json:"entries"`
+	ID        string      `json:"id"` // timestamp id, also the backup dir name
+	CreatedAt time.Time   `json:"created_at"`
+	Version   string      `json:"version"` // capiko version that created it
+	Reason    string      `json:"reason"`  // install | uninstall | sync | persona
+	Entries   []Entry     `json:"entries"`
+	Files     []FileEntry `json:"files,omitempty"`
 }
 
 // Store manages backups under a root directory (default ~/.capiko/backups).
@@ -33,9 +42,6 @@ type Store struct{ dir string }
 
 // NewStore returns a store rooted at dir.
 func NewStore(dir string) *Store { return &Store{dir: dir} }
-
-// Dir is the store's root directory.
-func (s *Store) Dir() string { return s.dir }
 
 // DefaultStore returns a store at ~/.capiko/backups.
 func DefaultStore() (*Store, error) {
@@ -77,6 +83,43 @@ func (s *Store) Create(skillsDir, reason, version string, skills []string) (stri
 		Version:   version,
 		Reason:    reason,
 		Entries:   entries,
+	}
+	if err := writeManifest(dir, man); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// CreateFiles snapshots the given absolute file paths into a new backup and
+// returns its id. Files that do not currently exist are recorded (Existed=false)
+// so a restore can remove them, returning to the pre-mutation state. Used for
+// standalone files outside the skills tree (e.g. copilot-instructions.md).
+func (s *Store) CreateFiles(reason, version string, paths []string) (string, error) {
+	base := time.Now().UTC().Format("20060102T150405.000000000")
+	id, dir := base, filepath.Join(s.dir, base)
+	for i := 1; isDir(dir); i++ {
+		id = fmt.Sprintf("%s-%d", base, i)
+		dir = filepath.Join(s.dir, id)
+	}
+
+	var files []FileEntry
+	for _, p := range paths {
+		existed := isFile(p)
+		label := filepath.Base(p)
+		if existed {
+			if err := copyFile(p, filepath.Join(dir, "files", label)); err != nil {
+				return "", err
+			}
+		}
+		files = append(files, FileEntry{Label: label, Path: p, Existed: existed})
+	}
+
+	man := Manifest{
+		ID:        id,
+		CreatedAt: time.Now().UTC(),
+		Version:   version,
+		Reason:    reason,
+		Files:     files,
 	}
 	if err := writeManifest(dir, man); err != nil {
 		return "", err
@@ -128,6 +171,15 @@ func (s *Store) Restore(skillsDir, id string) error {
 			}
 		}
 	}
+	for _, f := range man.Files {
+		if f.Existed {
+			if err := copyFile(filepath.Join(s.dir, id, "files", f.Label), f.Path); err != nil {
+				return err
+			}
+		} else if err := os.Remove(f.Path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -169,6 +221,22 @@ func readManifest(dir string) (Manifest, error) {
 func isDir(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func copyFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
 }
 
 func copyDir(src, dst string) error {

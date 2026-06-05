@@ -107,8 +107,12 @@ func (s *backupsScreen) View() string {
 		if i == s.cursor {
 			cursor = titleSty.Render(menuCursor)
 		}
-		line := fmt.Sprintf("%s  %s  (%d skills)",
-			m.CreatedAt.Local().Format("2006-01-02 15:04:05"), m.Reason, len(m.Entries))
+		detail := fmt.Sprintf("%d skills", len(m.Entries))
+		if len(m.Files) > 0 {
+			detail = fmt.Sprintf("%d file(s)", len(m.Files))
+		}
+		line := fmt.Sprintf("%s  %s  (%s)",
+			m.CreatedAt.Local().Format("2006-01-02 15:04:05"), m.Reason, detail)
 		if i == s.cursor {
 			b.WriteString(cursor + titleSty.Render(line) + "\n")
 		} else {
