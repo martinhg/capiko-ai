@@ -44,9 +44,14 @@ Ordered roughly by value for a Copilot-focused tool:
 
 - **Model configuration** — gentle-ai has per-agent model pickers. Copilot CLI
   model selection could be surfaced here if/when it exposes one.
-- **Agent Builder** — gentle-ai can scaffold a custom agent (prompt → preview →
-  generate → install). A "build a custom Copilot skill" wizard would be the
-  capiko analogue.
+- **Agent Builder → "skill-creator" (decided approach).** gentle-ai's Agent
+  Builder is an LLM-generation wizard (describe → generate → preview → install):
+  it *calls a model* to write a custom agent. capiko has no LLM in its Go code (it
+  is a file configurator), and adding an API client/auth/cost would break that
+  pattern. The capiko-appropriate version keeps the LLM where it belongs — Copilot
+  — by shipping a `skill-creator` **catalog skill** that guides Copilot to scaffold
+  a new custom `SKILL.md` from the user's description. capiko ships the guidance;
+  Copilot does the building. (Same pattern as the SDD skills.)
 - **SDD skills are deliberately simple (TODO: full machinery).** capiko's
   `sdd-*` skills are self-contained and file-based on purpose, to ship the workflow
   fast. gentle-ai's SDD skills are a richer machine: an artifact-store layer
