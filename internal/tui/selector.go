@@ -126,11 +126,23 @@ func (s *selector) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		s.toggleAll()
 	case "enter":
 		if s.hasChanges() {
-			s.state = selApplying
-			return s, s.reconcileCmd()
+			return newReview(s), nil // confirm before applying
 		}
 	}
 	return s, nil
+}
+
+// plan returns the skills the current selection would install and remove.
+func (s *selector) plan() (install, remove []string) {
+	for i, sk := range s.items {
+		switch want, have := s.desired[i], s.installed[sk.Name]; {
+		case want && !have:
+			install = append(install, sk.Name)
+		case !want && have:
+			remove = append(remove, sk.Name)
+		}
+	}
+	return install, remove
 }
 
 func (s *selector) toggleAll() {
