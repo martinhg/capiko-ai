@@ -16,6 +16,18 @@ import (
 )
 
 func main() {
+	// version is handled before anything else so installers and CI can read the
+	// build-injected version (ldflags set internal/tui.Version) without launching
+	// the full-screen TUI. Both `version` and `-v`/`--version` are accepted so the
+	// POSIX and PowerShell install scripts can share one binary contract.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "-v", "--version":
+			fmt.Println("capiko-ai", tui.Version)
+			return
+		}
+	}
+
 	cat, err := catalog.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "capiko-ai: loading catalog:", err)
