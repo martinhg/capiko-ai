@@ -1,23 +1,27 @@
-╭▔▔▔▔▔▔▔╮                                         
-╱ ●   ● ╲                                         
-│   ▾   │                                         
-│  ╲▁╱  │   █ █ ███                               
-│ ▆▆▆▆▆ │   ██  █ █                               
-╲▆▆▆▆▆▆▆╱   █ █ ███                               
- ╰┳▔▔▔┳╯                                          
-  ╹   ╹                                           
-                                                  
-CAPIKO-AI dev  ·  Ecosystem, Frameworks, Workflows
-                                                  
-Menu                                              
-╭────────────────────────╮                        
-│  › Start installation  │                        
-│    Managed uninstall   │                        
-│    Sync configs        │                        
-│    Manage backups      │                        
-│    Upgrade tools       │                        
-│    Upgrade + sync      │                        
-│    Quit                │                        
-╰────────────────────────╯                        
-                                                  
-↑/↓ move · enter select · q quit                  
+╔══════════════════════════════════════════════════════╗
+║                                                      ║
+║  ⢀⣀⡀⠀⠀⠀⠀⢀⣀⡀                                          ║
+║  ⣾⣿⣿⣶⣶⣶⣶⣿⣿⣷                                          ║
+║  ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿                                          ║
+║  ⣿⠿⣿⣿⣿⣿⣿⣿⠿⣿   ⣿ ⣿ ⣿⣿⣿                                ║
+║  ⣿⣿⣿⣷⣶⣶⣾⣿⣿⣿   ⣿⣿⠀ ⣿⠀⣿                                ║
+║  ⠘⢿⣿⡿⠟⠻⢿⣿⡿⠃   ⣿ ⣿ ⣿⣿⣿                                ║
+║  ⢀⣾⣿⣿⣿⣿⣿⣿⣷⡀                                          ║
+║  ⣾⣿⣿⣿⣿⣿⣿⣿⣿⣷                                          ║
+║  ⠛⠋⠁⠀⠀⠀⠀⠈⠙⠛                                          ║
+║                                                      ║
+║  capiko-ai dev  ·  Ecosystem, Frameworks, Workflows  ║
+║                                                      ║
+║  Menu                                                ║
+║                                                      ║
+║  ▸ Start installation                                ║
+║    Managed uninstall                                 ║
+║    Sync configs                                      ║
+║    Manage backups                                    ║
+║    Upgrade tools                                     ║
+║    Upgrade + sync                                    ║
+║    Quit                                              ║
+║                                                      ║
+║  ↑/↓ move · enter select · q quit                    ║
+║                                                      ║
+╚══════════════════════════════════════════════════════╝

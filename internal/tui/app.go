@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -233,46 +232,45 @@ func (a App) View() string {
 }
 
 func (a App) viewMenu() string {
-	var items strings.Builder
+	var b strings.Builder
+
+	b.WriteString(logo())
+	b.WriteString("\n\n")
+	b.WriteString(titleSty.Render("capiko-ai "+Version) + dimSty.Render("  ·  "+tagline))
+	b.WriteString("\n")
+	if banner := a.updateBanner(); banner != "" {
+		b.WriteString(banner + "\n")
+	}
+	if banner := a.staleBanner(); banner != "" {
+		b.WriteString(banner + "\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(titleSty.Render("Menu"))
+	b.WriteString("\n\n")
+
 	for i, it := range menuItems {
 		label := it.label
+		// A star badges the upgrade item when a newer release is available.
+		if it.id == "upgrade" && a.latest != "" {
+			label += " ★"
+		}
 		if !it.ready {
 			label += "  (coming soon)"
 		}
 		switch {
 		case i == a.cursor:
-			items.WriteString(titleSty.Render("› "+label) + "\n")
+			b.WriteString(titleSty.Render(menuCursor+label) + "\n")
 		case !it.ready:
-			items.WriteString(dimSty.Render("  "+label) + "\n")
+			b.WriteString(dimSty.Render("  "+label) + "\n")
 		default:
-			items.WriteString(textSty.Render("  "+label) + "\n")
+			b.WriteString(textSty.Render("  "+label) + "\n")
 		}
 	}
 
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(brandColor).
-		Padding(0, 2).
-		Render(strings.TrimRight(items.String(), "\n"))
+	b.WriteString("\n")
+	b.WriteString(dimSty.Render("↑/↓ move · enter select · q quit"))
 
-	header := titleSty.Render("CAPIKO-AI "+Version) + dimSty.Render("  ·  "+tagline)
-
-	parts := []string{logo(), "", header}
-	if banner := a.updateBanner(); banner != "" {
-		parts = append(parts, banner)
-	}
-	if banner := a.staleBanner(); banner != "" {
-		parts = append(parts, banner)
-	}
-	parts = append(parts,
-		"",
-		titleSty.Render("Menu"),
-		box,
-		"",
-		dimSty.Render("↑/↓ move · enter select · q quit"),
-	)
-
-	return lipgloss.JoinVertical(lipgloss.Left, parts...) + "\n"
+	return menuBoxSty.Render(b.String()) + "\n"
 }
 
 // staleSkills loads the recorded state and reports which installed skills the
