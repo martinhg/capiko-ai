@@ -66,7 +66,9 @@ func normalize(a map[string]string) map[string]string {
 }
 
 // Render builds the orchestrator instruction block for the given assignments.
-func Render(assignments map[string]string) string {
+// When strictTDD is true, the block requires the apply/verify phases to follow
+// strict Test-Driven Development.
+func Render(assignments map[string]string, strictTDD bool) string {
 	a := normalize(assignments)
 
 	var b strings.Builder
@@ -90,6 +92,11 @@ func Render(assignments map[string]string) string {
 	b.WriteString("- Run `sdd-init` once per project (creates `sdd/context.md`) before the first cycle; use `sdd-onboard` for a guided walkthrough.\n")
 	b.WriteString("- Keep one thin orchestrator thread and synthesize the sub-agents' results.\n")
 	b.WriteString("- A phase with `default` runs on the session model.\n")
+
+	if strictTDD {
+		b.WriteString("\n### Strict TDD (active)\n\n")
+		b.WriteString("The apply and verify phases MUST follow strict Test-Driven Development: write a failing test FIRST, run it to see it fail, then write the minimal code to pass it, then refactor. Do not write any implementation before a failing test exists.\n")
+	}
 
 	return b.String()
 }

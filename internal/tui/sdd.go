@@ -19,12 +19,12 @@ import (
 // assignments) into Copilot's instructions file, backing the file up only when
 // it changes, then records the assignments in state. Shared by the config screen
 // and the post-sync re-apply.
-func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models map[string]string) error {
+func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models map[string]string, strict bool) error {
 	if host == nil {
 		return nil
 	}
 	path := filepath.Join(host.ConfigDir, "copilot-instructions.md")
-	content, changed, err := instructions.Render(path, sdd.MarkerStart, sdd.MarkerEnd, sdd.Render(models))
+	content, changed, err := instructions.Render(path, sdd.MarkerStart, sdd.MarkerEnd, sdd.Render(models, strict))
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,10 @@ func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models 
 		}
 	}
 	if store != nil {
-		return store.SetSDDModels(models)
+		if err := store.SetSDDModels(models); err != nil {
+			return err
+		}
+		return store.SetStrictTDD(strict)
 	}
 	return nil
 }
@@ -53,7 +56,8 @@ type sddScreen struct {
 	installed map[string]bool
 	inFlow    bool // reached from install flow → Apply continues to the selector
 	models    map[string]string
-	cursor    int // 0..len-1 phases, len = Apply, len+1 = Back
+	strict    bool // strict TDD for apply/verify
+	cursor    int  // 0..len-1 phases, len = Apply, len+1 = Back
 	editing   bool
 	editBuf   string
 	state     sddState
@@ -72,6 +76,7 @@ type sddAppliedMsg struct{ err error }
 
 func newSDD(svc services, catalog []skill.Skill, installed map[string]bool, inFlow bool) screen {
 	models := sdd.DefaultAssignments()
+	strict := false
 	if svc.state != nil {
 		if st, err := svc.state.Load(); err == nil {
 			for k, v := range st.SDDModels {
@@ -79,9 +84,10 @@ func newSDD(svc services, catalog []skill.Skill, installed map[string]bool, inFl
 					models[k] = v
 				}
 			}
+			strict = st.StrictTDD
 		}
 	}
-	return &sddScreen{svc: svc, catalog: catalog, installed: installed, inFlow: inFlow, models: models}
+	return &sddScreen{svc: svc, catalog: catalog, installed: installed, inFlow: inFlow, models: models, strict: strict}
 }
 
 func (s *sddScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
@@ -119,6 +125,8 @@ func (s *sddScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.cycle(-1)
 		case "right", "l":
 			s.cycle(1)
+		case "t":
+			s.strict = !s.strict
 		case "c":
 			if s.onPhase() {
 				s.editing, s.editBuf = true, ""
@@ -183,16 +191,21 @@ func (s *sddScreen) cycle(delta int) {
 }
 
 func (s *sddScreen) applyCmd() tea.Cmd {
-	host, store, bkp, models := s.svc.host, s.svc.state, s.svc.backup, s.models
+	host, store, bkp, models, strict := s.svc.host, s.svc.state, s.svc.backup, s.models, s.strict
 	return func() tea.Msg {
-		return sddAppliedMsg{err: applySDD(host, store, bkp, models)}
+		return sddAppliedMsg{err: applySDD(host, store, bkp, models, strict)}
 	}
 }
 
 func (s *sddScreen) View() string {
 	var b strings.Builder
 	b.WriteString(titleSty.Render("Configure SDD models") + "\n\n")
-	b.WriteString(dimSty.Render("Run the orchestrator on the top model; cheaper phases auto-downgrade.") + "\n\n")
+	b.WriteString(dimSty.Render("Run the orchestrator on the top model; cheaper phases auto-downgrade.") + "\n")
+	strictVal := dimSty.Render("off")
+	if s.strict {
+		strictVal = okSty.Render("on")
+	}
+	b.WriteString("  " + titleSty.Render(pad("Strict TDD", 13)) + "  " + strictVal + dimSty.Render("  (t to toggle)") + "\n\n")
 
 	switch s.state {
 	case sddApplying:
@@ -229,6 +242,6 @@ func (s *sddScreen) View() string {
 		b.WriteString(marker + optSty.Render(opt) + "\n")
 	}
 
-	b.WriteString("\n" + dimSty.Render("↑/↓ move · ←/→ change model · c custom · enter select · esc back") + "\n")
+	b.WriteString("\n" + dimSty.Render("↑/↓ move · ←/→ change model · c custom · t strict TDD · enter select · esc back") + "\n")
 	return b.String()
 }

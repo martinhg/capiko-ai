@@ -28,6 +28,9 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
 - SDD init / onboard — `sdd-init` bootstraps per-project context (`sdd/context.md`)
   so phases don't re-discover the project; `sdd-onboard` is a guided walkthrough
   that teaches the SDD cycle on the user's real code.
+- Strict TDD toggle — a `t` toggle on the Configure SDD screen; when on, the
+  orchestrator block requires the apply/verify phases to follow strict TDD
+  (failing test first). Tracked in state and re-applied on sync.
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -61,7 +64,6 @@ Ordered roughly by value for a Copilot-focused tool:
   capiko's skills toward that — add a persistence backend (engram/openspec), a
   shared status contract the phases read/write, and the orchestrator gates — so the
   cycle is resumable and cross-session, not just a set of guidance docs.
-- **Strict TDD mode** toggle.
 - **Dependency install hints / one-click install** — gentle-ai offers install
   hints (and can run them) for missing dependencies; our detection only reports.
 - **`copilot-instructions` directory support** — Copilot also reads

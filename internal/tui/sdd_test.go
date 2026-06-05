@@ -100,6 +100,33 @@ func TestSDDInFlowApplyOpensInstall(t *testing.T) {
 	}
 }
 
+func TestSDDStrictToggleAppliesAndPersists(t *testing.T) {
+	s, svc, path := newSDDT(t, false)
+	if s.strict {
+		t.Fatal("strict TDD should default off")
+	}
+	s.Update(key("t"))
+	if !s.strict {
+		t.Fatal("t should toggle strict TDD on")
+	}
+
+	s.cursor = len(sdd.Phases) // Apply
+	_, cmd := s.Update(key("enter"))
+	applied, ok := cmd().(sddAppliedMsg)
+	if !ok || applied.err != nil {
+		t.Fatalf("apply failed: %+v", applied)
+	}
+
+	st, _ := svc.state.Load()
+	if !st.StrictTDD {
+		t.Error("strict TDD not persisted in state")
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), "Strict TDD") {
+		t.Errorf("strict TDD section not in the orchestrator block: %q", data)
+	}
+}
+
 func TestSDDBackGoesToMenu(t *testing.T) {
 	s, _, _ := newSDDT(t, false)
 	_, cmd := s.Update(key("esc"))

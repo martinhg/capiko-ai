@@ -21,6 +21,7 @@ type State struct {
 	Skills    map[string]SkillRecord `json:"skills"`
 	Persona   string                 `json:"persona,omitempty"`    // active persona id, "" = unmanaged
 	SDDModels map[string]string      `json:"sdd_models,omitempty"` // SDD phase → model, empty = SDD unmanaged
+	StrictTDD bool                   `json:"strict_tdd,omitempty"` // SDD apply/verify must follow strict TDD
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -134,6 +135,17 @@ func (s *Store) SetSDDModels(models map[string]string) error {
 		return err
 	}
 	st.SDDModels = models
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetStrictTDD records whether the SDD apply/verify phases must follow strict TDD.
+func (s *Store) SetStrictTDD(on bool) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.StrictTDD = on
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
