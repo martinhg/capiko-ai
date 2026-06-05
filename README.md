@@ -11,6 +11,39 @@ capiko-ai does not replace Copilot. It writes a curated set of `SKILL.md` files
 into Copilot's skills directory, which Copilot then auto-discovers. The actual
 coding still happens inside Copilot.
 
+## Install
+
+**Homebrew (macOS / Linux)**
+
+```bash
+brew install martinhg/homebrew-tap/capiko-ai
+```
+
+**Install script (macOS / Linux)**
+
+```bash
+curl -sL https://raw.githubusercontent.com/martinhg/capiko-ai/main/scripts/install.sh | bash
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/martinhg/capiko-ai/main/scripts/install.ps1 | iex
+# or, with Scoop:
+scoop bucket add capiko-ai https://github.com/martinhg/scoop-bucket
+scoop install capiko-ai
+```
+
+**From source**
+
+```bash
+go install github.com/martinhg/capiko-ai@latest
+```
+
+Pre-built binaries for every platform are attached to each
+[release](https://github.com/martinhg/capiko-ai/releases). Run `capiko-ai version`
+to print the installed version.
+
 ## Quick path
 
 ```bash
@@ -76,5 +109,6 @@ terminal.
 ## Status
 
 Working: configurator (install / uninstall / sync), backups with restore,
-persistent state, embedded catalog, menu UI. Planned: upgrade detection via
-checksums, a real version-update check, and a release pipeline.
+persistent state, embedded catalog, menu UI, and a goreleaser release pipeline
+(Homebrew, Scoop, install scripts, multi-platform binaries). Planned: upgrade
+detection via checksums and a real version-update check feeding the banner.
