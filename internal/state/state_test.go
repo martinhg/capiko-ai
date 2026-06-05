@@ -95,6 +95,21 @@ func TestSetPersona(t *testing.T) {
 	}
 }
 
+func TestSetSDDModels(t *testing.T) {
+	s := NewStore(t.TempDir())
+	models := map[string]string{"orchestrator": "claude-opus-4.8", "spec": "gemini-5.4"}
+	if err := s.SetSDDModels(models); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.SDDModels["orchestrator"] != "claude-opus-4.8" || st.SDDModels["spec"] != "gemini-5.4" {
+		t.Errorf("sdd models = %v", st.SDDModels)
+	}
+}
+
 func TestChecksumStable(t *testing.T) {
 	if Checksum("hello") != Checksum("hello") {
 		t.Error("checksum not deterministic")
