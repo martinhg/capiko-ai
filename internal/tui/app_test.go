@@ -81,25 +81,33 @@ func TestEnterOpensReadyScreen(t *testing.T) {
 	}
 }
 
-func TestEnterOnComingSoonOpensStub(t *testing.T) {
+func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 5 // Upgrade + sync (not ready)
+	a.cursor = 4 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
-	if _, ok := app.active.(soonScreen); !ok {
-		t.Errorf("active = %T, want soonScreen", app.active)
+	up, ok := app.active.(*upgradeScreen)
+	if !ok {
+		t.Fatalf("active = %T, want *upgradeScreen", app.active)
+	}
+	if up.withSync {
+		t.Error("Upgrade tools should open the plain upgrade, not sync mode")
 	}
 }
 
-func TestEnterOpensUpgrade(t *testing.T) {
+func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 4 // Upgrade tools (now ready)
+	a.cursor = 5 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
-	if _, ok := app.active.(*upgradeScreen); !ok {
-		t.Errorf("active = %T, want *upgradeScreen", app.active)
+	up, ok := app.active.(*upgradeScreen)
+	if !ok {
+		t.Fatalf("active = %T, want *upgradeScreen", app.active)
+	}
+	if !up.withSync {
+		t.Error("Upgrade + sync should open the screen in sync mode")
 	}
 }
 
