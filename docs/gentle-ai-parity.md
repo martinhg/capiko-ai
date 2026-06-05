@@ -17,6 +17,8 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
 - Release pipeline (Homebrew, Scoop, install scripts, multi-platform binaries)
 - Persona lifecycle: persona is tracked in `state.json`, re-applied on sync, and
   its instructions file is backed up through the managed backup system.
+- Review and Confirm screen — a pre-apply summary (skills to install/remove,
+  active persona) gating the reconcile, between the skill selector and the apply.
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -39,7 +41,6 @@ Ordered roughly by value for a Copilot-focused tool:
 - **SDD integration / profiles** — gentle-ai installs an SDD orchestrator and
   manages OpenCode SDD profiles. capiko could ship an SDD skill bundle for Copilot.
 - **Strict TDD mode** toggle.
-- **Review screen** — a pre-apply diff/summary of everything that will change.
 - **Dependency install hints / one-click install** — gentle-ai offers install
   hints (and can run them) for missing dependencies; our detection only reports.
 - **`copilot-instructions` directory support** — Copilot also reads

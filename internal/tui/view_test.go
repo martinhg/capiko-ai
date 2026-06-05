@@ -59,6 +59,12 @@ func TestViewGolden(t *testing.T) {
 		removed:   []string{"capiko-hello"},
 	}
 
+	// A selector with a pending change, viewed through the review gate.
+	reviewSel := newInstall(svc, testCatalog(), map[string]bool{"capiko-hello": true}).(*selector)
+	reviewSel.desired[0] = false // remove capiko-hello
+	reviewSel.desired[1] = true  // install capiko-conventions
+	reviewView := newReview(reviewSel)
+
 	uninstallEmpty := newUninstall(svc, testCatalog(), map[string]bool{})
 
 	// A fixed report keeps the detection golden deterministic across machines.
@@ -104,6 +110,7 @@ func TestViewGolden(t *testing.T) {
 		{"persona", App{state: appScreen, active: newPersona(svc, testCatalog(), map[string]bool{})}.View()},
 		{"install_picking", App{state: appScreen, active: installPicking}.View()},
 		{"install_done", App{state: appScreen, active: installDone}.View()},
+		{"review", App{state: appScreen, active: reviewView}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
 		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog())}.View()},
 		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},

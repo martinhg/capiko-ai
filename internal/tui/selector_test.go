@@ -23,6 +23,26 @@ func installScreen(t *testing.T, skillsDir string, installed ...string) *selecto
 	return s
 }
 
+// applyViaReview drives a selector through the Review confirmation gate: enter
+// opens Review, Apply hands back to the selector and triggers the reconcile.
+func applyViaReview(t *testing.T, s *selector) reconciledMsg {
+	t.Helper()
+	next, _ := s.Update(key("enter"))
+	rv, ok := next.(*reviewScreen)
+	if !ok {
+		t.Fatalf("enter should open review, got %T", next)
+	}
+	back, cmd := rv.Update(key("enter")) // cursor 0 = Apply
+	if _, ok := back.(*selector); !ok {
+		t.Fatalf("apply should return the selector, got %T", back)
+	}
+	rm, ok := cmd().(reconciledMsg)
+	if !ok {
+		t.Fatalf("apply should reconcile, got %T", cmd())
+	}
+	return rm
+}
+
 func TestInstallSeedsFromDisk(t *testing.T) {
 	s := installScreen(t, t.TempDir(), "capiko-hello")
 	if !s.desired[0] {
@@ -39,12 +59,8 @@ func TestInstallAppliesNewlyMarked(t *testing.T) {
 
 	s.Update(key("space")) // mark capiko-hello (cursor 0)
 
-	_, cmd := s.Update(key("enter"))
-	if s.state != selApplying {
-		t.Fatalf("state = %d, want selApplying", s.state)
-	}
-	rm, ok := cmd().(reconciledMsg)
-	if !ok || rm.err != nil {
+	rm := applyViaReview(t, s)
+	if rm.err != nil {
 		t.Fatalf("reconcile failed: %+v", rm)
 	}
 	if len(rm.result.installed) != 1 || rm.result.installed[0] != "capiko-hello" {
@@ -67,9 +83,8 @@ func TestInstallRecordsState(t *testing.T) {
 	s, _ := newInstall(services{host: &copilot.Host{SkillsDir: dir}, state: store}, testCatalog(), map[string]bool{}).(*selector)
 	s.Update(key("space")) // mark capiko-hello (cursor 0)
 
-	_, cmd := s.Update(key("enter"))
-	rm, ok := cmd().(reconciledMsg)
-	if !ok || rm.err != nil {
+	rm := applyViaReview(t, s)
+	if rm.err != nil {
 		t.Fatalf("reconcile failed: %+v", rm)
 	}
 
@@ -93,8 +108,7 @@ func TestInstallCreatesBackupBeforeMutating(t *testing.T) {
 	s, _ := newInstall(services{host: &copilot.Host{SkillsDir: dir}, backup: bkp}, testCatalog(), map[string]bool{}).(*selector)
 	s.Update(key("space")) // mark capiko-hello
 
-	_, cmd := s.Update(key("enter"))
-	if rm := cmd().(reconciledMsg); rm.err != nil {
+	if rm := applyViaReview(t, s); rm.err != nil {
 		t.Fatalf("reconcile failed: %v", rm.err)
 	}
 
@@ -124,9 +138,8 @@ func TestUninstallRemovesUnmarked(t *testing.T) {
 
 	s.Update(key("space")) // unmark capiko-hello
 
-	_, cmd := s.Update(key("enter"))
-	rm, ok := cmd().(reconciledMsg)
-	if !ok || rm.err != nil {
+	rm := applyViaReview(t, s)
+	if rm.err != nil {
 		t.Fatalf("reconcile failed: %+v", rm)
 	}
 	if len(rm.result.removed) != 1 || rm.result.removed[0] != "capiko-hello" {
