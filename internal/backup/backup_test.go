@@ -26,6 +26,55 @@ func readSkill(t *testing.T, skillsDir, name string) string {
 	return string(data)
 }
 
+// A standalone file is snapshotted and restored to its original path.
+func TestCreateFilesAndRestore(t *testing.T) {
+	store := NewStore(t.TempDir())
+	target := filepath.Join(t.TempDir(), "copilot-instructions.md")
+	if err := os.WriteFile(target, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := store.CreateFiles("persona", "1.0.0", []string{target})
+	if err != nil {
+		t.Fatalf("CreateFiles: %v", err)
+	}
+
+	mans, _ := store.List()
+	if len(mans) != 1 || len(mans[0].Files) != 1 || mans[0].Reason != "persona" {
+		t.Fatalf("manifest = %+v, want one persona file backup", mans)
+	}
+
+	if err := os.WriteFile(target, []byte("v2"), 0o644); err != nil { // mutate
+		t.Fatal(err)
+	}
+	if err := store.Restore(t.TempDir(), id); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if data, _ := os.ReadFile(target); string(data) != "v1" {
+		t.Errorf("content = %q, want v1 after restore", data)
+	}
+}
+
+// Restoring a files backup taken before the file existed removes it.
+func TestRestoreRemovesNewlyCreatedFile(t *testing.T) {
+	store := NewStore(t.TempDir())
+	target := filepath.Join(t.TempDir(), "copilot-instructions.md") // does not exist yet
+
+	id, err := store.CreateFiles("persona", "1.0.0", []string{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("created later"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Restore(t.TempDir(), id); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Errorf("file should be removed on restore, stat err = %v", err)
+	}
+}
+
 // Restoring an overwritten skill brings back the original content.
 func TestRestoreRecoversOverwrittenSkill(t *testing.T) {
 	skillsDir := t.TempDir()
