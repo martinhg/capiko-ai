@@ -14,6 +14,20 @@ var (
 	errSty   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D9554A")) // error
 )
 
+// Menu chrome. The main menu wraps everything (logo, banners, options, help) in
+// one double-border box of a fixed width, so the frame never jumps as the
+// selection or banners change. Height is left to grow with the content.
+const (
+	menuCursor = "▸ " // prefix on the focused menu item
+	menuWidth  = 54   // fixed inner content width of the menu box
+)
+
+var menuBoxSty = lipgloss.NewStyle().
+	Border(lipgloss.DoubleBorder()).
+	BorderForeground(brandColor).
+	Padding(1, 2).
+	Width(menuWidth)
+
 // head renders the compact capiko banner shown above sub-screens.
 func head() string {
 	return titleSty.Render("capiko-ai") + dimSty.Render("  ·  Copilot configurator") + "\n\n"
