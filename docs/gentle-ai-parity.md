@@ -25,6 +25,9 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
   re-applied on sync.
 - SDD phase skills bundle — `sdd-explore/propose/spec/design/tasks/apply/verify/
   archive` ship in the catalog; the orchestrator delegates each phase to its skill.
+- SDD init / onboard — `sdd-init` bootstraps per-project context (`sdd/context.md`)
+  so phases don't re-discover the project; `sdd-onboard` is a guided walkthrough
+  that teaches the SDD cycle on the user's real code.
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -44,9 +47,15 @@ Ordered roughly by value for a Copilot-focused tool:
 - **Agent Builder** — gentle-ai can scaffold a custom agent (prompt → preview →
   generate → install). A "build a custom Copilot skill" wizard would be the
   capiko analogue.
-- **SDD init / onboard** — gentle-ai bootstraps SDD context per project and has a
-  guided onboarding walkthrough. capiko ships the phase skills but no init/onboard
-  flow yet.
+- **SDD skills are deliberately simple (TODO: full machinery).** capiko's
+  `sdd-*` skills are self-contained and file-based on purpose, to ship the workflow
+  fast. gentle-ai's SDD skills are a richer machine: an artifact-store layer
+  (engram / openspec / hybrid persistence), `_shared` status contracts passed
+  between phases, orchestrator/executor gates, delivery-strategy + workload guards,
+  strict-TDD forwarding, and per-skill registries. A later pass should evolve
+  capiko's skills toward that — add a persistence backend (engram/openspec), a
+  shared status contract the phases read/write, and the orchestrator gates — so the
+  cycle is resumable and cross-session, not just a set of guidance docs.
 - **Strict TDD mode** toggle.
 - **Dependency install hints / one-click install** — gentle-ai offers install
   hints (and can run them) for missing dependencies; our detection only reports.
