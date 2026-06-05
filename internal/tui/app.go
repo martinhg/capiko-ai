@@ -68,6 +68,7 @@ var menuItems = []menuItem{
 	{"Configure SDD", "sdd", true},
 	{"Upgrade tools", "upgrade", true},
 	{"Upgrade + sync", "upgrade-sync", true},
+	{"Install instructions", "instructions", true},
 	{"Quit", "quit", true},
 }
 
@@ -206,6 +207,8 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newSDD(a.svc, a.catalog, a.installed, false)
 	case it.id == "upgrade-sync":
 		a.active = newUpgradeSync(a.svc, a.catalog, a.latest)
+	case it.id == "instructions":
+		a.active = newInstructions(a.svc)
 	default:
 		a.active = newSoon(it.label)
 	}

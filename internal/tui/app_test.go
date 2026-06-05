@@ -133,6 +133,16 @@ func TestEnterOpensBackups(t *testing.T) {
 	}
 }
 
+func TestEnterOpensInstructions(t *testing.T) {
+	a := readyApp(t, t.TempDir())
+	a.cursor = 7 // Install instructions
+
+	next, _ := a.Update(key("enter"))
+	if _, ok := next.(App).active.(*instructionsScreen); !ok {
+		t.Errorf("active = %T, want *instructionsScreen", next.(App).active)
+	}
+}
+
 func TestBackReturnsToMenu(t *testing.T) {
 	a := readyApp(t, t.TempDir())
 	a.state, a.active = appScreen, newSoon("x")

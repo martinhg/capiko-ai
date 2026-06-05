@@ -26,6 +26,7 @@ Dependencies
 Detected Configs
   ~/.copilot          present
   ~/.copilot/skills   present
+  ~/.copilot/instructions  missing
   settings.json       missing
   mcp-config.json     missing
 
