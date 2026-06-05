@@ -4,6 +4,9 @@
 *.exe
 *.test
 
+# GoReleaser build output
+/dist/
+
 # Test / coverage output
 *.out
 coverage.*

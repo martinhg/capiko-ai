@@ -1,0 +1,65 @@
+version: 2
+
+project_name: capiko-ai
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: capiko-ai
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/martinhg/capiko-ai/internal/tui.Version={{.Version}}
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+brews:
+  - repository:
+      owner: martinhg
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    name: capiko-ai
+    homepage: "https://github.com/martinhg/capiko-ai"
+    description: "capiko-ai — mounts the capiko layer (skills, state, backups) onto the GitHub Copilot CLI."
+    license: "MIT"
+    commit_msg_template: "chore: update capiko-ai formula to {{ .Tag }}"
+
+scoops:
+  - repository:
+      owner: martinhg
+      name: scoop-bucket
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    name: capiko-ai
+    homepage: "https://github.com/martinhg/capiko-ai"
+    description: "capiko-ai — mounts the capiko layer (skills, state, backups) onto the GitHub Copilot CLI."
+    license: MIT
+    commit_msg_template: "chore: update capiko-ai to {{ .Tag }}"
