@@ -15,6 +15,7 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/drift"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -79,8 +80,9 @@ type App struct {
 	err       error
 	cursor    int
 	active    screen
-	latest    string // newer version if an update is available; empty otherwise
-	restart   bool   // set after a successful self-update; main re-execs on exit
+	latest    string   // newer version if an update is available; empty otherwise
+	stale     []string // installed skills whose catalog content has since changed
+	restart   bool     // set after a successful self-update; main re-execs on exit
 }
 
 // ShouldRestart reports whether a self-update succeeded and main should re-exec
@@ -128,6 +130,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			a.svc.host, a.installed = msg.host, msg.installed
 			a.state = appMenu
+			a.stale = staleSkills(a.svc.state, a.catalog)
 		}
 		return a, nil
 
@@ -251,6 +254,9 @@ func (a App) viewMenu() string {
 	if banner := a.updateBanner(); banner != "" {
 		parts = append(parts, banner)
 	}
+	if banner := a.staleBanner(); banner != "" {
+		parts = append(parts, banner)
+	}
 	parts = append(parts,
 		"",
 		titleSty.Render("Menu"),
@@ -260,6 +266,34 @@ func (a App) viewMenu() string {
 	)
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...) + "\n"
+}
+
+// staleSkills loads the recorded state and reports which installed skills the
+// current catalog would refresh. A nil store or a read error yields no drift —
+// detection is best-effort and never blocks the menu.
+func staleSkills(store *state.Store, catalog []skill.Skill) []string {
+	if store == nil {
+		return nil
+	}
+	st, err := store.Load()
+	if err != nil {
+		return nil
+	}
+	return drift.Stale(catalog, st)
+}
+
+// staleBanner renders the "skills out of date" line when the catalog has newer
+// content than what is installed, pointing the user at Sync configs.
+func (a App) staleBanner() string {
+	n := len(a.stale)
+	if n == 0 {
+		return ""
+	}
+	noun := "skill"
+	if n > 1 {
+		noun = "skills"
+	}
+	return warnSty.Render(fmt.Sprintf("%d %s out of date · Sync configs to update", n, noun))
 }
 
 // updateBanner renders the "update available" line when a newer version is
