@@ -68,7 +68,7 @@ func TestMenuCursorClamps(t *testing.T) {
 	}
 }
 
-func TestEnterOpensReadyScreen(t *testing.T) {
+func TestEnterOpensDetection(t *testing.T) {
 	a := readyApp(t, t.TempDir()) // cursor 0 = Start installation
 
 	next, _ := a.Update(key("enter"))
@@ -76,8 +76,8 @@ func TestEnterOpensReadyScreen(t *testing.T) {
 	if app.state != appScreen {
 		t.Fatalf("state = %d, want appScreen", app.state)
 	}
-	if _, ok := app.active.(*selector); !ok {
-		t.Errorf("active = %T, want *selector", app.active)
+	if _, ok := app.active.(*detectionScreen); !ok {
+		t.Errorf("active = %T, want *detectionScreen", app.active)
 	}
 }
 
