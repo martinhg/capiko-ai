@@ -65,6 +65,10 @@ func TestViewGolden(t *testing.T) {
 	reviewSel.desired[1] = true  // install capiko-conventions
 	reviewView := newReview(reviewSel)
 
+	sddView := newSDD(svc, testCatalog(), map[string]bool{}, false).(*sddScreen)
+	sddView.models["orchestrator"] = "claude-opus-4.8"
+	sddView.models["spec"] = "gemini-5.4"
+
 	uninstallEmpty := newUninstall(svc, testCatalog(), map[string]bool{})
 
 	// A fixed report keeps the detection golden deterministic across machines.
@@ -111,6 +115,7 @@ func TestViewGolden(t *testing.T) {
 		{"install_picking", App{state: appScreen, active: installPicking}.View()},
 		{"install_done", App{state: appScreen, active: installDone}.View()},
 		{"review", App{state: appScreen, active: reviewView}.View()},
+		{"sdd", App{state: appScreen, active: sddView}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
 		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog())}.View()},
 		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},

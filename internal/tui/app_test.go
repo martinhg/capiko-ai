@@ -81,9 +81,20 @@ func TestEnterOpensDetection(t *testing.T) {
 	}
 }
 
+func TestEnterOpensSDD(t *testing.T) {
+	a := readyApp(t, t.TempDir())
+	a.cursor = 4 // Configure SDD
+
+	next, _ := a.Update(key("enter"))
+	app := next.(App)
+	if _, ok := app.active.(*sddScreen); !ok {
+		t.Errorf("active = %T, want *sddScreen", app.active)
+	}
+}
+
 func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 4 // Upgrade tools
+	a.cursor = 5 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -98,7 +109,7 @@ func TestEnterOpensUpgrade(t *testing.T) {
 
 func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 5 // Upgrade + sync
+	a.cursor = 6 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)

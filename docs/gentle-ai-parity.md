@@ -19,6 +19,10 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
   its instructions file is backed up through the managed backup system.
 - Review and Confirm screen — a pre-apply summary (skills to install/remove,
   active persona) gating the reconcile, between the skill selector and the apply.
+- SDD orchestrator + per-phase model table — a "Configure SDD models" screen
+  (curated list + custom) writes an orchestrator instructions block that delegates
+  each SDD phase to its assigned model via the Task tool. Tracked in state and
+  re-applied on sync. (The SDD phase skills themselves are still pending.)
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -38,8 +42,9 @@ Ordered roughly by value for a Copilot-focused tool:
 - **Agent Builder** — gentle-ai can scaffold a custom agent (prompt → preview →
   generate → install). A "build a custom Copilot skill" wizard would be the
   capiko analogue.
-- **SDD integration / profiles** — gentle-ai installs an SDD orchestrator and
-  manages OpenCode SDD profiles. capiko could ship an SDD skill bundle for Copilot.
+- **SDD phase skills bundle** — the orchestrator + model table exist; the next
+  step is shipping the per-phase `SKILL.md` files (explore/propose/spec/design/
+  tasks/apply/verify/archive) it delegates to, as a catalog bundle.
 - **Strict TDD mode** toggle.
 - **Dependency install hints / one-click install** — gentle-ai offers install
   hints (and can run them) for missing dependencies; our detection only reports.

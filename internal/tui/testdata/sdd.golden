@@ -1,0 +1,20 @@
+capiko-ai  ·  Copilot configurator
+
+Configure SDD models
+
+Run the orchestrator on the top model; cheaper phases auto-downgrade.
+
+▸ orchestrator   claude-opus-4.8
+  explore        default
+  propose        default
+  spec           gemini-5.4
+  design         default
+  tasks          default
+  apply          default
+  verify         default
+  archive        default
+
+  Apply
+  Back
+
+↑/↓ move · ←/→ change model · c custom · enter select · esc back

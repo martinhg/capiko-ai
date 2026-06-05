@@ -82,8 +82,8 @@ func (s *personaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.state, s.err = personaFailed, msg.err
 			return s, nil
 		}
-		// Persona applied — continue to the skill selector.
-		return newInstall(s.svc, s.catalog, s.installed), nil
+		// Persona applied — continue to the SDD model config, then skills.
+		return newSDD(s.svc, s.catalog, s.installed, true), nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc":
