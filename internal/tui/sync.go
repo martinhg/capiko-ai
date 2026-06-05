@@ -48,8 +48,8 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, store *state.Store, bkp 
 					}
 				}
 			}
-			if len(st.SDDModels) > 0 {
-				if err := applySDD(host, store, bkp, st.SDDModels); err != nil {
+			if len(st.SDDModels) > 0 || st.StrictTDD {
+				if err := applySDD(host, store, bkp, st.SDDModels, st.StrictTDD); err != nil {
 					return len(recorded), fmt.Errorf("re-applying SDD: %w", err)
 				}
 			}

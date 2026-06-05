@@ -3,6 +3,7 @@ capiko-ai  ·  Copilot configurator
 Configure SDD models
 
 Run the orchestrator on the top model; cheaper phases auto-downgrade.
+  Strict TDD     off  (t to toggle)
 
 ▸ orchestrator   claude-opus-4.8
   explore        default
@@ -17,4 +18,4 @@ Run the orchestrator on the top model; cheaper phases auto-downgrade.
   Apply
   Back
 
-↑/↓ move · ←/→ change model · c custom · enter select · esc back
+↑/↓ move · ←/→ change model · c custom · t strict TDD · enter select · esc back

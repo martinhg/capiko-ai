@@ -22,7 +22,10 @@ func TestRenderReflectsAssignments(t *testing.T) {
 		"orchestrator": "claude-opus-4.8",
 		"spec":         "gemini-5.4",
 		// the rest fall back to default
-	})
+	}, false)
+	if strings.Contains(out, "Strict TDD") {
+		t.Error("strict TDD section should be absent when off")
+	}
 
 	for _, want := range []string{
 		"SDD Orchestrator",
@@ -37,11 +40,18 @@ func TestRenderReflectsAssignments(t *testing.T) {
 	}
 }
 
+func TestRenderStrictTDD(t *testing.T) {
+	out := Render(nil, true)
+	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {
+		t.Errorf("strict TDD section missing when on:\n%s", out)
+	}
+}
+
 func TestRenderIgnoresUnknownAndEmpty(t *testing.T) {
 	out := Render(map[string]string{
 		"orchestrator": "", // empty → default
 		"bogus-phase":  "x",
-	})
+	}, false)
 	if !strings.Contains(out, "| orchestrator | default |") {
 		t.Error("empty assignment should fall back to default")
 	}
