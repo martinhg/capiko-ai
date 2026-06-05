@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -72,6 +73,12 @@ func TestDetect(t *testing.T) {
 	if d := deps["node"]; d.Found {
 		t.Errorf("node dep should be not found, got %+v", d)
 	}
+	if d, ok := deps["pnpm"]; !ok || d.Found {
+		t.Errorf("pnpm should be detected as a not-found dependency, got %+v", d)
+	}
+	if d := deps["node"]; d.Install == "" {
+		t.Error("a missing dependency should carry an install hint")
+	}
 
 	cfgs := map[string]bool{}
 	for _, c := range r.Configs {
@@ -82,6 +89,37 @@ func TestDetect(t *testing.T) {
 	}
 	if cfgs["settings.json"] {
 		t.Error("settings.json should be missing")
+	}
+}
+
+func TestInstallInfo(t *testing.T) {
+	if cmd, auto := installInfo("node", "darwin"); cmd != "brew install node" || !auto {
+		t.Errorf("darwin node = (%q, %v), want (brew install node, true)", cmd, auto)
+	}
+	if cmd, auto := installInfo("pnpm", "linux"); !strings.Contains(cmd, "pnpm") || !auto {
+		t.Errorf("linux pnpm = (%q, %v), want a runnable pnpm install", cmd, auto)
+	}
+	if _, auto := installInfo("git", "linux"); auto {
+		t.Error("sudo apt install should not be auto-runnable")
+	}
+}
+
+func TestInstall(t *testing.T) {
+	orig := runInstall
+	t.Cleanup(func() { runInstall = orig })
+
+	var ran string
+	runInstall = func(cmd string) error { ran = cmd; return nil }
+
+	if err := Install(Dependency{Name: "node", Install: "brew install node", Auto: true}); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if ran != "brew install node" {
+		t.Errorf("ran %q, want brew install node", ran)
+	}
+
+	if err := Install(Dependency{Name: "git", Install: "sudo apt install git", Auto: false}); err == nil {
+		t.Error("a non-auto dependency must not be run")
 	}
 }
 

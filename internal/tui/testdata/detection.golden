@@ -15,12 +15,13 @@ Tools
 
 Dependencies
   copilot     1.0.59
-  node        not found (required)
-  npm         not found (required)
+  node        not found (required)  → brew install node
+  npm         not found (required)  → brew install node
+  pnpm        not found (required)  → brew install pnpm
   git         2.43.0
   curl        8.4.0
   brew        4.2.0 (optional)
-  go          not found (optional)
+  go          not found (optional)  → see the tool's website to install go
 
 Detected Configs
   ~/.copilot          present
@@ -28,7 +29,8 @@ Detected Configs
   settings.json       missing
   mcp-config.json     missing
 
-▸ Continue
+▸ Install missing
+  Continue
   Back
 
 ↑/↓ move · enter select · esc back
