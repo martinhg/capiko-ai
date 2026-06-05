@@ -242,7 +242,7 @@ func (s *selector) View() string {
 	for i, sk := range s.items {
 		cursor := "  "
 		if i == s.cursor {
-			cursor = titleSty.Render("> ")
+			cursor = titleSty.Render(menuCursor)
 		}
 		box := "[ ]"
 		if s.desired[i] {
