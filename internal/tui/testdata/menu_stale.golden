@@ -11,14 +11,14 @@ CAPIKO-AI dev  ·  Ecosystem, Frameworks, Workflows
 2 skills out of date · Sync configs to update     
                                                   
 Menu                                              
-╭───────────────────────────────────╮             
-│  › Start installation             │             
-│    Managed uninstall              │             
-│    Sync configs                   │             
-│    Manage backups                 │             
-│    Upgrade tools                  │             
-│    Upgrade + sync  (coming soon)  │             
-│    Quit                           │             
-╰───────────────────────────────────╯             
+╭────────────────────────╮                        
+│  › Start installation  │                        
+│    Managed uninstall   │                        
+│    Sync configs        │                        
+│    Manage backups      │                        
+│    Upgrade tools       │                        
+│    Upgrade + sync      │                        
+│    Quit                │                        
+╰────────────────────────╯                        
                                                   
 ↑/↓ move · enter select · q quit                  

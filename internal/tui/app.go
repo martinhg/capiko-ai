@@ -67,7 +67,7 @@ var menuItems = []menuItem{
 	{"Sync configs", "sync", true},
 	{"Manage backups", "backups", true},
 	{"Upgrade tools", "upgrade", true},
-	{"Upgrade + sync", "upgrade-sync", false},
+	{"Upgrade + sync", "upgrade-sync", true},
 	{"Quit", "quit", true},
 }
 
@@ -83,11 +83,16 @@ type App struct {
 	latest    string   // newer version if an update is available; empty otherwise
 	stale     []string // installed skills whose catalog content has since changed
 	restart   bool     // set after a successful self-update; main re-execs on exit
+	postSync  bool     // set when the restart should sync skills with the new binary
 }
 
 // ShouldRestart reports whether a self-update succeeded and main should re-exec
 // into the new binary after the program exits.
 func (a App) ShouldRestart() bool { return a.restart }
+
+// ShouldSyncAfterRestart reports whether the re-exec'd binary should sync skills
+// on startup (the "Upgrade + sync" flow).
+func (a App) ShouldSyncAfterRestart() bool { return a.postSync }
 
 // NewApp builds the root model. The state and backup stores may be nil, in
 // which case operations still work but are not recorded or snapshotted.
@@ -139,7 +144,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case restartMsg:
-		a.restart = true
+		a.restart, a.postSync = true, msg.sync
 		return a, tea.Quit
 
 	case backMsg:
@@ -196,7 +201,9 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 	case it.id == "backups":
 		a.active = newBackups(a.svc)
 	case it.id == "upgrade":
-		a.active = newUpgrade(a.latest)
+		a.active = newUpgrade(a.svc, a.latest)
+	case it.id == "upgrade-sync":
+		a.active = newUpgradeSync(a.svc, a.catalog, a.latest)
 	default:
 		a.active = newSoon(it.label)
 	}
