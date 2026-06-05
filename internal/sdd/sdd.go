@@ -1,0 +1,93 @@
+// Package sdd builds the capiko SDD orchestrator instructions block: a
+// Spec-Driven Development workflow Copilot runs by delegating each phase to a
+// sub-agent (Task tool) with a per-phase model. The model table is configurable;
+// Copilot honors any model whose cost is <= the session model and downgrades the
+// rest, so the orchestrator (session) should run on the most capable model.
+package sdd
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Marker delimiters for the orchestrator block inside the instructions file.
+const (
+	MarkerStart = "<!-- capiko:sdd:start -->"
+	MarkerEnd   = "<!-- capiko:sdd:end -->"
+)
+
+// DefaultModel is the assignment meaning "inherit the Copilot session model".
+const DefaultModel = "default"
+
+// Phases are the SDD roles, in execution order. "orchestrator" is the
+// coordinating session; the rest are delegated.
+var Phases = []string{
+	"orchestrator",
+	"explore",
+	"propose",
+	"spec",
+	"design",
+	"tasks",
+	"apply",
+	"verify",
+	"archive",
+}
+
+// Models is the curated list offered in the picker. The UI also allows a custom
+// entry. DefaultModel inherits the session model.
+var Models = []string{
+	DefaultModel,
+	"claude-opus-4.8",
+	"claude-sonnet-4.6",
+	"gpt-5.2",
+	"gemini-5.4",
+}
+
+// DefaultAssignments maps every phase to DefaultModel until the user configures
+// specifics.
+func DefaultAssignments() map[string]string {
+	m := make(map[string]string, len(Phases))
+	for _, p := range Phases {
+		m[p] = DefaultModel
+	}
+	return m
+}
+
+// normalize returns a full phase→model map, filling missing/empty phases with
+// DefaultModel so rendering is stable regardless of the input.
+func normalize(a map[string]string) map[string]string {
+	out := DefaultAssignments()
+	for k, v := range a {
+		if _, ok := out[k]; ok && strings.TrimSpace(v) != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// Render builds the orchestrator instruction block for the given assignments.
+func Render(assignments map[string]string) string {
+	a := normalize(assignments)
+
+	var b strings.Builder
+	b.WriteString("## SDD Orchestrator (capiko)\n\n")
+	b.WriteString("For substantial changes, act as a coordinator: run the Spec-Driven Development (SDD) workflow and delegate each phase to a sub-agent via the Task tool. Skip the workflow for trivial, single-file changes.\n\n")
+
+	b.WriteString("### Phases (in order)\n\n")
+	b.WriteString("explore → propose → spec → design → tasks → apply → verify → archive\n\n")
+
+	b.WriteString("### Model assignments\n\n")
+	b.WriteString("Run the session on the most capable assigned model. Delegate each phase to its model via the Task tool's `model` parameter. Copilot honors any model whose cost is ≤ the session model and downgrades anything more expensive, so keep the orchestrator on the top model. `default` means inherit the session model.\n\n")
+	b.WriteString("| Phase | Model |\n| --- | --- |\n")
+	for _, p := range Phases {
+		fmt.Fprintf(&b, "| %s | %s |\n", p, a[p])
+	}
+	b.WriteString("\n")
+
+	b.WriteString("### Rules\n\n")
+	b.WriteString("- Delegate each phase's work to a sub-agent (Task tool); pass the phase's assigned model.\n")
+	b.WriteString("- Keep one thin orchestrator thread and synthesize the sub-agents' results.\n")
+	b.WriteString("- A phase with `default` runs on the session model.\n")
+
+	return b.String()
+}
