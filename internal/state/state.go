@@ -19,7 +19,8 @@ type State struct {
 	Version   string                 `json:"version"`
 	UpdatedAt time.Time              `json:"updated_at"`
 	Skills    map[string]SkillRecord `json:"skills"`
-	Persona   string                 `json:"persona,omitempty"` // active persona id, "" = unmanaged
+	Persona   string                 `json:"persona,omitempty"`    // active persona id, "" = unmanaged
+	SDDModels map[string]string      `json:"sdd_models,omitempty"` // SDD phase → model, empty = SDD unmanaged
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -122,6 +123,17 @@ func (s *Store) SetPersona(id string) error {
 		return err
 	}
 	st.Persona = id
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetSDDModels records the SDD phase→model assignments (nil means unmanaged).
+func (s *Store) SetSDDModels(models map[string]string) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.SDDModels = models
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
