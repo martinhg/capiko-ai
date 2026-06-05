@@ -14,6 +14,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/release"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/tui"
+	"github.com/martinhg/capiko-ai/internal/versions"
 )
 
 func main() {
@@ -25,6 +26,7 @@ func main() {
 		switch os.Args[1] {
 		case "version", "-v", "--version":
 			fmt.Println("capiko-ai", tui.Version)
+			fmt.Println("targets GitHub Copilot CLI", versions.CopilotCLI)
 			return
 		}
 	}
