@@ -95,7 +95,7 @@ func NewApp(catalog []skill.Skill, st *state.Store, bkp *backup.Store) App {
 	}
 }
 
-func (a App) Init() tea.Cmd { return detectCmd }
+func (a App) Init() tea.Cmd { return tea.Batch(detectCmd, checkLatestCmd) }
 
 type detectedMsg struct {
 	host      *copilot.Host
@@ -127,6 +127,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.svc.host, a.installed = msg.host, msg.installed
 			a.state = appMenu
 		}
+		return a, nil
+
+	case latestVersionMsg:
+		a.latest = msg.version
 		return a, nil
 
 	case backMsg:
