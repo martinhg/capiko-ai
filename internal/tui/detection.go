@@ -8,18 +8,17 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
-	"github.com/martinhg/capiko-ai/internal/versions"
 )
 
 // detectionScreen shows a System Detection summary before installation: the host
-// environment and whether the tools capiko relies on are present. Continue leads
-// to the skill selector; Back returns to the menu.
+// environment, the tools capiko relies on, its prerequisites' versions, and which
+// Copilot configs already exist. Continue leads to the skill selector; Back
+// returns to the menu.
 type detectionScreen struct {
 	svc       services
 	catalog   []skill.Skill
 	installed map[string]bool
 	report    sysinfo.Report
-	hasConfig bool
 	cursor    int // 0 = Continue, 1 = Back
 }
 
@@ -29,9 +28,6 @@ func newDetection(svc services, catalog []skill.Skill, installed map[string]bool
 		catalog:   catalog,
 		installed: installed,
 		report:    sysinfo.Detect(),
-		// Detection only yields a host when ~/.copilot exists, so a non-nil host
-		// means the config is present.
-		hasConfig: svc.host != nil,
 	}
 }
 
@@ -64,28 +60,49 @@ func (s *detectionScreen) View() string {
 	var b strings.Builder
 	b.WriteString(titleSty.Render("System Detection") + "\n\n")
 
-	fmt.Fprintf(&b, "  %s  %s\n", titleSty.Render("OS"), textSty.Render(s.report.OS+" ("+s.report.Arch+")"))
-	fmt.Fprintf(&b, "  %s  %s\n\n", titleSty.Render("Shell"), textSty.Render(s.report.Shell))
+	// System
+	supported := errSty.Render("No")
+	if s.report.Supported {
+		supported = okSty.Render("Yes")
+	}
+	row := func(label, value string) {
+		fmt.Fprintf(&b, "  %s  %s\n", titleSty.Render(pad(label, 10)), value)
+	}
+	row("OS", textSty.Render(s.report.OS+" ("+s.report.Arch+")"))
+	row("Shell", textSty.Render(s.report.Shell))
+	row("Supported", supported)
+	b.WriteString("\n")
 
+	// Tools
 	b.WriteString(titleSty.Render("Tools") + "\n")
-	for _, tool := range s.report.Tools {
+	for _, t := range s.report.Tools {
 		status := errSty.Render("not found")
-		if tool.Found {
+		if t.Found {
 			status = okSty.Render("found")
 		}
-		fmt.Fprintf(&b, "  %s  %s\n", textSty.Render(pad(tool.Name, 8)), status)
+		fmt.Fprintf(&b, "  %s  %s\n", textSty.Render(pad(t.Name, 10)), status)
 	}
 	b.WriteString("\n")
 
-	config := errSty.Render("missing")
-	if s.hasConfig {
-		config = okSty.Render("present")
+	// Dependencies
+	b.WriteString(titleSty.Render("Dependencies") + "\n")
+	for _, d := range s.report.Dependencies {
+		fmt.Fprintf(&b, "  %s  %s\n", textSty.Render(pad(d.Name, 10)), dependencyStatus(d))
 	}
-	fmt.Fprintf(&b, "  %s  %s\n", textSty.Render(pad("~/.copilot", 12)), config)
-	fmt.Fprintf(&b, "  %s  %s\n\n", textSty.Render(pad("Copilot CLI target", 12)), dimSty.Render(versions.CopilotCLI))
+	b.WriteString("\n")
 
-	options := []string{"Continue", "Back"}
-	for i, opt := range options {
+	// Detected Configs
+	b.WriteString(titleSty.Render("Detected Configs") + "\n")
+	for _, c := range s.report.Configs {
+		status := errSty.Render("missing")
+		if c.Exists {
+			status = okSty.Render("present")
+		}
+		fmt.Fprintf(&b, "  %s  %s\n", textSty.Render(pad(c.Name, 18)), status)
+	}
+	b.WriteString("\n")
+
+	for i, opt := range []string{"Continue", "Back"} {
 		if i == s.cursor {
 			b.WriteString(titleSty.Render(menuCursor+opt) + "\n")
 		} else {
@@ -95,6 +112,24 @@ func (s *detectionScreen) View() string {
 
 	b.WriteString("\n" + dimSty.Render("↑/↓ move · enter select · esc back") + "\n")
 	return b.String()
+}
+
+func dependencyStatus(d sysinfo.Dependency) string {
+	if d.Found {
+		v := d.Version
+		if v == "" {
+			v = "found"
+		}
+		out := okSty.Render(v)
+		if !d.Required {
+			out += dimSty.Render(" (optional)")
+		}
+		return out
+	}
+	if d.Required {
+		return errSty.Render("not found (required)")
+	}
+	return dimSty.Render("not found (optional)")
 }
 
 // pad right-pads s with spaces to at least width columns, for column alignment.

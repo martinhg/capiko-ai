@@ -64,15 +64,30 @@ func TestViewGolden(t *testing.T) {
 	// A fixed report keeps the detection golden deterministic across machines.
 	detection := &detectionScreen{
 		report: sysinfo.Report{
-			OS: "darwin", Arch: "arm64", Shell: "fish",
+			OS: "darwin", Arch: "arm64", Shell: "fish", Supported: true,
 			Tools: []sysinfo.Tool{
-				{Name: "copilot", Found: true},
-				{Name: "node", Found: false},
-				{Name: "npm", Found: false},
 				{Name: "git", Found: true},
+				{Name: "curl", Found: true},
+				{Name: "brew", Found: true},
+				{Name: "node", Found: false},
+				{Name: "go", Found: true},
+			},
+			Dependencies: []sysinfo.Dependency{
+				{Name: "copilot", Required: true, Found: true, Version: "1.0.59"},
+				{Name: "node", Required: true, Found: false},
+				{Name: "npm", Required: true, Found: false},
+				{Name: "git", Required: true, Found: true, Version: "2.43.0"},
+				{Name: "curl", Required: true, Found: true, Version: "8.4.0"},
+				{Name: "brew", Required: false, Found: true, Version: "4.2.0"},
+				{Name: "go", Required: false, Found: false},
+			},
+			Configs: []sysinfo.Config{
+				{Name: "~/.copilot", Exists: true},
+				{Name: "~/.copilot/skills", Exists: true},
+				{Name: "settings.json", Exists: false},
+				{Name: "mcp-config.json", Exists: false},
 			},
 		},
-		hasConfig: true,
 	}
 
 	cases := []struct {

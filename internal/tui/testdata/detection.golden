@@ -2,17 +2,31 @@ capiko-ai  ·  Copilot configurator
 
 System Detection
 
-  OS  darwin (arm64)
-  Shell  fish
+  OS          darwin (arm64)
+  Shell       fish
+  Supported   Yes
 
 Tools
-  copilot   found
-  node      not found
-  npm       not found
-  git       found
+  git         found
+  curl        found
+  brew        found
+  node        not found
+  go          found
 
-  ~/.copilot    present
-  Copilot CLI target  1.0.59
+Dependencies
+  copilot     1.0.59
+  node        not found (required)
+  npm         not found (required)
+  git         2.43.0
+  curl        8.4.0
+  brew        4.2.0 (optional)
+  go          not found (optional)
+
+Detected Configs
+  ~/.copilot          present
+  ~/.copilot/skills   present
+  settings.json       missing
+  mcp-config.json     missing
 
 ▸ Continue
   Back
