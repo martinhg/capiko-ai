@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/state"
 )
 
 func TestSyncWritesWholeCatalog(t *testing.T) {
@@ -36,6 +37,37 @@ func TestSyncWritesWholeCatalog(t *testing.T) {
 	s.Update(sm)
 	if s.state != syncDone {
 		t.Errorf("state = %d, want syncDone", s.state)
+	}
+}
+
+func TestRunSyncWritesCatalogAndRecordsState(t *testing.T) {
+	dir := t.TempDir()
+	store := state.NewStore(t.TempDir())
+
+	n, err := RunSync(&copilot.Host{SkillsDir: dir}, testCatalog(), store, nil)
+	if err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+	if n != len(testCatalog()) {
+		t.Errorf("count = %d, want %d", n, len(testCatalog()))
+	}
+
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sk := range testCatalog() {
+		if _, err := os.Stat(filepath.Join(dir, sk.Name, "SKILL.md")); err != nil {
+			t.Errorf("%s not written: %v", sk.Name, err)
+		}
+		rec, ok := st.Skills[sk.Name]
+		if !ok {
+			t.Errorf("%s not recorded in state", sk.Name)
+			continue
+		}
+		if rec.Checksum != state.Checksum(sk.Content) {
+			t.Errorf("%s checksum = %q, want content checksum", sk.Name, rec.Checksum)
+		}
 	}
 }
 
