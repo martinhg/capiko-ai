@@ -34,6 +34,9 @@ type Store struct{ dir string }
 // NewStore returns a store rooted at dir.
 func NewStore(dir string) *Store { return &Store{dir: dir} }
 
+// Dir is the store's root directory.
+func (s *Store) Dir() string { return s.dir }
+
 // DefaultStore returns a store at ~/.capiko/backups.
 func DefaultStore() (*Store, error) {
 	home, err := os.UserHomeDir()
