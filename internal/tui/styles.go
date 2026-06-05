@@ -6,12 +6,12 @@ import "github.com/charmbracelet/lipgloss"
 var (
 	brandColor = lipgloss.Color("#E8B05A") // warm amber (capybara/brand accent)
 
-	titleSty = lipgloss.NewStyle().Bold(true).Foreground(brandColor)      // headings, selection
-	textSty  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECE3D4"))  // body text (cream)
-	dimSty   = lipgloss.NewStyle().Foreground(lipgloss.Color("#998A77"))  // secondary (warm gray)
-	okSty    = lipgloss.NewStyle().Foreground(lipgloss.Color("#84B26A"))  // success
-	warnSty  = lipgloss.NewStyle().Foreground(lipgloss.Color("#E0894C"))  // caution
-	errSty   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D9554A"))  // error
+	titleSty = lipgloss.NewStyle().Bold(true).Foreground(brandColor)     // headings, selection
+	textSty  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ECE3D4")) // body text (cream)
+	dimSty   = lipgloss.NewStyle().Foreground(lipgloss.Color("#998A77")) // secondary (warm gray)
+	okSty    = lipgloss.NewStyle().Foreground(lipgloss.Color("#84B26A")) // success
+	warnSty  = lipgloss.NewStyle().Foreground(lipgloss.Color("#E0894C")) // caution
+	errSty   = lipgloss.NewStyle().Foreground(lipgloss.Color("#D9554A")) // error
 )
 
 // head renders the compact capiko banner shown above sub-screens.

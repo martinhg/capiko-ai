@@ -21,10 +21,10 @@ type Entry struct {
 
 // Manifest is the metadata stored alongside a backup's files.
 type Manifest struct {
-	ID        string    `json:"id"`         // timestamp id, also the backup dir name
+	ID        string    `json:"id"` // timestamp id, also the backup dir name
 	CreatedAt time.Time `json:"created_at"`
-	Version   string    `json:"version"`    // capiko version that created it
-	Reason    string    `json:"reason"`     // install | uninstall | sync
+	Version   string    `json:"version"` // capiko version that created it
+	Reason    string    `json:"reason"`  // install | uninstall | sync
 	Entries   []Entry   `json:"entries"`
 }
 
