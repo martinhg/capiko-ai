@@ -236,7 +236,7 @@ func (a App) viewMenu() string {
 
 	b.WriteString(logo())
 	b.WriteString("\n\n")
-	b.WriteString(titleSty.Render("capiko-ai "+Version) + dimSty.Render("  ·  "+tagline))
+	b.WriteString(titleSty.Render("Capiko AI - v"+Version) + dimSty.Render("  ·  "+tagline))
 	b.WriteString("\n")
 	if banner := a.updateBanner(); banner != "" {
 		b.WriteString(banner + "\n")
