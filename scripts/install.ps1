@@ -143,9 +143,8 @@ function Get-InstallMethod {
 function Install-ViaGo {
     Write-Step "Installing via go install"
 
-    # capiko-ai's main package lives at the module root, so the install path is
-    # the module path itself (no /cmd/... suffix).
-    $goPackage = "github.com/$($GITHUB_OWNER.ToLower())/$GITHUB_REPO@latest"
+    # capiko-ai's main package lives under cmd/capiko-ai.
+    $goPackage = "github.com/$($GITHUB_OWNER.ToLower())/$GITHUB_REPO/cmd/capiko-ai@latest"
     Write-Info "Running: go install $goPackage"
 
     & go install $goPackage
