@@ -7,7 +7,7 @@ before:
     - go mod tidy
 
 builds:
-  - main: .
+  - main: ./cmd/capiko-ai
     binary: capiko-ai
     env:
       - CGO_ENABLED=0

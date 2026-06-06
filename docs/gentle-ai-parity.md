@@ -67,11 +67,28 @@ Ordered roughly by value for a Copilot-focused tool:
   a new custom `SKILL.md` from the user's description. capiko ships the guidance;
   Copilot does the building. (Same pattern as the SDD skills.)
 - **More SDD machinery (TODO).** The OpenSpec file store is in place (config /
-  changes / specs / archive + merge-on-archive). Still missing vs gentle-ai: an
-  **engram** (cross-session memory DB) backend and a `hybrid` mode; `_shared`
-  status contracts passed structurally between phases; explicit orchestrator/
-  executor gates in the skills; and delivery-strategy + workload guards. These make
-  the cycle machine-coordinated rather than convention-driven.
+  changes / specs / archive + merge-on-archive). The pieces still missing vs
+  gentle-ai, to evolve the SDD from convention-driven to machine-coordinated:
+  - **engram backend + `hybrid` mode** — a cross-session memory DB (engram) as an
+    alternative/companion artifact store, so the cycle's state survives across
+    sessions and machines without relying on the repo's files. `hybrid` = files +
+    engram together. gentle-ai selects `engram | openspec | hybrid | none` per change.
+  - **`_shared` status contracts** — a structured status object passed between
+    phases (schema name, planning home, change root, artifact paths, context files,
+    apply/task progress, dependency states, action context), instead of each phase
+    re-reading loose markdown. Makes hand-offs precise and resumable mid-phase.
+  - **Orchestrator/executor gates** — explicit guards in each skill: if the
+    orchestrator loaded the skill it must DELEGATE (not run it inline); only the
+    executor sub-agent runs the phase body. Prevents the orchestrator from doing
+    phase work itself.
+  - **Delivery-strategy + workload guards** — before apply, forecast the change
+    size and decide PR strategy (`ask-on-risk | auto-chain | single-pr |
+    exception-ok`) and chain strategy (stacked-to-main | feature-branch-chain),
+    with a >400-line budget guard. Keeps large changes reviewable.
+  - **Strict-TDD forwarding & skill registry** — forward the strict-TDD flag
+    structurally to apply/verify sub-agents (we have the toggle, not the structural
+    forwarding); and a per-skill registry indexing skills by trigger/path for the
+    orchestrator to resolve.
 - **One-click install on Linux** — install hints exist for all platforms, but the
   one-click runner only auto-runs no-sudo commands (brew on macOS, the pnpm
   installer). Linux system packages (git/curl via apt) and node/go are shown but

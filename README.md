@@ -37,7 +37,7 @@ scoop install capiko-ai
 **From source**
 
 ```bash
-go install github.com/martinhg/capiko-ai@latest
+go install github.com/martinhg/capiko-ai/cmd/capiko-ai@latest
 ```
 
 Pre-built binaries for every platform are attached to each
@@ -52,7 +52,7 @@ npm install -g @github/copilot
 copilot            # run once, then /login, then /exit
 
 # 2. Build and run
-go build -o capiko-ai .
+go build -o capiko-ai ./cmd/capiko-ai
 ./capiko-ai
 
 # 3. In the menu: Start installation → pick skills → enter.

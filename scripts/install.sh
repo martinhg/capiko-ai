@@ -216,9 +216,8 @@ install_brew() {
 install_go() {
     step "Installing via go install"
 
-    # capiko-ai's main package lives at the module root, so the install path is
-    # the module path itself (no /cmd/... suffix).
-    local go_package="github.com/${GITHUB_OWNER}/${GITHUB_REPO}@latest"
+    # capiko-ai's main package lives under cmd/capiko-ai.
+    local go_package="github.com/${GITHUB_OWNER}/${GITHUB_REPO}/cmd/capiko-ai@latest"
 
     info "Running: go install ${go_package}"
     if ! go install "$go_package"; then
