@@ -42,6 +42,24 @@ func sha256hex(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func TestMethodString(t *testing.T) {
+	tests := []struct {
+		method Method
+		want   string
+	}{
+		{MethodBrew, "brew"},
+		{MethodGo, "go"},
+		{MethodBinary, "binary"},
+		{MethodUnknown, "unknown"},
+		{Method(99), "unknown"},
+	}
+	for _, tc := range tests {
+		if got := tc.method.String(); got != tc.want {
+			t.Errorf("Method(%d).String() = %q, want %q", tc.method, got, tc.want)
+		}
+	}
+}
+
 func TestDetectMethod(t *testing.T) {
 	t.Setenv("GOBIN", "/home/dev/go/bin")
 	t.Setenv("GOPATH", "")
@@ -196,6 +214,24 @@ func TestBinaryUpgradeUnsupportedOnWindows(t *testing.T) {
 
 	if err := binaryUpgrade(context.Background(), "/x/capiko-ai", "1.2.3"); err == nil {
 		t.Error("Windows binary upgrade should return a manual-fallback error")
+	}
+}
+
+func TestDownloadRejectsNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	if _, err := download(context.Background(), srv.URL+"/missing.tar.gz"); err == nil {
+		t.Error("download should error on a non-200 response")
+	}
+}
+
+func TestReplaceExecutableFailsOnMissingDir(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "no-such-dir", "capiko-ai")
+	if err := replaceExecutable(exe, []byte("data")); err == nil {
+		t.Error("replaceExecutable should error when the target dir does not exist")
 	}
 }
 

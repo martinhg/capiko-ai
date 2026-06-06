@@ -110,6 +110,51 @@ func TestSetSDDModels(t *testing.T) {
 	}
 }
 
+func TestSetStrictTDD(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetStrictTDD(true); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.StrictTDD {
+		t.Error("StrictTDD should be true after SetStrictTDD(true)")
+	}
+	if err := s.SetStrictTDD(false); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.StrictTDD {
+		t.Error("StrictTDD should be false after SetStrictTDD(false)")
+	}
+}
+
+func TestDefaultStoreRootsAtCapikoHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	s, err := DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore: %v", err)
+	}
+	want := filepath.Join(home, ".capiko")
+	if s.Dir() != want {
+		t.Errorf("Dir() = %q, want %q", s.Dir(), want)
+	}
+}
+
+func TestLoadRejectsMalformedJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(dir).Load(); err == nil {
+		t.Error("Load should error on malformed JSON, got nil")
+	}
+}
+
 func TestChecksumStable(t *testing.T) {
 	if Checksum("hello") != Checksum("hello") {
 		t.Error("checksum not deterministic")
