@@ -157,3 +157,30 @@ func mustWriteSkill(t *testing.T, skillsDir, name string) {
 		t.Fatal(err)
 	}
 }
+
+func TestCustomInstructionDirs(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want []string
+	}{
+		{"unset", "", nil},
+		{"whitespace only", "  ,  , ", nil},
+		{"single", "/a/dir", []string{"/a/dir"}},
+		{"multiple trimmed", "/a, /b ,,/c ", []string{"/a", "/b", "/c"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", tc.env)
+			got := CustomInstructionDirs()
+			if len(got) != len(tc.want) {
+				t.Fatalf("CustomInstructionDirs() = %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("dir[%d] = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}

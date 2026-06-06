@@ -2,8 +2,12 @@ capiko-ai  ·  Copilot configurator
 
 Install scoped instructions
 
-Write 2 file(s) to ~/.copilot/instructions/ (applied per-file via their applyTo globs).
+Write 2 file(s) to each target, applied per-file via their applyTo globs.
 
+Target(s):
+  ~/.copilot/instructions/
+
+Files:
   go.instructions.md
   markdown.instructions.md
 

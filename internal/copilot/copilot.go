@@ -9,7 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
+
+// customInstructionDirsEnv is the env var Copilot reads to load extra instruction
+// directories beyond ~/.copilot/instructions/.
+const customInstructionDirsEnv = "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"
 
 // Host describes a detected and initialized Copilot CLI installation.
 type Host struct {
@@ -47,6 +52,23 @@ func Detect() (*Host, error) {
 		ConfigDir: cfg,
 		SkillsDir: filepath.Join(cfg, "skills"),
 	}, nil
+}
+
+// CustomInstructionDirs returns the extra instruction directories Copilot loads
+// via COPILOT_CUSTOM_INSTRUCTIONS_DIRS (comma-separated), trimmed and with empty
+// entries dropped. It is the single source of truth for that env var.
+func CustomInstructionDirs() []string {
+	raw := os.Getenv(customInstructionDirsEnv)
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, d := range strings.Split(raw, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // InstalledSkills returns the set of skill names already present in the host's
