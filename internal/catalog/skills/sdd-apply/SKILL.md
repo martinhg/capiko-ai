@@ -35,7 +35,10 @@ Implement the tasks exactly as specified, matching the existing codebase style.
 1. Read `openspec/config.yaml` (build/test commands, conventions) and the change's
    `spec.md`, `design.md`, and `tasks.md`.
 2. Implement the assigned task(s), following the surrounding code's patterns and
-   conventions. If strict TDD is active, write a failing test FIRST, then the code.
+   conventions. If strict TDD is active, you MUST follow the detailed protocol in
+   `~/.copilot/skills/sdd-apply/strict-tdd.md` (RED→GREEN→refactor, test layers,
+   assertion quality) — write a failing test FIRST, then the code. Do not fall
+   back to writing code first.
 3. Write or update tests for new behavior.
 4. Check off each task in `tasks.md` as you complete it.
 5. Run the project's test/build command from `config.yaml`; do not report a task
