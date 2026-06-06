@@ -3,6 +3,8 @@ package catalog
 import (
 	"strings"
 	"testing"
+
+	"github.com/martinhg/capiko-ai/internal/skill"
 )
 
 func TestLoadEmbedded(t *testing.T) {
@@ -79,5 +81,51 @@ func TestTasksSkillEmitsWorkloadGuard(t *testing.T) {
 		if !strings.Contains(tasks, want) {
 			t.Errorf("sdd-tasks skill must contain workload-guard line %q, but it is missing", want)
 		}
+	}
+}
+
+// TestApplySkillShipsStrictTDDReference pins the strict-TDD reference file to the
+// sdd-apply bundle. The orchestrator's strict-TDD forwarding tells the apply
+// executor to "follow strict-tdd.md"; if that reference file stops shipping with
+// the skill, the forwarding dangles and the executor falls back to ad-hoc TDD.
+// Guard both that the file ships as an Extra and that the SKILL.md points to it.
+func TestApplySkillShipsStrictTDDReference(t *testing.T) {
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+
+	var apply *skill.Skill
+	for i := range got {
+		if got[i].Name == "sdd-apply" {
+			apply = &got[i]
+			break
+		}
+	}
+	if apply == nil {
+		t.Fatal("sdd-apply skill not found in catalog")
+	}
+
+	var ref string
+	for _, f := range apply.Extra {
+		if f.Path == "strict-tdd.md" {
+			ref = f.Content
+			break
+		}
+	}
+	if ref == "" {
+		t.Fatal("sdd-apply must ship strict-tdd.md as an Extra file with content")
+	}
+
+	// The reference must carry the core RED→GREEN protocol vocabulary.
+	for _, want := range []string{"RED", "GREEN", "failing test"} {
+		if !strings.Contains(ref, want) {
+			t.Errorf("strict-tdd.md must cover %q", want)
+		}
+	}
+
+	// The SKILL.md must point the executor at the reference file.
+	if !strings.Contains(apply.Content, "strict-tdd.md") {
+		t.Error("sdd-apply SKILL.md must reference strict-tdd.md so the executor loads it")
 	}
 }
