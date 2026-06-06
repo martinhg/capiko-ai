@@ -106,6 +106,12 @@ UI rendering is covered by golden snapshots in `internal/tui/testdata`. They use
 a plain color profile so they stay deterministic; colors only render in a real
 terminal.
 
+## Documentation
+
+See [`docs/`](docs/README.md) — usage and the SDD workflow ([usage.md](docs/usage.md)),
+releasing ([release.md](docs/release.md)), and the codebase guide for contributors
+([docs/codebase/](docs/codebase/)).
+
 ## Status
 
 Working: configurator (install / uninstall / sync), backups with restore,
