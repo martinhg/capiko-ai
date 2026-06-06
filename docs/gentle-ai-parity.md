@@ -41,7 +41,10 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
 - Scoped instructions — curated `*.instructions.md` files (with `applyTo` globs)
   installed under `~/.copilot/instructions/`, which Copilot applies per matching
   file. "Install instructions" menu item writes them (with backup); detection
-  reports the directory.
+  reports the directory and any `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`.
+- `skill-creator` skill — guides Copilot to scaffold a new custom `SKILL.md` from a
+  plain-language description (the capiko analogue of gentle-ai's Agent Builder,
+  without an LLM in capiko's Go).
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -58,14 +61,6 @@ Ordered roughly by value for a Copilot-focused tool:
 
 - **Model configuration** — gentle-ai has per-agent model pickers. Copilot CLI
   model selection could be surfaced here if/when it exposes one.
-- **Agent Builder → "skill-creator" (decided approach).** gentle-ai's Agent
-  Builder is an LLM-generation wizard (describe → generate → preview → install):
-  it *calls a model* to write a custom agent. capiko has no LLM in its Go code (it
-  is a file configurator), and adding an API client/auth/cost would break that
-  pattern. The capiko-appropriate version keeps the LLM where it belongs — Copilot
-  — by shipping a `skill-creator` **catalog skill** that guides Copilot to scaffold
-  a new custom `SKILL.md` from the user's description. capiko ships the guidance;
-  Copilot does the building. (Same pattern as the SDD skills.)
 - **More SDD machinery (TODO).** The OpenSpec file store is in place (config /
   changes / specs / archive + merge-on-archive). The pieces still missing vs
   gentle-ai, to evolve the SDD from convention-driven to machine-coordinated:
@@ -94,9 +89,10 @@ Ordered roughly by value for a Copilot-focused tool:
   installer). Linux system packages (git/curl via apt) and node/go are shown but
   not auto-run, partly because sudo can't prompt inside the TUI. A safe Linux
   one-click (distro detection + a non-TUI sudo path) is future work.
-- **`COPILOT_CUSTOM_INSTRUCTIONS_DIRS` support** — Copilot also honors extra
-  instruction dirs via this env var; capiko manages the home file and the
-  `~/.copilot/instructions/` dir, but not arbitrary configured dirs.
+- **Manage instructions in `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`** — System Detection
+  now *reports* those configured dirs, but capiko only *writes* the home file and
+  `~/.copilot/instructions/`. Writing/managing scoped files into the env-configured
+  dirs is a possible next step.
 
 ## Documentation
 
