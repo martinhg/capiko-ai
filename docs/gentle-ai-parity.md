@@ -80,6 +80,14 @@ Ordered roughly by value for a Copilot-focused tool:
   instruction dirs via this env var; capiko manages the home file and the
   `~/.copilot/instructions/` dir, but not arbitrary configured dirs.
 
+## Dogfooding
+
+- `AGENTS.md` + `skills/` at the repo root hold the conventions for **developing
+  capiko** (workflow, Go/Bubbletea testing, commit discipline, branch-first PRs).
+  Copilot loads `AGENTS.md` as custom instructions when working in this repo —
+  mirroring gentle-ai's root `skills/`. Distinct from `internal/catalog/skills/`,
+  which is the catalog shipped to users.
+
 ## Notes
 
 - gentle-ai uses the Rose Pine palette; capiko keeps its warm amber + capybara brand.
