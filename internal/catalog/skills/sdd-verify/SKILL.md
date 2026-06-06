@@ -38,6 +38,9 @@ Confirm the implementation satisfies its contract before the change is archived.
 3. Confirm every task is implemented and checked off.
 4. Run the test/build command from `openspec/config.yaml` yourself; do not trust a
    claim that it passes.
+5. If strict TDD is active, you MUST follow the audit in
+   `~/.copilot/skills/sdd-verify/strict-tdd-verify.md` (TDD compliance, theater-test
+   detection, changed-file coverage) and fold its findings into the verdict below.
 
 ## Output
 

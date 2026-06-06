@@ -129,3 +129,49 @@ func TestApplySkillShipsStrictTDDReference(t *testing.T) {
 		t.Error("sdd-apply SKILL.md must reference strict-tdd.md so the executor loads it")
 	}
 }
+
+// TestVerifySkillShipsStrictTDDReference pins the strict-TDD verification
+// reference to the sdd-verify bundle. The orchestrator's strict-TDD forwarding
+// tells the verify executor to follow strict-tdd-verify.md; if it stops shipping,
+// the forwarding dangles and TDD compliance goes unchecked at verify time.
+func TestVerifySkillShipsStrictTDDReference(t *testing.T) {
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+
+	var verify *skill.Skill
+	for i := range got {
+		if got[i].Name == "sdd-verify" {
+			verify = &got[i]
+			break
+		}
+	}
+	if verify == nil {
+		t.Fatal("sdd-verify skill not found in catalog")
+	}
+
+	var ref string
+	for _, f := range verify.Extra {
+		if f.Path == "strict-tdd-verify.md" {
+			ref = f.Content
+			break
+		}
+	}
+	if ref == "" {
+		t.Fatal("sdd-verify must ship strict-tdd-verify.md as an Extra file with content")
+	}
+
+	// The reference must carry the core verification vocabulary: it audits whether
+	// the change was built test-first and grades findings by severity.
+	for _, want := range []string{"test-first", "CRITICAL", "WARNING"} {
+		if !strings.Contains(ref, want) {
+			t.Errorf("strict-tdd-verify.md must cover %q", want)
+		}
+	}
+
+	// The SKILL.md must point the executor at the reference file.
+	if !strings.Contains(verify.Content, "strict-tdd-verify.md") {
+		t.Error("sdd-verify SKILL.md must reference strict-tdd-verify.md so the executor loads it")
+	}
+}
