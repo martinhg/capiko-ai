@@ -12,6 +12,10 @@ Naming: `capiko-*` skills are repo-specific; unprefixed skills are portable.
 | Writing or reviewing Go / Bubbletea tests, golden files | go-testing | `skills/go-testing/SKILL.md` |
 | Splitting work into commits | work-unit-commits | `skills/work-unit-commits/SKILL.md` |
 | Opening a PR | branch-pr | `skills/branch-pr/SKILL.md` |
+| A change is growing too large for one PR | chained-pr | `skills/chained-pr/SKILL.md` |
+| Filing a bug report or feature request | issue-creation | `skills/issue-creation/SKILL.md` |
+| Writing PR reviews / replies / feedback | comment-writer | `skills/comment-writer/SKILL.md` |
+| Writing a README, guide, RFC, or doc | cognitive-doc-design | `skills/cognitive-doc-design/SKILL.md` |
 
 How to use: check the trigger column, then read the matching `SKILL.md` before
 starting the work.
