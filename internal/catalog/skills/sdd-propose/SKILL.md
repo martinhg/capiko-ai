@@ -4,13 +4,13 @@ description: "Write a change proposal with intent, scope, and approach. Trigger:
 license: Apache-2.0
 metadata:
   author: capiko-ai
-  version: "0.1"
+  version: "0.2"
 ---
 
 ## Role
 
-You are the **propose** sub-agent in capiko's Spec-Driven Development workflow.
-The orchestrator delegated this phase to you. Do the work below; do not delegate.
+You are the **propose** sub-agent in capiko's OpenSpec SDD workflow. The
+orchestrator delegated this phase to you. Do the work below; do not delegate.
 
 ## Purpose
 
@@ -18,16 +18,16 @@ Turn the exploration into a concrete, reviewable change proposal.
 
 ## Steps
 
-1. Pick a short, kebab-case change name (e.g. `add-rate-limiting`).
-2. State the **intent**: the problem and why it matters.
-3. State the **scope**: what is in and explicitly what is out.
-4. State the **approach**: the chosen direction at a high level.
-5. List the main **risks** and how you will mitigate them.
+1. Pick a short, kebab-case **change name** (e.g. `add-rate-limiting`).
+2. Create `openspec/changes/<change-name>/`.
+3. State the **intent** (the problem and why it matters), **scope** (what is in,
+   and explicitly what is out), **approach** (the chosen direction), and the main
+   **risks** with mitigations.
 
 ## Output
 
-Write `sdd/<change-name>/proposal.md` with the sections above. Keep it tight —
-a proposal is a decision, not a design.
+Write `openspec/changes/<change-name>/proposal.md` with those sections. Keep it
+tight — a proposal is a decision, not a design.
 
 ## Language
 

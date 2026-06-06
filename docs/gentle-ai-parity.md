@@ -25,9 +25,13 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
   re-applied on sync.
 - SDD phase skills bundle — `sdd-explore/propose/spec/design/tasks/apply/verify/
   archive` ship in the catalog; the orchestrator delegates each phase to its skill.
-- SDD init / onboard — `sdd-init` bootstraps per-project context (`sdd/context.md`)
-  so phases don't re-discover the project; `sdd-onboard` is a guided walkthrough
-  that teaches the SDD cycle on the user's real code.
+- SDD init / onboard — `sdd-init` bootstraps the OpenSpec store; `sdd-onboard` is a
+  guided walkthrough that teaches the SDD cycle on the user's real code.
+- OpenSpec artifact store — the SDD skills now use a formal file-based store:
+  `openspec/config.yaml` (project context), `openspec/changes/<name>/` (in-flight
+  proposal/spec/design/tasks), `openspec/specs/` (canonical specs), and
+  `openspec/changes/archive/`. Archive merges the change's spec delta into the
+  canonical specs, making the cycle resumable and auditable.
 - Strict TDD toggle — a `t` toggle on the Configure SDD screen; when on, the
   orchestrator block requires the apply/verify phases to follow strict TDD
   (failing test first). Tracked in state and re-applied on sync.
@@ -62,15 +66,12 @@ Ordered roughly by value for a Copilot-focused tool:
   — by shipping a `skill-creator` **catalog skill** that guides Copilot to scaffold
   a new custom `SKILL.md` from the user's description. capiko ships the guidance;
   Copilot does the building. (Same pattern as the SDD skills.)
-- **SDD skills are deliberately simple (TODO: full machinery).** capiko's
-  `sdd-*` skills are self-contained and file-based on purpose, to ship the workflow
-  fast. gentle-ai's SDD skills are a richer machine: an artifact-store layer
-  (engram / openspec / hybrid persistence), `_shared` status contracts passed
-  between phases, orchestrator/executor gates, delivery-strategy + workload guards,
-  strict-TDD forwarding, and per-skill registries. A later pass should evolve
-  capiko's skills toward that — add a persistence backend (engram/openspec), a
-  shared status contract the phases read/write, and the orchestrator gates — so the
-  cycle is resumable and cross-session, not just a set of guidance docs.
+- **More SDD machinery (TODO).** The OpenSpec file store is in place (config /
+  changes / specs / archive + merge-on-archive). Still missing vs gentle-ai: an
+  **engram** (cross-session memory DB) backend and a `hybrid` mode; `_shared`
+  status contracts passed structurally between phases; explicit orchestrator/
+  executor gates in the skills; and delivery-strategy + workload guards. These make
+  the cycle machine-coordinated rather than convention-driven.
 - **One-click install on Linux** — install hints exist for all platforms, but the
   one-click runner only auto-runs no-sudo commands (brew on macOS, the pnpm
   installer). Linux system packages (git/curl via apt) and node/go are shown but

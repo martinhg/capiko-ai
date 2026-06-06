@@ -1,34 +1,51 @@
 ---
 name: sdd-init
-description: "Bootstrap SDD context for a project, once. Trigger: starting SDD in a repo for the first time, or refreshing its context."
+description: "Bootstrap the OpenSpec store for a project, once. Trigger: starting SDD in a repo for the first time, or refreshing its context."
 license: Apache-2.0
 metadata:
   author: capiko-ai
-  version: "0.1"
+  version: "0.2"
 ---
 
 ## Role
 
-You are running **sdd-init**. Bootstrap capiko's Spec-Driven Development context
-for THIS project so later phases don't re-discover it every cycle. Run once per
-project; re-run to refresh after big changes.
+You are running **sdd-init**. Bootstrap capiko's OpenSpec store so the SDD cycle
+has memory: a place for in-flight changes, the canonical specs, and an archive.
+Run once per project; re-run to refresh the context.
+
+## OpenSpec layout (create this)
+
+```
+openspec/
+├── config.yaml                 # project context + rules (below)
+├── changes/                    # in-flight changes, one folder each
+│   └── archive/                # completed changes, dated
+└── specs/                      # canonical, accumulated specs (source of truth)
+```
 
 ## Steps
 
-1. Detect the stack: language(s), framework, package manager, and the build and
-   test commands (read the manifest — `go.mod`, `package.json`, `pyproject.toml`,
-   etc.).
-2. Note the project's conventions: where source and tests live, formatting/lint
-   commands, and any rules in `README`/`CONTRIBUTING`/existing instructions.
-3. Create the `sdd/` directory where change artifacts will live.
-4. Write `sdd/context.md` with: project name, stack, **build command**, **test
-   command**, where code/tests live, and key conventions.
+1. Detect the stack: language(s), framework, package manager, and the **build**
+   and **test** commands (read `go.mod` / `package.json` / `pyproject.toml` …).
+2. Create the `openspec/`, `openspec/changes/`, `openspec/changes/archive/`, and
+   `openspec/specs/` directories.
+3. Write `openspec/config.yaml`:
 
-## Output
+   ```yaml
+   schema: spec-driven
+   context: |
+     Tech stack: <languages, framework, package manager>
+     Build: <build command>
+     Test: <test command>
+     Source/tests: <where code and tests live>
+     Conventions: <formatting/lint, key rules>
+   strict_tdd: <true|false>   # match the Configure SDD strict-TDD setting
+   rules: |
+     <project rules the SDD phases must follow>
+   ```
 
-`sdd/context.md` plus the `sdd/` directory. Every later phase (especially apply
-and verify) reads `sdd/context.md` instead of re-discovering the project — so the
-test command and conventions are decided once, here.
+Every later phase reads `openspec/config.yaml` instead of re-discovering the
+project, so the test command and conventions are decided once, here.
 
 ## Language
 

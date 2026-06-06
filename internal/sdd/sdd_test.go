@@ -33,6 +33,8 @@ func TestRenderReflectsAssignments(t *testing.T) {
 		"| spec | gemini-5.4 |",
 		"| explore | default |", // unspecified phase defaults
 		"Task tool",
+		"openspec/changes/", // OpenSpec store
+		"openspec/specs/",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered block missing %q\n---\n%s", want, out)

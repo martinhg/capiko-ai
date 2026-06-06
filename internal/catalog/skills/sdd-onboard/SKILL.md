@@ -18,7 +18,8 @@ one small change end to end. Teach before you do; go one phase at a time.
 1. Explain SDD in two sentences and the phase order:
    `explore → propose → spec → design → tasks → apply → verify → archive`,
    each delegated to a sub-agent.
-2. If `sdd/context.md` is missing, run `sdd-init` first.
+2. If `openspec/config.yaml` is missing, run `sdd-init` first (it creates the
+   OpenSpec store: `openspec/config.yaml`, `changes/`, `specs/`, `changes/archive/`).
 3. Ask the user for a small, real change to use as the example.
 4. Walk through each phase ON THAT CHANGE: explain what the phase does, run it,
    show the artifact it produced, and pause for the user to follow before moving on.
