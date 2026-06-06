@@ -9,12 +9,25 @@ Commands that select, continue, apply, verify, or archive an SDD change MUST fir
 produce or consume structured status. The status is the handoff between the
 orchestrator and the phase executor.
 
-## No Native Engine
+## Native Engine
 
-capiko ships the SDD workflow as Copilot skills; there is no native `capiko-ai
-sdd-status` engine. Always reconstruct status from this prompt contract and the
-manual status schema below by reading the change's OpenSpec artifacts. Keep the
-output shape stable so every consumer parses it the same way.
+capiko ships a native SDD engine. When the `capiko-ai` binary is on PATH, prefer it
+for status and routing:
+
+- `capiko-ai sdd-status [change] --cwd <repo> --json` — the authoritative status as
+  `capiko.sdd-status` JSON (the same schema below).
+- `capiko-ai sdd-continue [change] --cwd <repo>` — the dispatcher routing view.
+
+Treat the native JSON as authoritative over prompt inference. Route only by
+`nextRecommended` and the dependency states; never re-derive status from prose when
+the binary answered. When `blockedReasons` is non-empty, report it and stop unless
+`nextRecommended` is `verify` (verification may run to refresh evidence). When
+`nextRecommended` is `resolve-blockers` or `select-change`, report and stop.
+
+If the binary is unavailable, fall back to this prompt contract: reconstruct status
+from the manual schema below by reading the change's OpenSpec artifacts. Manual
+fallback output MUST stay shape-compatible with the native JSON so consumers parse
+both the same way.
 
 ## Change Selection
 
