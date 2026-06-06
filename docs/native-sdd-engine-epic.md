@@ -26,23 +26,24 @@ is **not** relevant — that is its component-install dependency resolver
 capiko's skills are flat and independent, so there is nothing to topologically
 resolve.
 
-## Slices (each a PR, dependency-ordered)
+## Slices (each a PR, dependency-ordered) — ✅ all shipped
 
-1. **Status model + OpenSpec reader** — new `internal/sddstatus` package: the
+1. ✅ **Status model + OpenSpec reader** — new `internal/sddstatus` package: the
    `Status` types and the path/change discovery (`ListActiveOpenSpecChanges`,
    `resolveArtifactPaths`). Pure, no resolution logic yet.
-2. **`Resolve(opts)` — the brain** — artifact states (missing/done/partial),
+2. ✅ **`Resolve(opts)` — the brain** — artifact states (missing/done/partial),
    `tasks.md` checkbox parsing → task progress, the dependency state machine
    (proposal → specs → tasks → apply → verify → archive), apply state,
    `nextRecommended`, `blockedReasons`, and verify-report "clearly passing"
    detection.
-3. **Renderers** — `RenderJSON` (`schemaName: capiko.sdd-status`),
+3. ✅ **Renderers** — `RenderJSON` (`schemaName: capiko.sdd-status`),
    `RenderMarkdown`, `RenderDispatcherMarkdown`.
-4. **CLI subcommands** — `case "sdd-status"` / `case "sdd-continue"` in
+4. ✅ **CLI subcommands** — `case "sdd-status"` / `case "sdd-continue"` in
    `cmd/capiko-ai/main.go`, resolved before the TUI launches (same pattern as
    `version`), with `--cwd` and `--json` flags.
-5. **Flip the contract** — update `sdd-shared/sdd-status-contract.md` and the
-   phase-skill `## Gate` blocks to prefer the native command.
+5. ✅ **Flip the contract** — `sdd-shared/sdd-status-contract.md` and the
+   phase-skill `## Gate` blocks now prefer the native command, falling back to the
+   prompt contract when the binary is unavailable.
 
 ## Key decisions & risks
 
