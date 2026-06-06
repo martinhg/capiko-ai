@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 )
 
 // Tool is a command capiko looks for on the PATH (presence only).
@@ -183,12 +184,33 @@ func detectConfigs() []Config {
 		{Name: "settings.json", Path: filepath.Join(cfg, "settings.json")},
 		{Name: "mcp-config.json", Path: filepath.Join(cfg, "mcp-config.json")},
 	}
+	// Extra instruction dirs Copilot loads via COPILOT_CUSTOM_INSTRUCTIONS_DIRS
+	// (comma-separated). Surface them so capiko reflects every instruction source.
+	for _, d := range customInstructionDirs() {
+		specs = append(specs, Config{Name: d, Path: d})
+	}
 	for i := range specs {
 		if _, err := os.Stat(specs[i].Path); err == nil {
 			specs[i].Exists = true
 		}
 	}
 	return specs
+}
+
+// customInstructionDirs returns the trimmed, non-empty dirs configured in
+// COPILOT_CUSTOM_INSTRUCTIONS_DIRS.
+func customInstructionDirs() []string {
+	raw := getenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS")
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, d := range strings.Split(raw, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // shell returns the base name of the user's shell, or "unknown".

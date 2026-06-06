@@ -92,6 +92,31 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+func TestCustomInstructionDirsInConfigs(t *testing.T) {
+	origEnv, origHome := getenv, userHomeDir
+	t.Cleanup(func() { getenv, userHomeDir = origEnv, origHome })
+
+	existing := t.TempDir()
+	userHomeDir = func() (string, error) { return t.TempDir(), nil }
+	getenv = func(key string) string {
+		if key == "COPILOT_CUSTOM_INSTRUCTIONS_DIRS" {
+			return " " + existing + " , /does/not/exist "
+		}
+		return ""
+	}
+
+	exists := map[string]bool{}
+	for _, c := range detectConfigs() {
+		exists[c.Name] = c.Exists
+	}
+	if !exists[existing] {
+		t.Errorf("configured dir %q should be reported present, got %v", existing, exists)
+	}
+	if _, ok := exists["/does/not/exist"]; !ok || exists["/does/not/exist"] {
+		t.Error("a non-existent configured dir should be listed as missing")
+	}
+}
+
 func TestInstallInfo(t *testing.T) {
 	if cmd, auto := installInfo("node", "darwin"); cmd != "brew install node" || !auto {
 		t.Errorf("darwin node = (%q, %v), want (brew install node, true)", cmd, auto)
