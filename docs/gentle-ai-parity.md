@@ -84,11 +84,14 @@ Ordered roughly by value for a Copilot-focused tool:
     structurally to apply/verify sub-agents (we have the toggle, not the structural
     forwarding); and a per-skill registry indexing skills by trigger/path for the
     orchestrator to resolve.
-- **One-click install on Linux** — install hints exist for all platforms, but the
-  one-click runner only auto-runs no-sudo commands (brew on macOS, the pnpm
-  installer). Linux system packages (git/curl via apt) and node/go are shown but
-  not auto-run, partly because sudo can't prompt inside the TUI. A safe Linux
-  one-click (distro detection + a non-TUI sudo path) is future work.
+- **One-click install on Linux** — install hints are now distro-aware: capiko
+  detects the package manager from `/etc/os-release` (Ubuntu/Debian→apt, Arch→
+  pacman, Fedora/RHEL→dnf, plus winget on Windows and Linuxbrew when present) and
+  shows the correct per-distro command, mirroring gentle-ai's `install_deps.go`.
+  Like gentle-ai, sudo system-package installs are shown but **not** auto-run; only
+  no-sudo commands (Homebrew installs, the pnpm script) are one-click. gentle-ai
+  itself never auto-runs sudo (it displays per-distro commands), so a TUI sudo
+  handoff is not required for parity.
 - **Manage instructions in `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`** — System Detection
   now *reports* those configured dirs, but capiko only *writes* the home file and
   `~/.copilot/instructions/`. Writing/managing scoped files into the env-configured

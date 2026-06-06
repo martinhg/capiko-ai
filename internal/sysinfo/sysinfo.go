@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
 )
@@ -61,7 +62,11 @@ var (
 		out, err := exec.Command(name, args...).Output()
 		return string(out), err
 	}
-	runInstall = func(cmd string) error { return exec.Command("sh", "-c", cmd).Run() }
+	runInstall  = func(cmd string) error { return exec.Command("sh", "-c", cmd).Run() }
+	osReleaseFn = func() string {
+		b, _ := os.ReadFile("/etc/os-release")
+		return string(b)
+	}
 )
 
 // Install runs a dependency's one-click install command. It refuses anything not
@@ -127,6 +132,7 @@ func dependencySpecs(goos string) []depSpec {
 
 func detectDependencies(goos string) []Dependency {
 	specs := dependencySpecs(goos)
+	pm := packageManager(goos)
 	deps := make([]Dependency, 0, len(specs))
 	for _, spec := range specs {
 		d := Dependency{Name: spec.name, Required: spec.required}
@@ -134,41 +140,179 @@ func detectDependencies(goos string) []Dependency {
 			d.Found = true
 			d.Version = versionRe.FindString(out)
 		} else {
-			d.Install, d.Auto = installInfo(spec.name, goos)
+			d.Install, d.Auto = installInfo(spec.name, pm)
 		}
 		deps = append(deps, d)
 	}
 	return deps
 }
 
-// installInfo returns how to install a missing dependency on goos: the command
-// (or a manual hint) and whether capiko may run it via one-click. Anything that
-// needs sudo or an interactive prompt is reported with auto=false (shown, not run).
-func installInfo(name, goos string) (cmd string, auto bool) {
-	const brewScript = `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
-	pnpmScript := "curl -fsSL https://get.pnpm.io/install.sh | sh -"
+// Linux distro families capiko recognizes, mirroring gentle-ai's support matrix:
+// Ubuntu/Debian (apt), Arch (pacman), and Fedora/RHEL (dnf).
+const (
+	linuxDistroUnknown = "unknown"
+	linuxDistroUbuntu  = "ubuntu"
+	linuxDistroDebian  = "debian"
+	linuxDistroArch    = "arch"
+	linuxDistroFedora  = "fedora"
+)
 
-	if goos == "darwin" {
-		switch name {
-		case "brew":
-			return brewScript, false // bootstrap prompts for sudo
-		case "npm":
-			return "brew install node", true // npm ships with node
-		default:
-			return "brew install " + name, true
+// packageManager resolves the package manager capiko should reference for goos:
+// brew on macOS (or Linux when Homebrew is installed), winget on Windows, and the
+// distro-native manager (apt/pacman/dnf) on Linux. Returns "" when unsupported.
+func packageManager(goos string) string {
+	switch goos {
+	case "darwin":
+		return "brew"
+	case "windows":
+		return "winget"
+	case "linux":
+		if _, err := lookPath("brew"); err == nil {
+			return "brew" // Linuxbrew, no sudo
+		}
+		switch detectLinuxDistro(osReleaseFn()) {
+		case linuxDistroUbuntu, linuxDistroDebian:
+			return "apt"
+		case linuxDistroArch:
+			return "pacman"
+		case linuxDistroFedora:
+			return "dnf"
 		}
 	}
+	return ""
+}
 
-	// Linux and others — best effort.
+// detectLinuxDistro classifies /etc/os-release content into a known family using
+// ID and ID_LIKE, so derivatives (Mint, Manjaro, Rocky, RHEL clones) map to their
+// base distro's package manager.
+func detectLinuxDistro(osRelease string) string {
+	if strings.TrimSpace(osRelease) == "" {
+		return linuxDistroUnknown
+	}
+	fields := map[string]string{}
+	for _, line := range strings.Split(osRelease, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.ToUpper(strings.TrimSpace(parts[0]))
+		val := strings.ToLower(strings.Trim(strings.TrimSpace(parts[1]), `"`))
+		fields[key] = val
+	}
+	id, idLike := fields["ID"], fields["ID_LIKE"]
+	switch {
+	case matchesDistro(id, idLike, linuxDistroUbuntu, linuxDistroDebian):
+		if id == linuxDistroDebian {
+			return linuxDistroDebian
+		}
+		return linuxDistroUbuntu
+	case matchesDistro(id, idLike, linuxDistroArch):
+		return linuxDistroArch
+	case matchesDistro(id, idLike, linuxDistroFedora, "rhel", "centos", "rocky", "almalinux", "nobara"):
+		return linuxDistroFedora
+	}
+	return linuxDistroUnknown
+}
+
+// matchesDistro reports whether id, or any ID_LIKE token, is one of wants.
+func matchesDistro(id, idLike string, wants ...string) bool {
+	for _, w := range wants {
+		if id == w {
+			return true
+		}
+		for _, token := range strings.Fields(idLike) {
+			if token == w {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// installInfo returns how to install a missing dependency: the command (or a
+// manual hint) and whether capiko may run it via one-click. Only no-sudo commands
+// (Homebrew installs, the pnpm script) are auto-runnable; sudo, winget, and manual
+// hints are reported with auto=false (shown, not run) — matching gentle-ai, which
+// shows per-distro commands rather than auto-running them.
+func installInfo(name, pm string) (cmd string, auto bool) {
+	const brewScript = `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+	const pnpmScript = "curl -fsSL https://get.pnpm.io/install.sh | sh -"
+
 	switch name {
 	case "pnpm":
-		return pnpmScript, true
+		return pnpmScript, true // no sudo, safe to one-click
 	case "brew":
-		return brewScript, false
-	case "git", "curl":
-		return "sudo apt-get install -y " + name, false // distro-dependent, needs sudo
-	default: // node, npm, go
-		return "see the tool's website to install " + name, false
+		return brewScript, false // bootstrap prompts for sudo
+	case "npm":
+		return installInfo("node", pm) // npm ships with node
+	}
+
+	switch pm {
+	case "brew":
+		return "brew install " + name, true
+	case "winget":
+		return wingetCmd(name), false
+	case "apt":
+		switch name {
+		case "node":
+			return "curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs", false
+		case "go":
+			return "sudo apt-get install -y golang", false
+		default:
+			return "sudo apt-get install -y " + name, false
+		}
+	case "pacman":
+		switch name {
+		case "node":
+			return "sudo pacman -S --noconfirm nodejs npm", false
+		default:
+			return "sudo pacman -S --noconfirm " + name, false
+		}
+	case "dnf":
+		switch name {
+		case "node":
+			return "curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash - && sudo dnf install -y nodejs", false
+		case "go":
+			return "sudo dnf install -y golang", false
+		default:
+			return "sudo dnf install -y " + name, false
+		}
+	default:
+		return manualHint(name), false
+	}
+}
+
+// wingetCmd returns the winget install command for a dependency on Windows.
+func wingetCmd(name string) string {
+	switch name {
+	case "git":
+		return "winget install --id Git.Git -e"
+	case "node":
+		return "winget install --id OpenJS.NodeJS.LTS -e"
+	case "go":
+		return "winget install --id GoLang.Go -e"
+	default:
+		return manualHint(name)
+	}
+}
+
+// manualHint points at a tool's official install page when capiko has no command.
+func manualHint(name string) string {
+	switch name {
+	case "git":
+		return "install git from https://git-scm.com/"
+	case "curl":
+		return "install curl from https://curl.se/"
+	case "node":
+		return "install node from https://nodejs.org/"
+	case "go":
+		return "install go from https://go.dev/dl/"
+	default:
+		return "see the tool's website to install " + name
 	}
 }
 
