@@ -93,17 +93,12 @@ func TestDetect(t *testing.T) {
 }
 
 func TestCustomInstructionDirsInConfigs(t *testing.T) {
-	origEnv, origHome := getenv, userHomeDir
-	t.Cleanup(func() { getenv, userHomeDir = origEnv, origHome })
+	origHome := userHomeDir
+	t.Cleanup(func() { userHomeDir = origHome })
 
 	existing := t.TempDir()
 	userHomeDir = func() (string, error) { return t.TempDir(), nil }
-	getenv = func(key string) string {
-		if key == "COPILOT_CUSTOM_INSTRUCTIONS_DIRS" {
-			return " " + existing + " , /does/not/exist "
-		}
-		return ""
-	}
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", " "+existing+" , /does/not/exist ")
 
 	exists := map[string]bool{}
 	for _, c := range detectConfigs() {

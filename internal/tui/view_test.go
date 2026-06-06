@@ -46,6 +46,7 @@ func golden(t *testing.T, name, got string) {
 }
 
 func TestViewGolden(t *testing.T) {
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "") // deterministic golden: home target only
 	fixedHost := &copilot.Host{SkillsDir: "/home/user/.copilot/skills"}
 
 	svc := services{host: fixedHost}

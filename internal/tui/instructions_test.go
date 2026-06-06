@@ -7,9 +7,11 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/scoped"
 )
 
 func TestInstructionsInstallWritesFilesAndBacksUp(t *testing.T) {
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "") // hermetic: home dir only
 	cfgDir := t.TempDir()
 	svc := services{
 		host:   &copilot.Host{ConfigDir: cfgDir},
@@ -48,6 +50,34 @@ func TestInstructionsInstallWritesFilesAndBacksUp(t *testing.T) {
 	_, c := s.Update(key("enter"))
 	if _, ok := c().(backMsg); !ok {
 		t.Error("done screen should go back on any key")
+	}
+}
+
+func TestInstructionsInstallWritesToCustomDirs(t *testing.T) {
+	cfgDir := t.TempDir()
+	customDir := t.TempDir()
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", customDir)
+
+	svc := services{
+		host:   &copilot.Host{ConfigDir: cfgDir},
+		backup: backup.NewStore(t.TempDir()),
+	}
+	n, err := installInstructions(svc.host, svc.backup)
+	if err != nil {
+		t.Fatalf("installInstructions: %v", err)
+	}
+
+	items, _ := scoped.Load()
+	wantTargets := 2 // ~/.copilot/instructions + one custom dir
+	if n != len(items)*wantTargets {
+		t.Errorf("count = %d, want %d (%d files × %d targets)", n, len(items)*wantTargets, len(items), wantTargets)
+	}
+
+	// The same file must land in BOTH the home dir and the custom dir.
+	for _, dir := range []string{filepath.Join(cfgDir, "instructions"), customDir} {
+		if _, err := os.Stat(filepath.Join(dir, "go.instructions.md")); err != nil {
+			t.Errorf("go.instructions.md missing in %s: %v", dir, err)
+		}
 	}
 }
 
