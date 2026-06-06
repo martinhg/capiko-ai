@@ -41,17 +41,26 @@ changelog:
       - "^test:"
       - "^ci:"
 
-brews:
+homebrew_casks:
   - repository:
       owner: martinhg
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
+    directory: Casks
     name: capiko-ai
+    binaries:
+      - capiko-ai
     homepage: "https://github.com/martinhg/capiko-ai"
     description: "capiko-ai — mounts the capiko layer (skills, state, backups) onto the GitHub Copilot CLI."
-    license: "MIT"
-    commit_msg_template: "chore: update capiko-ai formula to {{ .Tag }}"
+    commit_msg_template: "chore: update capiko-ai cask to {{ .Tag }}"
+    # capiko-ai binaries are not notarized; strip the macOS quarantine flag on install
+    # so the cask runs without a Gatekeeper prompt.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/capiko-ai"]
+          end
 
 scoops:
   - repository:
