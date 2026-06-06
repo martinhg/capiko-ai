@@ -25,6 +25,9 @@ func TestLoadEmbedded(t *testing.T) {
 	if !byName["capiko-hello"] {
 		t.Errorf("expected capiko-hello in catalog, got %v", byName)
 	}
+	if !byName["codebase-docs"] {
+		t.Errorf("expected codebase-docs in catalog, got %v", byName)
+	}
 
 	// The SDD skills bundle must be present and parse.
 	for _, name := range []string{

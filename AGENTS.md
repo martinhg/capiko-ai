@@ -20,5 +20,8 @@ Naming: `capiko-*` skills are repo-specific; unprefixed skills are portable.
 How to use: check the trigger column, then read the matching `SKILL.md` before
 starting the work.
 
+For the architecture and where code belongs, read the codebase guide:
+`docs/codebase/` (`mental-model.md`, `repository-map.md`, `architecture.md`).
+
 These skills are for **developing capiko**. The skills capiko ships to users live
 in `internal/catalog/skills/` (embedded in the binary).

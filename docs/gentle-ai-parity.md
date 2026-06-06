@@ -98,6 +98,15 @@ Ordered roughly by value for a Copilot-focused tool:
   instruction dirs via this env var; capiko manages the home file and the
   `~/.copilot/instructions/` dir, but not arbitrary configured dirs.
 
+## Documentation
+
+- `docs/` is organized in three layers like gentle-ai's: **user** (`usage.md` +
+  README), **maintainer** (`release.md`, this parity doc), and a **codebase guide**
+  for contributors (`docs/codebase/`: `mental-model.md`, `repository-map.md`,
+  `architecture.md`).
+- A `codebase-docs` catalog skill ships the same idea to users: it guides Copilot to
+  generate a `docs/codebase/` guide for **their** project, so new devs onboard fast.
+
 ## Dogfooding
 
 - `AGENTS.md` + `skills/` at the repo root hold the conventions for **developing
