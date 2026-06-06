@@ -46,11 +46,14 @@ resolve.
 
 ## Key decisions & risks
 
-- **OpenSpec path contract.** capiko's own skills are inconsistent: some write
-  `spec.md` (singular), others reference `specs/` (a directory, like gentle-ai).
-  The engine must accept **both** (`spec.md` and/or `specs/*.md`). Normalizing the
-  skills to one convention is a follow-up cleanup. `apply-progress.md` and
-  `verify-report.md` live under the change dir; the phase skills should write them.
+- **OpenSpec path contract.** Two distinct artifacts, not an inconsistency:
+  `openspec/specs/` (top-level directory) holds the **canonical accumulated specs**
+  (the source of truth, read as context), while `openspec/changes/<change>/spec.md`
+  is that change's **spec delta** (a single file capiko writes). The engine
+  resolves the change's spec as `spec.md`; a `specs/` directory under a change is
+  gentle-ai's per-capability layout, not capiko's, and is ignored. `apply-progress.md`
+  and `verify-report.md` live under the change dir; the phase skills should write
+  them.
 - **`schemaName: capiko.sdd-status`** — capiko's own, not gentle-ai's.
 - **Active change** = present under `openspec/changes/` and not archived.
 - **TUI safety** — subcommands resolve and exit before the full-screen TUI starts.

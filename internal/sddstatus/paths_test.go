@@ -69,30 +69,18 @@ func TestResolveArtifactPaths(t *testing.T) {
 	}
 }
 
-func TestResolveArtifactPathsSpecsDir(t *testing.T) {
-	cwd := t.TempDir()
-	root := filepath.Join(cwd, "openspec", "changes", "add-auth")
-	// No spec.md; a specs/ directory of capability specs instead (gentle-ai style).
-	writeFile(t, filepath.Join(root, "specs", "b-capability.md"))
-	writeFile(t, filepath.Join(root, "specs", "a-capability.md"))
-
-	p := ResolveArtifactPaths(cwd, "add-auth")
-	if len(p.Specs) != 2 {
-		t.Fatalf("Specs = %v, want 2 from specs/ dir", p.Specs)
-	}
-	if filepath.Base(p.Specs[0]) != "a-capability.md" || filepath.Base(p.Specs[1]) != "b-capability.md" {
-		t.Errorf("Specs not sorted: %v", p.Specs)
-	}
-}
-
-func TestResolveArtifactPathsAcceptsBothSpecForms(t *testing.T) {
+func TestResolveArtifactPathsSpecIsDeltaFileOnly(t *testing.T) {
+	// capiko's per-change spec delta is a single spec.md. A specs/ directory under
+	// the change is NOT capiko's layout (that is gentle-ai's per-capability deltas,
+	// and the top-level openspec/specs/ holds the canonical specs) — it must be
+	// ignored, not mistaken for the change's spec.
 	cwd := t.TempDir()
 	root := filepath.Join(cwd, "openspec", "changes", "add-auth")
 	writeFile(t, filepath.Join(root, "spec.md"))
-	writeFile(t, filepath.Join(root, "specs", "extra.md"))
+	writeFile(t, filepath.Join(root, "specs", "stray.md"))
 
 	p := ResolveArtifactPaths(cwd, "add-auth")
-	if len(p.Specs) != 2 {
-		t.Errorf("Specs = %v, want both spec.md and specs/extra.md", p.Specs)
+	if len(p.Specs) != 1 || filepath.Base(p.Specs[0]) != "spec.md" {
+		t.Errorf("Specs = %v, want only the spec.md delta (specs/ under a change ignored)", p.Specs)
 	}
 }
