@@ -23,12 +23,32 @@ import (
 // distinct from the top-level openspec/specs/ canonical specs, which are change
 // context, not a change artifact.
 type ArtifactPaths struct {
-	Proposal      []string
-	Specs         []string // the change's spec.md delta
-	Design        []string
-	Tasks         []string
-	ApplyProgress []string
-	VerifyReport  []string
+	Proposal      []string `json:"proposal"`
+	Specs         []string `json:"specs"` // the change's spec.md delta
+	Design        []string `json:"design"`
+	Tasks         []string `json:"tasks"`
+	ApplyProgress []string `json:"applyProgress"`
+	VerifyReport  []string `json:"verifyReport"`
+}
+
+// withArrays returns a copy in which every nil slice is an empty slice, so JSON
+// serializes missing artifacts as [] rather than null (the status contract
+// requires arrays).
+func (a ArtifactPaths) withArrays() ArtifactPaths {
+	arr := func(s []string) []string {
+		if s == nil {
+			return []string{}
+		}
+		return s
+	}
+	return ArtifactPaths{
+		Proposal:      arr(a.Proposal),
+		Specs:         arr(a.Specs),
+		Design:        arr(a.Design),
+		Tasks:         arr(a.Tasks),
+		ApplyProgress: arr(a.ApplyProgress),
+		VerifyReport:  arr(a.VerifyReport),
+	}
 }
 
 // OpenSpecDir returns the openspec directory under a workspace root.
