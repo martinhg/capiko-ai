@@ -32,7 +32,7 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, store *state.Store, bkp 
 		if _, err := sk.Install(host.SkillsDir); err != nil {
 			return 0, fmt.Errorf("syncing %s: %w", sk.Name, err)
 		}
-		recorded = append(recorded, state.Installed{Name: sk.Name, Checksum: state.Checksum(sk.Content)})
+		recorded = append(recorded, state.Installed{Name: sk.Name, Checksum: state.Checksum(sk.CanonicalContent())})
 	}
 	if store != nil {
 		if err := store.Apply(Version, recorded, nil); err != nil {

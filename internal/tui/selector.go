@@ -202,7 +202,7 @@ func (s *selector) reconcileCmd() tea.Cmd {
 					return reconciledMsg{err: fmt.Errorf("installing %s: %w", o.sk.Name, err)}
 				}
 				res.installed = append(res.installed, o.sk.Name)
-				recorded = append(recorded, state.Installed{Name: o.sk.Name, Checksum: state.Checksum(o.sk.Content)})
+				recorded = append(recorded, state.Installed{Name: o.sk.Name, Checksum: state.Checksum(o.sk.CanonicalContent())})
 				continue
 			}
 			if err := host.UninstallSkill(o.sk.Name); err != nil {

@@ -25,7 +25,7 @@ func Stale(catalog []skill.Skill, st *state.State) []string {
 		if !ok {
 			continue
 		}
-		if rec.Checksum != state.Checksum(sk.Content) {
+		if rec.Checksum != state.Checksum(sk.CanonicalContent()) {
 			out = append(out, sk.Name)
 		}
 	}
