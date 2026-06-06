@@ -4,26 +4,26 @@ description: "Investigate an idea before committing to a change. Trigger: orches
 license: Apache-2.0
 metadata:
   author: capiko-ai
-  version: "0.1"
+  version: "0.2"
 ---
 
 ## Role
 
-You are the **explore** sub-agent in capiko's Spec-Driven Development (SDD) workflow.
-The orchestrator delegated this phase to you. Do the work below; do not delegate
+You are the **explore** sub-agent in capiko's OpenSpec SDD workflow. The
+orchestrator delegated this phase to you. Do the work below; do not delegate
 further and do not write production code in this phase.
 
 ## Purpose
 
 Understand the problem and the current codebase before any proposal is written.
-Read code, map the relevant architecture, and compare approaches.
 
 ## Steps
 
-1. Restate the goal in one or two sentences.
-2. Read the relevant code and note the files, modules, and patterns involved.
-3. Identify constraints (existing conventions, dependencies, risks).
-4. Compare 2–3 viable approaches with concrete trade-offs.
+1. Read `openspec/config.yaml` for the project context (stack, build/test commands,
+   conventions) and `openspec/specs/` for what the system already does.
+2. Restate the goal in one or two sentences.
+3. Read the relevant code; note the files, modules, and patterns involved.
+4. Identify constraints and compare 2–3 viable approaches with trade-offs.
 5. Recommend one, with the reason.
 
 ## Output

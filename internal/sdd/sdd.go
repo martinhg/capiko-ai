@@ -77,6 +77,7 @@ func Render(assignments map[string]string, strictTDD bool) string {
 
 	b.WriteString("### Phases (in order)\n\n")
 	b.WriteString("explore → propose → spec → design → tasks → apply → verify → archive\n\n")
+	b.WriteString("Artifacts live in the **OpenSpec store**: in-flight changes under `openspec/changes/<change>/` (proposal, spec, design, tasks), the canonical specs in `openspec/specs/`, and completed changes in `openspec/changes/archive/`. Archive merges the change's spec delta into `openspec/specs/`. Run `sdd-init` once to create it.\n\n")
 
 	b.WriteString("### Model assignments\n\n")
 	b.WriteString("Run the session on the most capable assigned model. Delegate each phase to its model via the Task tool's `model` parameter. Copilot honors any model whose cost is ≤ the session model and downgrades anything more expensive, so keep the orchestrator on the top model. `default` means inherit the session model.\n\n")
