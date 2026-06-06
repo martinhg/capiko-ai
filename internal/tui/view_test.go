@@ -110,7 +110,7 @@ func TestViewGolden(t *testing.T) {
 		{"notfound", App{state: appNotFound}.View()},
 		{"failed", App{state: appFailed, err: errors.New("boom")}.View()},
 		{"menu", App{state: appMenu, catalog: testCatalog()}.View()},
-		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "1.1.0"}.View()},
+		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "1.2.0"}.View()},
 		{"menu_stale", App{state: appMenu, catalog: testCatalog(), stale: []string{"capiko-hello", "capiko-pr"}}.View()},
 		{"detection", App{state: appScreen, active: detection}.View()},
 		{"persona", App{state: appScreen, active: newPersona(svc, testCatalog(), map[string]bool{})}.View()},
