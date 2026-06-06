@@ -61,15 +61,42 @@ type Dependencies struct {
 	Archive  DependencyState `json:"archive"`
 }
 
-// Status is the computed state of an SDD change.
+// Schema identity emitted in every status payload.
+const (
+	SchemaName    = "capiko.sdd-status"
+	SchemaVersion = 1
+	artifactStore = "openspec"
+	modeRepoLocal = "repo-local"
+)
+
+// PlanningHome locates the OpenSpec store.
+type PlanningHome struct {
+	Mode string `json:"mode"`
+	Path string `json:"path"`
+}
+
+// ActionContext bounds where a phase may edit.
+type ActionContext struct {
+	Mode             string   `json:"mode"`
+	WorkspaceRoot    string   `json:"workspaceRoot"`
+	AllowedEditRoots []string `json:"allowedEditRoots"`
+}
+
+// Status is the computed state of an SDD change. Its JSON form is the
+// capiko.sdd-status contract consumed by the SDD skills.
 type Status struct {
+	SchemaName      string                   `json:"schemaName"`
+	SchemaVersion   int                      `json:"schemaVersion"`
 	ChangeName      *string                  `json:"changeName"`
+	ArtifactStore   string                   `json:"artifactStore"`
+	PlanningHome    PlanningHome             `json:"planningHome"`
 	ChangeRoot      *string                  `json:"changeRoot"`
 	ArtifactPaths   ArtifactPaths            `json:"artifactPaths"`
 	Artifacts       map[string]ArtifactState `json:"artifacts"`
 	TaskProgress    TaskProgress             `json:"taskProgress"`
 	Dependencies    Dependencies             `json:"dependencies"`
 	ApplyState      ApplyState               `json:"applyState"`
+	ActionContext   ActionContext            `json:"actionContext"`
 	NextRecommended string                   `json:"nextRecommended"`
 	BlockedReasons  []string                 `json:"blockedReasons"`
 }
@@ -98,7 +125,7 @@ func Resolve(options ResolveOptions) (Status, error) {
 		return Status{}, err
 	}
 	if blocked != "" {
-		return blockedStatus(changeNamePtr(changeName), nil, blocked, reasons), nil
+		return blockedStatus(cwd, changeNamePtr(changeName), blocked, reasons), nil
 	}
 
 	root := changeRoot(cwd, changeName)
@@ -128,17 +155,13 @@ func Resolve(options ResolveOptions) (Status, error) {
 	dependencies := resolveDependencies(artifacts, taskProgress, applyState, coreReady, verifyReportPassing)
 	nextRecommended := resolveNextRecommended(dependencies, applyState)
 
-	return Status{
-		ChangeName:      changeNamePtr(changeName),
-		ChangeRoot:      &root,
-		ArtifactPaths:   paths,
-		Artifacts:       artifacts,
-		TaskProgress:    taskProgress,
-		Dependencies:    dependencies,
-		ApplyState:      applyState,
-		NextRecommended: nextRecommended,
-		BlockedReasons:  blockedReasons,
-	}, nil
+	status := baseStatus(cwd, changeNamePtr(changeName), &root, nextRecommended, blockedReasons)
+	status.ArtifactPaths = paths.withArrays()
+	status.Artifacts = artifacts
+	status.TaskProgress = taskProgress
+	status.Dependencies = dependencies
+	status.ApplyState = applyState
+	return status, nil
 }
 
 // selectChange resolves which change to act on. It returns a routing token and
@@ -279,15 +302,41 @@ func changeNamePtr(name string) *string {
 	return &name
 }
 
-func blockedStatus(name, root *string, next string, reasons []string) Status {
+// baseStatus builds a status with the schema metadata, planning home, action
+// context, and blocked defaults set; callers override the computed fields.
+func baseStatus(cwd string, name, root *string, next string, reasons []string) Status {
+	if reasons == nil {
+		reasons = []string{}
+	}
 	return Status{
-		ChangeName:      name,
-		ChangeRoot:      root,
-		Artifacts:       map[string]ArtifactState{},
-		ApplyState:      ApplyBlocked,
+		SchemaName:    SchemaName,
+		SchemaVersion: SchemaVersion,
+		ChangeName:    name,
+		ArtifactStore: artifactStore,
+		PlanningHome:  PlanningHome{Mode: modeRepoLocal, Path: OpenSpecDir(cwd)},
+		ChangeRoot:    root,
+		ArtifactPaths: ArtifactPaths{}.withArrays(),
+		Artifacts: map[string]ArtifactState{
+			"proposal": ArtifactMissing, "specs": ArtifactMissing, "design": ArtifactMissing,
+			"tasks": ArtifactMissing, "applyProgress": ArtifactMissing, "verifyReport": ArtifactMissing,
+		},
+		TaskProgress: TaskProgress{},
+		Dependencies: Dependencies{
+			Proposal: DependencyBlocked, Specs: DependencyBlocked, Design: DependencyBlocked,
+			Tasks: DependencyBlocked, Apply: DependencyBlocked, Verify: DependencyBlocked, Archive: DependencyBlocked,
+		},
+		ApplyState: ApplyBlocked,
+		ActionContext: ActionContext{
+			Mode: modeRepoLocal, WorkspaceRoot: cwd, AllowedEditRoots: []string{cwd},
+		},
 		NextRecommended: next,
 		BlockedReasons:  reasons,
 	}
+}
+
+// blockedStatus is a base status with no resolved change root.
+func blockedStatus(cwd string, name *string, next string, reasons []string) Status {
+	return baseStatus(cwd, name, nil, next, reasons)
 }
 
 var taskCheckbox = regexp.MustCompile(`^\s*(?:[-*]|\d+[.)])\s+\[([ xX])\]`)
