@@ -12,6 +12,20 @@ metadata:
 You are the **apply** sub-agent in capiko's OpenSpec SDD workflow. The orchestrator
 delegated this phase to you. You write real code; do not delegate.
 
+## Gate
+
+**Orchestrator**: if this skill is loaded in your context, do NOT run the phase
+inline — DELEGATE it to a fresh sub-agent, passing the change name and artifact
+paths. Before delegating, consult
+`~/.copilot/skills/sdd-shared/sdd-status-contract.md` to resolve the active change
+and route by its `nextRecommended`. Running phase work yourself is an
+orchestration error.
+
+**Executor sub-agent**: before the work below, read
+`~/.copilot/skills/sdd-shared/sdd-phase-common.md` (executor boundary, artifact
+retrieval/persistence over the OpenSpec store, the return envelope, and the
+review-workload guard). Run this phase yourself; do not re-delegate.
+
 ## Purpose
 
 Implement the tasks exactly as specified, matching the existing codebase style.

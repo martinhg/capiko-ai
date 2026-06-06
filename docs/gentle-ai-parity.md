@@ -68,14 +68,16 @@ Ordered roughly by value for a Copilot-focused tool:
     alternative/companion artifact store, so the cycle's state survives across
     sessions and machines without relying on the repo's files. `hybrid` = files +
     engram together. gentle-ai selects `engram | openspec | hybrid | none` per change.
-  - **`_shared` status contracts** — a structured status object passed between
-    phases (schema name, planning home, change root, artifact paths, context files,
-    apply/task progress, dependency states, action context), instead of each phase
-    re-reading loose markdown. Makes hand-offs precise and resumable mid-phase.
-  - **Orchestrator/executor gates** — explicit guards in each skill: if the
-    orchestrator loaded the skill it must DELEGATE (not run it inline); only the
-    executor sub-agent runs the phase body. Prevents the orchestrator from doing
-    phase work itself.
+  - ~~**`_shared` status contracts**~~ — **Done.** Shipped as the `sdd-shared`
+    multi-file skill bundle (`sdd-status-contract.md` + `sdd-phase-common.md`),
+    enabled by the multi-file skill installer. A structured status object
+    (`schemaName: capiko.sdd-status`: change root, artifact paths, apply/task
+    progress, dependency states, action context) replaces re-reading loose
+    markdown between phases.
+  - ~~**Orchestrator/executor gates**~~ — **Done.** Every SDD phase skill carries
+    a `## Gate`: if the orchestrator loaded the skill it must DELEGATE (not run it
+    inline) and route via the status contract; the executor sub-agent loads
+    `sdd-phase-common.md` and runs the phase body without re-delegating.
   - **Delivery-strategy + workload guards** — before apply, forecast the change
     size and decide PR strategy (`ask-on-risk | auto-chain | single-pr |
     exception-ok`) and chain strategy (stacked-to-main | feature-branch-chain),
