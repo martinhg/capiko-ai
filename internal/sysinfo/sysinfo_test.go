@@ -112,15 +112,95 @@ func TestCustomInstructionDirsInConfigs(t *testing.T) {
 	}
 }
 
+func TestDetectLinuxDistro(t *testing.T) {
+	tests := []struct {
+		name       string
+		osRelease  string
+		wantDistro string
+	}{
+		{"empty", "", linuxDistroUnknown},
+		{"ubuntu", "ID=ubuntu\nVERSION_ID=\"24.04\"", linuxDistroUbuntu},
+		{"debian", "ID=debian", linuxDistroDebian},
+		{"mint via id_like", "ID=linuxmint\nID_LIKE=ubuntu", linuxDistroUbuntu},
+		{"arch", "ID=arch", linuxDistroArch},
+		{"manjaro via id_like", "ID=manjaro\nID_LIKE=arch", linuxDistroArch},
+		{"fedora", "ID=fedora", linuxDistroFedora},
+		{"rocky", "ID=rocky", linuxDistroFedora},
+		{"rhel via id_like", "ID=ol\nID_LIKE=\"rhel fedora\"", linuxDistroFedora},
+		{"unknown", "ID=void", linuxDistroUnknown},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectLinuxDistro(tc.osRelease); got != tc.wantDistro {
+				t.Errorf("detectLinuxDistro = %q, want %q", got, tc.wantDistro)
+			}
+		})
+	}
+}
+
+func TestPackageManager(t *testing.T) {
+	origLook, origOSRel := lookPath, osReleaseFn
+	t.Cleanup(func() { lookPath, osReleaseFn = origLook, origOSRel })
+
+	noBrew := func(name string) (string, error) { return "", errors.New("not found") }
+	lookPath = noBrew
+
+	if got := packageManager("darwin"); got != "brew" {
+		t.Errorf("darwin pm = %q, want brew", got)
+	}
+	if got := packageManager("windows"); got != "winget" {
+		t.Errorf("windows pm = %q, want winget", got)
+	}
+
+	cases := map[string]string{"ID=ubuntu": "apt", "ID=arch": "pacman", "ID=fedora": "dnf", "ID=void": ""}
+	for osrel, want := range cases {
+		osReleaseFn = func() string { return osrel }
+		if got := packageManager("linux"); got != want {
+			t.Errorf("linux %q pm = %q, want %q", osrel, got, want)
+		}
+	}
+
+	// brew on Linux wins over the distro package manager.
+	lookPath = func(name string) (string, error) {
+		if name == "brew" {
+			return "/home/linuxbrew/.linuxbrew/bin/brew", nil
+		}
+		return "", errors.New("not found")
+	}
+	osReleaseFn = func() string { return "ID=ubuntu" }
+	if got := packageManager("linux"); got != "brew" {
+		t.Errorf("linux with brew pm = %q, want brew", got)
+	}
+}
+
 func TestInstallInfo(t *testing.T) {
-	if cmd, auto := installInfo("node", "darwin"); cmd != "brew install node" || !auto {
-		t.Errorf("darwin node = (%q, %v), want (brew install node, true)", cmd, auto)
+	if cmd, auto := installInfo("node", "brew"); cmd != "brew install node" || !auto {
+		t.Errorf("brew node = (%q, %v), want (brew install node, true)", cmd, auto)
 	}
-	if cmd, auto := installInfo("pnpm", "linux"); !strings.Contains(cmd, "pnpm") || !auto {
-		t.Errorf("linux pnpm = (%q, %v), want a runnable pnpm install", cmd, auto)
+	if cmd, auto := installInfo("pnpm", "apt"); !strings.Contains(cmd, "pnpm") || !auto {
+		t.Errorf("pnpm = (%q, %v), want a runnable pnpm install", cmd, auto)
 	}
-	if _, auto := installInfo("git", "linux"); auto {
-		t.Error("sudo apt install should not be auto-runnable")
+	// Each Linux package manager produces its own correct, non-auto command.
+	for pm, want := range map[string]string{
+		"apt":    "sudo apt-get install -y git",
+		"pacman": "sudo pacman -S --noconfirm git",
+		"dnf":    "sudo dnf install -y git",
+	} {
+		if cmd, auto := installInfo("git", pm); cmd != want || auto {
+			t.Errorf("%s git = (%q, %v), want (%q, false)", pm, cmd, auto, want)
+		}
+	}
+	// Windows uses winget, not apt (regression guard).
+	if cmd, auto := installInfo("git", "winget"); !strings.Contains(cmd, "winget") || auto {
+		t.Errorf("winget git = (%q, %v), want a winget command, not auto", cmd, auto)
+	}
+	// Node on apt uses the NodeSource setup, not a bare apt package.
+	if cmd, _ := installInfo("node", "apt"); !strings.Contains(cmd, "nodesource") {
+		t.Errorf("apt node = %q, want a NodeSource install", cmd)
+	}
+	// Unknown package manager falls back to a manual hint.
+	if cmd, auto := installInfo("git", ""); auto || strings.HasPrefix(cmd, "sudo") {
+		t.Errorf("unknown pm git = (%q, %v), want a non-auto manual hint", cmd, auto)
 	}
 }
 
