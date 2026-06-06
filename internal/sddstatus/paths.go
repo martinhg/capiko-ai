@@ -16,9 +16,15 @@ import (
 // ArtifactPaths holds the existing on-disk paths of each SDD artifact for a
 // change. Each field lists only files that are actually present; a missing
 // artifact is an empty slice, never a path that does not exist.
+//
+// Specs is the per-change spec *delta* — capiko writes a single spec.md under the
+// change. It is kept as a slice for shape-compatibility with the status schema
+// (which allows multiple spec files) and to stay forward-compatible. It is
+// distinct from the top-level openspec/specs/ canonical specs, which are change
+// context, not a change artifact.
 type ArtifactPaths struct {
 	Proposal      []string
-	Specs         []string // spec.md and/or specs/*.md
+	Specs         []string // the change's spec.md delta
 	Design        []string
 	Tasks         []string
 	ApplyProgress []string
@@ -58,13 +64,13 @@ func ListActiveOpenSpecChanges(cwd string) ([]string, error) {
 }
 
 // ResolveArtifactPaths returns the existing artifact paths for a change. The spec
-// artifact is tolerant of both layouts capiko's skills use: a single spec.md and a
-// specs/ directory of capability files (both are included when present).
+// is the change's spec.md delta; a specs/ directory under the change is not
+// capiko's layout (the canonical openspec/specs/ is separate) and is ignored.
 func ResolveArtifactPaths(cwd, change string) ArtifactPaths {
 	root := changeRoot(cwd, change)
 	return ArtifactPaths{
 		Proposal:      existing(filepath.Join(root, "proposal.md")),
-		Specs:         append(existing(filepath.Join(root, "spec.md")), markdownIn(filepath.Join(root, "specs"))...),
+		Specs:         existing(filepath.Join(root, "spec.md")),
 		Design:        existing(filepath.Join(root, "design.md")),
 		Tasks:         existing(filepath.Join(root, "tasks.md")),
 		ApplyProgress: existing(filepath.Join(root, "apply-progress.md")),
@@ -79,21 +85,4 @@ func existing(path string) []string {
 		return []string{path}
 	}
 	return nil
-}
-
-// markdownIn returns the sorted .md files directly inside dir, or nil when dir is
-// absent or empty.
-func markdownIn(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if !e.IsDir() && filepath.Ext(e.Name()) == ".md" {
-			out = append(out, filepath.Join(dir, e.Name()))
-		}
-	}
-	sort.Strings(out)
-	return out
 }
