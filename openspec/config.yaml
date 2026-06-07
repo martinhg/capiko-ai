@@ -1,0 +1,67 @@
+schema: spec-driven
+
+context: |
+  Project: capiko-ai
+  Module: github.com/martinhg/capiko-ai
+  Language: Go (go 1.26.4)
+  Architecture: Bubbletea TUI configurator + native SDD engine for GitHub Copilot CLI.
+  Key packages: internal/tui (screens), internal/sdd (SDD engine), internal/sddstatus,
+    internal/catalog, internal/instructions, internal/state, internal/skill, cmd/.
+  Screens implement the screen interface (Update/View). State lives in ~/.capiko/state.json.
+  Skills install into ~/.copilot/skills/; scoped instructions into ~/.copilot/instructions/.
+
+testing:
+  strict_tdd: true
+  test_command: "go test -race ./..."
+  build_command: "go build ./..."
+  coverage_command: "go test -race -cover ./..."
+  layers:
+    unit: true
+    integration: true
+    e2e: false
+  golden_tests:
+    available: true
+    update_command: "go test ./internal/tui -update"
+    note: "Always inspect golden diff before committing — confirm only intended lines changed."
+  quality:
+    formatter: "gofmt -l ."
+    formatter_gate: "output must be empty before any PR"
+    linter: "go vet ./..."
+    type_checker: "built-in (Go compiler)"
+
+conventions:
+  branch: "branch-first — create branch from main BEFORE any edit"
+  commits: "conventional commits; never add Co-Authored-By or AI attribution"
+  pr_merge: "squash-merge; delete branch after merge"
+  pr_budget: "400 changed lines max; use chained PRs when exceeded"
+  tools: "prefer bat/rg/fd/eza over cat/grep/find/ls"
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify which internal packages are affected
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Reference the affected internal package(s) in scope section
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+    - Follow screen interface pattern (Update/View) for any new TUI screens
+  tasks:
+    - Group by phase; use hierarchical numbering
+    - Keep tasks completable in one session
+    - Each task slice must keep go test -race ./... green
+  apply:
+    - Follow existing code patterns (seams over mocks, t.TempDir, table-driven tests)
+    - Branch first before any edit
+    tdd: true
+    test_command: "go test -race ./..."
+    golden_update_command: "go test ./internal/tui -update"
+  verify:
+    test_command: "go test -race ./..."
+    build_command: "go build ./..."
+    lint_command: "gofmt -l . && go vet ./..."
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas into main specs
