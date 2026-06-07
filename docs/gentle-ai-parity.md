@@ -99,11 +99,16 @@ Ordered roughly by value for a Copilot-focused tool:
     a `## Gate`: if the orchestrator loaded the skill it must DELEGATE (not run it
     inline) and route via the status contract; the executor sub-agent loads
     `sdd-phase-common.md` and runs the phase body without re-delegating.
-  - **Delivery-strategy + chain-strategy decision flow** — the >400-line workload
-    *forecast guard* is **done** (`sdd-tasks` forecasts size before apply). Still
-    missing: the full PR-strategy (`ask-on-risk | auto-chain | single-pr |
-    exception-ok`) and chain-strategy (stacked-to-main | feature-branch-chain)
-    decision flow wired through the skills.
+  - ~~**Delivery-strategy + chain-strategy decision flow**~~ — **Done.** The
+    `sdd-tasks` forecast guard now drives a full decision flow. `internal/sdd`
+    Render adds a "Delivery & chain strategy" section: ask-once/cache a delivery
+    strategy (`ask-on-risk | auto-chain | single-pr | exception-ok`), a Review
+    Workload Guard that resolves the forecast with it after tasks and before
+    apply, and a chain strategy (`stacked-to-main | feature-branch-chain`) cached
+    when the resolution chains. The `capiko-sdd-coordinator` agent carries the
+    guard + chain-forwarding rules (the real delegation target), and
+    `sdd-phase-common.md` section F documents both for every phase. Pinned by
+    tests so the flow can't silently drop.
   - ~~**Strict-TDD structural forwarding**~~ — **Done.** The strict-TDD flag now
     travels with the delegation, not just the orchestrator block. When the toggle
     is on, `internal/sdd` Render instructs the coordinator to forward

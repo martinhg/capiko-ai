@@ -61,7 +61,10 @@ guard lines (the orchestrator parses them before launching apply):
 
 If `400-line budget risk` is `High` (or `Chained PRs recommended: Yes`), propose a
 chained/stacked PR split: list the deliverable work units, each with a clear
-start, finish, autonomous scope, verification, and rollback boundary.
+start, finish, autonomous scope, verification, and rollback boundary. The
+orchestrator resolves the split with the cached delivery strategy and, when it
+chains, a chain strategy (`stacked-to-main` or `feature-branch-chain`) — see
+`sdd-phase-common.md`, section F.
 
 ## Language
 

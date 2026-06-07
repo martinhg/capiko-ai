@@ -110,6 +110,58 @@ func TestTasksSkillEmitsWorkloadGuard(t *testing.T) {
 	}
 }
 
+// TestSDDStrategyDecisionFlow pins the delivery-strategy + chain-strategy
+// decision flow to the delegation layer. The orchestrator block describes it,
+// but the coordinator agent is the real delegation target that must apply the
+// Review Workload Guard before launching apply, and the shared contract must
+// document both chain strategies. Without this, the orchestrator's flow has no
+// receiver in the agent that actually routes the phases.
+func TestSDDStrategyDecisionFlow(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	var coord string
+	for _, a := range agents {
+		if a.Name == "capiko-sdd-coordinator" {
+			coord = a.Content
+			break
+		}
+	}
+	if coord == "" {
+		t.Fatal("capiko-sdd-coordinator agent not found in catalog")
+	}
+	for _, want := range []string{"Review Workload", "ask-on-risk", "stacked-to-main", "feature-branch-chain"} {
+		if !strings.Contains(coord, want) {
+			t.Errorf("coordinator agent must carry the strategy flow %q, but it is missing", want)
+		}
+	}
+
+	// The shared contract documents both chain strategies for every phase.
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	var common string
+	for i := range got {
+		if got[i].Name == "sdd-shared" {
+			for _, f := range got[i].Extra {
+				if f.Path == "sdd-phase-common.md" {
+					common = f.Content
+				}
+			}
+		}
+	}
+	if common == "" {
+		t.Fatal("sdd-shared must ship sdd-phase-common.md as an Extra file")
+	}
+	for _, want := range []string{"stacked-to-main", "feature-branch-chain"} {
+		if !strings.Contains(common, want) {
+			t.Errorf("sdd-phase-common.md must document chain strategy %q", want)
+		}
+	}
+}
+
 // TestApplySkillShipsStrictTDDReference pins the strict-TDD reference file to the
 // sdd-apply bundle. The orchestrator's strict-TDD forwarding tells the apply
 // executor to "follow strict-tdd.md"; if that reference file stops shipping with
