@@ -155,6 +155,59 @@ func TestLoadRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
+func TestState_AgentsMap_InitializedOnLoad(t *testing.T) {
+	s := NewStore(t.TempDir())
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.Agents == nil {
+		t.Error("Agents map should be initialized (non-nil) on load from empty state")
+	}
+}
+
+func TestStore_ApplyAgents_RecordsChecksums(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	installed := []Installed{
+		{Name: "capiko-sdd-apply", Checksum: Checksum("content-a")},
+		{Name: "capiko-sdd-spec", Checksum: Checksum("content-b")},
+	}
+	if err := s.ApplyAgents("1.0.0", installed, nil); err != nil {
+		t.Fatalf("ApplyAgents: %v", err)
+	}
+
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load after ApplyAgents: %v", err)
+	}
+	if st.Agents == nil {
+		t.Fatal("Agents map is nil after ApplyAgents")
+	}
+	if len(st.Agents) != 2 {
+		t.Fatalf("expected 2 agent records, got %d: %v", len(st.Agents), st.Agents)
+	}
+	got := st.Agents["capiko-sdd-apply"]
+	if got.Checksum != Checksum("content-a") {
+		t.Errorf("Agents[capiko-sdd-apply].Checksum = %q, want %q", got.Checksum, Checksum("content-a"))
+	}
+	if got.InstalledAt.IsZero() {
+		t.Error("Agents[capiko-sdd-apply].InstalledAt not stamped")
+	}
+
+	// Removing one agent drops only that record.
+	if err := s.ApplyAgents("1.0.0", nil, []string{"capiko-sdd-spec"}); err != nil {
+		t.Fatalf("ApplyAgents remove: %v", err)
+	}
+	st, _ = s.Load()
+	if _, ok := st.Agents["capiko-sdd-spec"]; ok {
+		t.Error("capiko-sdd-spec should have been removed")
+	}
+	if _, ok := st.Agents["capiko-sdd-apply"]; !ok {
+		t.Error("capiko-sdd-apply should remain")
+	}
+}
+
 func TestChecksumStable(t *testing.T) {
 	if Checksum("hello") != Checksum("hello") {
 		t.Error("checksum not deterministic")

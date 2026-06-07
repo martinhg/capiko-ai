@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -69,5 +70,70 @@ func TestStale(t *testing.T) {
 func TestStaleNilState(t *testing.T) {
 	if got := Stale(catalog(), nil); got != nil {
 		t.Errorf("Stale(nil) = %v, want nil", got)
+	}
+}
+
+// agentCatalog returns a small catalog of agent.Agent for drift tests.
+func agentCatalog() []agent.Agent {
+	return []agent.Agent{
+		{Name: "capiko-sdd-apply", Content: "apply-content-v1"},
+		{Name: "capiko-sdd-spec", Content: "spec-content-v1"},
+		{Name: "capiko-sdd-verify", Content: "verify-content-v1"},
+	}
+}
+
+// agentStateWith builds a *state.State carrying AgentRecords for the given
+// name→checksum map, so tests don't have to import state internals directly.
+func agentStateWith(records map[string]string) *state.State {
+	agents := map[string]state.AgentRecord{}
+	for name, checksum := range records {
+		agents[name] = state.AgentRecord{Checksum: checksum}
+	}
+	return &state.State{
+		Skills: map[string]state.SkillRecord{},
+		Agents: agents,
+	}
+}
+
+func TestStaleAgents_AllInSync(t *testing.T) {
+	cat := agentCatalog()
+	st := agentStateWith(map[string]string{
+		"capiko-sdd-apply":  state.Checksum("apply-content-v1"),
+		"capiko-sdd-spec":   state.Checksum("spec-content-v1"),
+		"capiko-sdd-verify": state.Checksum("verify-content-v1"),
+	})
+
+	got := StaleAgents(cat, st)
+	if len(got) != 0 {
+		t.Errorf("StaleAgents = %v, want nil (all in sync)", got)
+	}
+}
+
+func TestStaleAgents_MissingAgent(t *testing.T) {
+	cat := agentCatalog()
+	// capiko-sdd-spec is absent from state.
+	st := agentStateWith(map[string]string{
+		"capiko-sdd-apply":  state.Checksum("apply-content-v1"),
+		"capiko-sdd-verify": state.Checksum("verify-content-v1"),
+	})
+
+	got := StaleAgents(cat, st)
+	if !reflect.DeepEqual(got, []string{"capiko-sdd-spec"}) {
+		t.Errorf("StaleAgents = %v, want [capiko-sdd-spec]", got)
+	}
+}
+
+func TestStaleAgents_ChangedContent(t *testing.T) {
+	cat := agentCatalog()
+	// capiko-sdd-apply has a stale checksum.
+	st := agentStateWith(map[string]string{
+		"capiko-sdd-apply":  state.Checksum("apply-content-OLD"),
+		"capiko-sdd-spec":   state.Checksum("spec-content-v1"),
+		"capiko-sdd-verify": state.Checksum("verify-content-v1"),
+	})
+
+	got := StaleAgents(cat, st)
+	if !reflect.DeepEqual(got, []string{"capiko-sdd-apply"}) {
+		t.Errorf("StaleAgents = %v, want [capiko-sdd-apply]", got)
 	}
 }
