@@ -131,6 +131,27 @@ func TestSetStrictTDD(t *testing.T) {
 	}
 }
 
+func TestSetInstructionsInstalled(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetInstructionsInstalled(true); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.InstructionsInstalled {
+		t.Error("InstructionsInstalled should be true after SetInstructionsInstalled(true)")
+	}
+	if err := s.SetInstructionsInstalled(false); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.InstructionsInstalled {
+		t.Error("InstructionsInstalled should be false after SetInstructionsInstalled(false)")
+	}
+}
+
 func TestDefaultStoreRootsAtCapikoHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

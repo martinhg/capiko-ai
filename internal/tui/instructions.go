@@ -9,6 +9,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/scoped"
+	"github.com/martinhg/capiko-ai/internal/state"
 )
 
 // instructionTargets is every directory the curated scoped instructions are
@@ -20,9 +21,10 @@ func instructionTargets(host *copilot.Host) []string {
 }
 
 // installInstructions writes the curated scoped instruction files into every
-// target directory, snapshotting the targets first. Returns the total number of
-// files written (files × target dirs).
-func installInstructions(host *copilot.Host, bkp *backup.Store) (int, error) {
+// target directory, snapshotting the targets first. When store is non-nil it
+// records that scoped instructions are managed, so sync re-applies them later.
+// Returns the total number of files written (files × target dirs).
+func installInstructions(host *copilot.Host, bkp *backup.Store, store *state.Store) (int, error) {
 	ins, err := scoped.Load()
 	if err != nil {
 		return 0, err
@@ -46,6 +48,11 @@ func installInstructions(host *copilot.Host, bkp *backup.Store) (int, error) {
 				return count, fmt.Errorf("installing %s into %s: %w", in.Name, dir, err)
 			}
 			count++
+		}
+	}
+	if store != nil {
+		if err := store.SetInstructionsInstalled(true); err != nil {
+			return count, fmt.Errorf("recording instructions state: %w", err)
 		}
 	}
 	return count, nil
@@ -106,9 +113,9 @@ func (s *instructionsScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 }
 
 func (s *instructionsScreen) applyCmd() tea.Cmd {
-	host, bkp := s.svc.host, s.svc.backup
+	host, bkp, store := s.svc.host, s.svc.backup, s.svc.state
 	return func() tea.Msg {
-		n, err := installInstructions(host, bkp)
+		n, err := installInstructions(host, bkp, store)
 		return instructionsInstalledMsg{count: n, err: err}
 	}
 }

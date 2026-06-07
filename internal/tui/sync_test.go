@@ -94,6 +94,48 @@ func TestRunSyncReappliesPersona(t *testing.T) {
 	}
 }
 
+// TestRunSyncReappliesScopedInstructions asserts that once scoped instructions
+// are managed (recorded in state), sync re-applies them into the home dir AND any
+// COPILOT_CUSTOM_INSTRUCTIONS_DIRS, so they track the catalog like persona/SDD.
+func TestRunSyncReappliesScopedInstructions(t *testing.T) {
+	cfgDir := t.TempDir()
+	customDir := t.TempDir()
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", customDir)
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+	if err := store.SetInstructionsInstalled(true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	for _, dir := range []string{filepath.Join(cfgDir, "instructions"), customDir} {
+		if _, err := os.Stat(filepath.Join(dir, "go.instructions.md")); err != nil {
+			t.Errorf("sync did not re-apply scoped instructions into %s: %v", dir, err)
+		}
+	}
+}
+
+// TestRunSyncSkipsInstructionsWhenUnmanaged asserts sync does NOT create scoped
+// instruction files for a user who never installed them (flag unset), mirroring
+// how persona/SDD re-apply only when configured.
+func TestRunSyncSkipsInstructionsWhenUnmanaged(t *testing.T) {
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "")
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(cfgDir, "instructions", "go.instructions.md")); err == nil {
+		t.Error("sync wrote scoped instructions for an unmanaged user")
+	}
+}
+
 func TestSyncQuitGoesBack(t *testing.T) {
 	s, _ := newSync(services{host: &copilot.Host{SkillsDir: t.TempDir()}}, testCatalog(), nil).(*syncScreen)
 	_, cmd := s.Update(key("q"))

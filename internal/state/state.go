@@ -23,6 +23,9 @@ type State struct {
 	Persona   string                 `json:"persona,omitempty"`    // active persona id, "" = unmanaged
 	SDDModels map[string]string      `json:"sdd_models,omitempty"` // SDD phase → model, empty = SDD unmanaged
 	StrictTDD bool                   `json:"strict_tdd,omitempty"` // SDD apply/verify must follow strict TDD
+	// InstructionsInstalled is true once the user installs the curated scoped
+	// instruction files; sync re-applies them only when managed, mirroring persona/SDD.
+	InstructionsInstalled bool `json:"instructions_installed,omitempty"`
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -178,6 +181,18 @@ func (s *Store) SetStrictTDD(on bool) error {
 		return err
 	}
 	st.StrictTDD = on
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetInstructionsInstalled records whether the curated scoped instruction files
+// are managed by capiko, so sync re-applies them only after the user installs them.
+func (s *Store) SetInstructionsInstalled(on bool) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.InstructionsInstalled = on
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

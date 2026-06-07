@@ -8,6 +8,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/scoped"
+	"github.com/martinhg/capiko-ai/internal/state"
 )
 
 func TestInstructionsInstallWritesFilesAndBacksUp(t *testing.T) {
@@ -58,11 +59,13 @@ func TestInstructionsInstallWritesToCustomDirs(t *testing.T) {
 	customDir := t.TempDir()
 	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", customDir)
 
+	store := state.NewStore(t.TempDir())
 	svc := services{
 		host:   &copilot.Host{ConfigDir: cfgDir},
 		backup: backup.NewStore(t.TempDir()),
+		state:  store,
 	}
-	n, err := installInstructions(svc.host, svc.backup)
+	n, err := installInstructions(svc.host, svc.backup, svc.state)
 	if err != nil {
 		t.Fatalf("installInstructions: %v", err)
 	}
@@ -78,6 +81,12 @@ func TestInstructionsInstallWritesToCustomDirs(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, "go.instructions.md")); err != nil {
 			t.Errorf("go.instructions.md missing in %s: %v", dir, err)
 		}
+	}
+
+	// Installing must mark scoped instructions as managed so sync re-applies them.
+	st, _ := store.Load()
+	if !st.InstructionsInstalled {
+		t.Error("installInstructions must record InstructionsInstalled in state")
 	}
 }
 

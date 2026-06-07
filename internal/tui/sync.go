@@ -72,6 +72,14 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying SDD: %w", err)
 				}
 			}
+			// Re-apply curated scoped instructions so they track the catalog, into
+			// the home dir and any COPILOT_CUSTOM_INSTRUCTIONS_DIRS — only once the
+			// user has installed them, mirroring the persona/SDD opt-in above.
+			if st.InstructionsInstalled {
+				if _, err := installInstructions(host, bkp, store); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying scoped instructions: %w", err)
+				}
+			}
 		}
 	}
 	return len(recorded) + len(agentRecorded), nil
