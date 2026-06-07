@@ -7,6 +7,29 @@ import (
 	"github.com/martinhg/capiko-ai/internal/skill"
 )
 
+// TestLoadAgents_ReturnsNine exercises the embedded agents catalog at test
+// time so any authoring error is caught before the binary ships.
+func TestLoadAgents_ReturnsNine(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	if len(agents) != 9 {
+		t.Fatalf("expected 9 agents from embedded catalog, got %d", len(agents))
+	}
+	for _, a := range agents {
+		if a.Name == "" {
+			t.Error("agent has empty name")
+		}
+		if a.Description == "" {
+			t.Errorf("agent %q has empty description", a.Name)
+		}
+		if a.Content == "" {
+			t.Errorf("agent %q has empty content", a.Name)
+		}
+	}
+}
+
 func TestLoadEmbedded(t *testing.T) {
 	got, err := Load()
 	if err != nil {
