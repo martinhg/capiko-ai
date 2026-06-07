@@ -198,3 +198,43 @@ func TestVerifySkillShipsStrictTDDReference(t *testing.T) {
 		t.Error("sdd-verify SKILL.md must reference strict-tdd-verify.md so the executor loads it")
 	}
 }
+
+// TestSDDAgentsForwardStrictTDD pins the structural strict-TDD forwarding to the
+// delegation targets. The orchestrator forwards `strict_tdd: true` into the
+// apply/verify handoff; the worker .agent.md bodies are the direct delegation
+// targets, so they MUST detect that signal and load the right reference file. The
+// coordinator MUST carry the rule to forward it. Without this, the forwarding the
+// orchestrator block promises has no receiver and the worker silently skips TDD.
+func TestSDDAgentsForwardStrictTDD(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	byName := map[string]string{}
+	for _, a := range agents {
+		byName[a.Name] = a.Content
+	}
+
+	cases := []struct {
+		name     string
+		contains []string
+	}{
+		// Apply/verify workers detect the forwarded signal and load their protocol.
+		{"capiko-sdd-apply", []string{"strict_tdd: true", "strict-tdd.md"}},
+		{"capiko-sdd-verify", []string{"strict_tdd: true", "strict-tdd-verify.md"}},
+		// The coordinator must carry the rule to forward the signal downstream.
+		{"capiko-sdd-coordinator", []string{"strict_tdd: true", "forward"}},
+	}
+	for _, c := range cases {
+		body, ok := byName[c.name]
+		if !ok {
+			t.Errorf("agent %q not found in catalog", c.name)
+			continue
+		}
+		for _, want := range c.contains {
+			if !strings.Contains(body, want) {
+				t.Errorf("agent %q must carry strict-TDD forwarding %q, but it is missing", c.name, want)
+			}
+		}
+	}
+}

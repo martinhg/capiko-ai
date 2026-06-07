@@ -106,6 +106,7 @@ func Render(assignments map[string]string, strictTDD bool) string {
 	if strictTDD {
 		b.WriteString("\n### Strict TDD (active)\n\n")
 		b.WriteString("The apply and verify phases MUST follow strict Test-Driven Development: write a failing test FIRST, run it to see it fail, then write the minimal code to pass it, then refactor. Do not write any implementation before a failing test exists.\n")
+		b.WriteString("\nForward this requirement structurally: when you delegate the apply or verify phase, you MUST forward `strict_tdd: true` and the project's test command in the sub-agent handoff. The worker keys off that forwarded signal to load its strict-TDD protocol — stating the rule here is not enough, the flag has to travel with the delegation.\n")
 	}
 
 	return b.String()
