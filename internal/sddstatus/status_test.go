@@ -146,6 +146,64 @@ func TestResolveVerifyReportFailingBlocksArchive(t *testing.T) {
 	}
 }
 
+func TestResolveRoutesProposeWhenProposalIncomplete(t *testing.T) {
+	cwd := change(t, "add-auth", map[string]string{"proposal.md": ""}) // present but empty → partial
+	st, _ := Resolve(ResolveOptions{Cwd: cwd})
+	if st.Dependencies.Proposal != DependencyReady {
+		t.Errorf("proposal dependency = %q, want ready", st.Dependencies.Proposal)
+	}
+	if st.NextRecommended != string(PhasePropose) {
+		t.Errorf("next = %q, want propose", st.NextRecommended)
+	}
+}
+
+func TestResolveRoutesSpecAfterProposal(t *testing.T) {
+	cwd := change(t, "add-auth", map[string]string{"proposal.md": "# Proposal\nwhy"})
+	st, _ := Resolve(ResolveOptions{Cwd: cwd})
+	if st.Dependencies.Proposal != DependencyAllDone {
+		t.Errorf("proposal dependency = %q, want all_done", st.Dependencies.Proposal)
+	}
+	if st.Dependencies.Specs != DependencyReady {
+		t.Errorf("specs dependency = %q, want ready", st.Dependencies.Specs)
+	}
+	if st.NextRecommended != string(PhaseSpec) {
+		t.Errorf("next = %q, want spec", st.NextRecommended)
+	}
+}
+
+func TestResolveRoutesDesignAfterSpec(t *testing.T) {
+	cwd := change(t, "add-auth", map[string]string{
+		"proposal.md": "# Proposal\nwhy",
+		"spec.md":     "# Spec\nreqs",
+	})
+	st, _ := Resolve(ResolveOptions{Cwd: cwd})
+	if st.Dependencies.Design != DependencyReady {
+		t.Errorf("design dependency = %q, want ready", st.Dependencies.Design)
+	}
+	// tasks must stay blocked until design completes — the prereq gate must not loosen.
+	if st.Dependencies.Tasks != DependencyBlocked {
+		t.Errorf("tasks dependency = %q, want blocked while design incomplete", st.Dependencies.Tasks)
+	}
+	if st.NextRecommended != string(PhaseDesign) {
+		t.Errorf("next = %q, want design", st.NextRecommended)
+	}
+}
+
+func TestResolveRoutesTasksAfterDesign(t *testing.T) {
+	cwd := change(t, "add-auth", map[string]string{
+		"proposal.md": "# Proposal\nwhy",
+		"spec.md":     "# Spec\nreqs",
+		"design.md":   "# Design\napproach",
+	})
+	st, _ := Resolve(ResolveOptions{Cwd: cwd})
+	if st.Dependencies.Tasks != DependencyReady {
+		t.Errorf("tasks dependency = %q, want ready", st.Dependencies.Tasks)
+	}
+	if st.NextRecommended != string(PhaseTasks) {
+		t.Errorf("next = %q, want tasks", st.NextRecommended)
+	}
+}
+
 func TestResolvePartialArtifactBlocks(t *testing.T) {
 	files := coreArtifacts()
 	files["design.md"] = "   " // present but empty → partial
@@ -157,6 +215,10 @@ func TestResolvePartialArtifactBlocks(t *testing.T) {
 	if st.ApplyState != ApplyBlocked {
 		t.Errorf("applyState = %q, want blocked when a core artifact is partial", st.ApplyState)
 	}
+	// A partial mid-DAG artifact re-routes to its own phase, not forward.
+	if st.NextRecommended != string(PhaseDesign) {
+		t.Errorf("next = %q, want design when design is partial", st.NextRecommended)
+	}
 }
 
 func TestResolveMissingTasksCheckboxesBlocks(t *testing.T) {
@@ -166,5 +228,13 @@ func TestResolveMissingTasksCheckboxesBlocks(t *testing.T) {
 	st, _ := Resolve(ResolveOptions{Cwd: cwd})
 	if st.ApplyState != ApplyBlocked {
 		t.Errorf("applyState = %q, want blocked when tasks has no checkboxes", st.ApplyState)
+	}
+	// A present-but-malformed tasks artifact is "done" (has content), so it must NOT
+	// re-route to a clean planning phase; the engine reports a generic blocker instead.
+	if st.Dependencies.Tasks != DependencyAllDone {
+		t.Errorf("tasks dependency = %q, want all_done (artifact has content)", st.Dependencies.Tasks)
+	}
+	if st.NextRecommended != "resolve-blockers" {
+		t.Errorf("next = %q, want resolve-blockers for malformed tasks", st.NextRecommended)
 	}
 }

@@ -112,11 +112,13 @@ Ordered roughly by value for a Copilot-focused tool:
     trigger/path for the orchestrator to resolve and inject into sub-agents. capiko
     uses `.atl/skill-registry.md` internally for dogfooding; shipping the resolution
     mechanism to users is pending.
-  - **Expand the native engine to route planning phases** — `sdd-status` /
-    `sdd-continue` route `apply/verify/archive` deterministically, but the planning
-    phases (`proposal → spec → design → tasks`) are still inferred by prompt. A
-    later change should extend the engine to route planning too (deliberate split,
-    decided during the SDD-agents work).
+  - ~~**Expand the native engine to route planning phases**~~ — **Done.** The
+    engine now routes the planning phases deterministically: `resolveNextRecommended`
+    returns `propose | spec | design | tasks` (following the DAG proposal →
+    spec/design → tasks) instead of a generic `resolve-blockers`, so the coordinator
+    delegates the next planning step without inferring from `blockedReasons`. The
+    engine still only routes changes that already exist — zero active changes returns
+    `sdd-new`, which the triage gate (not the engine) decides whether to act on.
 - **One-click install on Linux** — install hints are now distro-aware: capiko
   detects the package manager from `/etc/os-release` (Ubuntu/Debian→apt, Arch→
   pacman, Fedora/RHEL→dnf, plus winget on Windows and Linuxbrew when present) and
