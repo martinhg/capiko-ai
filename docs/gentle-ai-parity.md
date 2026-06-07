@@ -45,6 +45,27 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
 - `skill-creator` skill — guides Copilot to scaffold a new custom `SKILL.md` from a
   plain-language description (the capiko analogue of gentle-ai's Agent Builder,
   without an LLM in capiko's Go).
+- Native SDD engine — `capiko-ai sdd-status` / `sdd-continue` compute SDD state
+  deterministically in Go (`internal/sddstatus`) from the OpenSpec store; the
+  `sdd-shared` contract and phase-skill gates prefer the native command and fall
+  back to inference when the binary is unavailable. (Native SDD Engine epic, all
+  slices shipped.)
+- Copilot SDD custom agents — an embedded catalog of `.agent.md` SDD-phase agents
+  (`capiko-sdd-explore/propose/.../archive` + a `capiko-sdd-coordinator`) installed
+  into `~/.copilot/agents/`, with install/sync/uninstall, drift detection, and TUI
+  surfacing. These are the real delegation targets the phase-skill gates predicate.
+- Review-workload forecast guard — `sdd-tasks` forecasts the change size and a
+  >400-line PR budget before apply, so oversized changes are split into reviewable
+  chained PRs instead of one unreviewable diff.
+- Per-skill strict-TDD reference files — `sdd-apply/strict-tdd.md` and
+  `sdd-verify/strict-tdd-verify.md` carry the failing-test-first protocol as
+  dedicated reference files the phases load.
+- SDD triage rules — both layers that govern when Copilot runs the full SDD flow
+  (the orchestrator instruction block rendered into `copilot-instructions.md` and
+  the `capiko-sdd-coordinator` agent) carry the same explicit rules: inline for
+  small changes, delegate an exploration on the 4-file rule, delegate a writer for
+  2+ non-trivial files, full SDD only for substantial work, and a fresh review
+  before a non-trivial PR. Keeps the token cost matched to the change size.
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -78,14 +99,24 @@ Ordered roughly by value for a Copilot-focused tool:
     a `## Gate`: if the orchestrator loaded the skill it must DELEGATE (not run it
     inline) and route via the status contract; the executor sub-agent loads
     `sdd-phase-common.md` and runs the phase body without re-delegating.
-  - **Delivery-strategy + workload guards** — before apply, forecast the change
-    size and decide PR strategy (`ask-on-risk | auto-chain | single-pr |
-    exception-ok`) and chain strategy (stacked-to-main | feature-branch-chain),
-    with a >400-line budget guard. Keeps large changes reviewable.
-  - **Strict-TDD forwarding & skill registry** — forward the strict-TDD flag
-    structurally to apply/verify sub-agents (we have the toggle, not the structural
-    forwarding); and a per-skill registry indexing skills by trigger/path for the
-    orchestrator to resolve.
+  - **Delivery-strategy + chain-strategy decision flow** — the >400-line workload
+    *forecast guard* is **done** (`sdd-tasks` forecasts size before apply). Still
+    missing: the full PR-strategy (`ask-on-risk | auto-chain | single-pr |
+    exception-ok`) and chain-strategy (stacked-to-main | feature-branch-chain)
+    decision flow wired through the skills.
+  - **Strict-TDD structural forwarding** — the per-skill reference files
+    (`sdd-apply/strict-tdd.md`, `sdd-verify/strict-tdd-verify.md`) are **done**.
+    Still missing: forwarding the strict-TDD flag *structurally* to the apply/verify
+    sub-agents (we have the toggle + reference files, not the structural handoff).
+  - **Skill registry resolution** — a per-skill registry indexing skills by
+    trigger/path for the orchestrator to resolve and inject into sub-agents. capiko
+    uses `.atl/skill-registry.md` internally for dogfooding; shipping the resolution
+    mechanism to users is pending.
+  - **Expand the native engine to route planning phases** — `sdd-status` /
+    `sdd-continue` route `apply/verify/archive` deterministically, but the planning
+    phases (`proposal → spec → design → tasks`) are still inferred by prompt. A
+    later change should extend the engine to route planning too (deliberate split,
+    decided during the SDD-agents work).
 - **One-click install on Linux** — install hints are now distro-aware: capiko
   detects the package manager from `/etc/os-release` (Ubuntu/Debian→apt, Arch→
   pacman, Fedora/RHEL→dnf, plus winget on Windows and Linuxbrew when present) and
