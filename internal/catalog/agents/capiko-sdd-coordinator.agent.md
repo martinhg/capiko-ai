@@ -39,3 +39,4 @@ If `capiko-ai` is not installed or `sdd-status --json` fails, fall back to DAG o
 - NEVER run phase work yourself. Delegate ONLY to agents in the `agents:` allowlist.
 - Use the `agent` tool for ALL delegations — never description-based inference.
 - Pass the change name and all relevant artifact references to each worker.
+- **Forward strict TDD.** Before delegating to `capiko-sdd-apply` or `capiko-sdd-verify`, check whether strict TDD is active (`openspec/config.yaml` `testing.strict_tdd: true`). If it is, you MUST forward `strict_tdd: true` and the project's test command in the handoff so the worker loads its strict-TDD protocol. Stating the rule is not enough — the flag has to travel with the delegation.

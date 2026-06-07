@@ -104,10 +104,14 @@ Ordered roughly by value for a Copilot-focused tool:
     missing: the full PR-strategy (`ask-on-risk | auto-chain | single-pr |
     exception-ok`) and chain-strategy (stacked-to-main | feature-branch-chain)
     decision flow wired through the skills.
-  - **Strict-TDD structural forwarding** — the per-skill reference files
-    (`sdd-apply/strict-tdd.md`, `sdd-verify/strict-tdd-verify.md`) are **done**.
-    Still missing: forwarding the strict-TDD flag *structurally* to the apply/verify
-    sub-agents (we have the toggle + reference files, not the structural handoff).
+  - ~~**Strict-TDD structural forwarding**~~ — **Done.** The strict-TDD flag now
+    travels with the delegation, not just the orchestrator block. When the toggle
+    is on, `internal/sdd` Render instructs the coordinator to forward
+    `strict_tdd: true` + the test command into the apply/verify handoff; the
+    `capiko-sdd-coordinator` agent carries the forwarding rule; and the
+    `capiko-sdd-apply` / `capiko-sdd-verify` agent bodies detect that signal (or
+    `openspec/config.yaml` `testing.strict_tdd: true`) and load their strict-TDD
+    reference file before writing code. Pinned by tests so the handoff can't dangle.
   - **Skill registry resolution** — a per-skill registry indexing skills by
     trigger/path for the orchestrator to resolve and inject into sub-agents. capiko
     uses `.atl/skill-registry.md` internally for dogfooding; shipping the resolution

@@ -69,6 +69,25 @@ func TestRenderStrictTDD(t *testing.T) {
 	}
 }
 
+// TestRenderStrictTDDForwarding pins the structural forwarding contract: when
+// strict TDD is on, the orchestrator block must instruct the coordinator to
+// FORWARD the strict-TDD signal into the apply/verify sub-agent handoff (the
+// `strict_tdd: true` token the reference files key off), not merely state the
+// rule. When off, that token must be absent so the worker takes the standard flow.
+func TestRenderStrictTDDForwarding(t *testing.T) {
+	on := Render(nil, true)
+	for _, want := range []string{"forward", "strict_tdd: true", "test command"} {
+		if !strings.Contains(on, want) {
+			t.Errorf("strict-TDD forwarding instruction missing %q when on:\n%s", want, on)
+		}
+	}
+
+	off := Render(nil, false)
+	if strings.Contains(off, "strict_tdd: true") {
+		t.Error("forwarding token strict_tdd: true must not appear when strict TDD is off")
+	}
+}
+
 func TestRenderIgnoresUnknownAndEmpty(t *testing.T) {
 	out := Render(map[string]string{
 		"orchestrator": "", // empty → default
