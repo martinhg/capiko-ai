@@ -45,6 +45,15 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "skill-registry":
+			// The native skill-registry engine: print the skill index so an
+			// orchestrator can resolve exact SKILL.md paths to inject into
+			// sub-agents, without launching the TUI.
+			if _, err := skillRegistryCommand(os.Args[1], os.Args[2:], os.Stdout); err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+				os.Exit(1)
+			}
+			return
 		}
 	}
 

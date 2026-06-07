@@ -99,7 +99,7 @@ func LoadCatalog(fsys fs.FS) ([]Skill, error) {
 			}
 			return nil, err
 		}
-		s, err := parse(e.Name(), string(data))
+		s, err := Parse(e.Name(), string(data))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", e.Name(), err)
 		}
@@ -143,8 +143,11 @@ func loadExtra(fsys fs.FS, name string) ([]File, error) {
 	return extra, nil
 }
 
-// parse builds a Skill from a directory name and SKILL.md content.
-func parse(name, content string) (Skill, error) {
+// Parse builds a Skill from a directory name and SKILL.md content. It is the
+// exported single-skill parser, so callers that scan untrusted skill
+// directories (e.g. the skill-registry engine) can parse and tolerate one
+// SKILL.md at a time instead of failing a whole catalog on one bad file.
+func Parse(name, content string) (Skill, error) {
 	m, err := frontmatter(content)
 	if err != nil {
 		return Skill{}, err

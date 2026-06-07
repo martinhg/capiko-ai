@@ -103,6 +103,10 @@ func Render(assignments map[string]string, strictTDD bool) string {
 	b.WriteString("- Keep one thin orchestrator thread and synthesize the sub-agents' results.\n")
 	b.WriteString("- A phase with `default` runs on the session model.\n")
 
+	b.WriteString("\n### Skill resolution\n\n")
+	b.WriteString("Before delegating to a sub-agent, resolve the skills it needs: run `capiko-ai skill-registry` to get the current index of installed skills by trigger and path. Match the relevant ones by their trigger, then pass the exact `SKILL.md` paths in the sub-agent handoff so it loads the full skill before doing any work.\n")
+	b.WriteString("Pass paths, not summaries — the `SKILL.md` is the source of truth, and a sub-agent that reads it directly preserves the author's intent. If the `capiko-ai` binary is unavailable, fall back to scanning `~/.copilot/skills` for the matching `SKILL.md` paths.\n")
+
 	if strictTDD {
 		b.WriteString("\n### Strict TDD (active)\n\n")
 		b.WriteString("The apply and verify phases MUST follow strict Test-Driven Development: write a failing test FIRST, run it to see it fail, then write the minimal code to pass it, then refactor. Do not write any implementation before a failing test exists.\n")
