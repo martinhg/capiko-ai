@@ -19,6 +19,7 @@ type State struct {
 	Version   string                 `json:"version"`
 	UpdatedAt time.Time              `json:"updated_at"`
 	Skills    map[string]SkillRecord `json:"skills"`
+	Agents    map[string]AgentRecord `json:"agents,omitempty"`
 	Persona   string                 `json:"persona,omitempty"`    // active persona id, "" = unmanaged
 	SDDModels map[string]string      `json:"sdd_models,omitempty"` // SDD phase → model, empty = SDD unmanaged
 	StrictTDD bool                   `json:"strict_tdd,omitempty"` // SDD apply/verify must follow strict TDD
@@ -26,6 +27,12 @@ type State struct {
 
 // SkillRecord is what capiko knows about one skill it installed.
 type SkillRecord struct {
+	Checksum    string    `json:"checksum"`
+	InstalledAt time.Time `json:"installed_at"`
+}
+
+// AgentRecord is what capiko knows about one agent it installed.
+type AgentRecord struct {
 	Checksum    string    `json:"checksum"`
 	InstalledAt time.Time `json:"installed_at"`
 }
@@ -67,7 +74,10 @@ func (s *Store) Load() (*State, error) {
 	data, err := os.ReadFile(s.path())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &State{Skills: map[string]SkillRecord{}}, nil
+			return &State{
+				Skills: map[string]SkillRecord{},
+				Agents: map[string]AgentRecord{},
+			}, nil
 		}
 		return nil, err
 	}
@@ -77,6 +87,9 @@ func (s *Store) Load() (*State, error) {
 	}
 	if st.Skills == nil {
 		st.Skills = map[string]SkillRecord{}
+	}
+	if st.Agents == nil {
+		st.Agents = map[string]AgentRecord{}
 	}
 	return &st, nil
 }
@@ -111,6 +124,25 @@ func (s *Store) Apply(version string, installed []Installed, removed []string) e
 	}
 	for _, name := range removed {
 		delete(st.Skills, name)
+	}
+	st.Version = version
+	st.UpdatedAt = now
+	return s.Save(st)
+}
+
+// ApplyAgents records installed agents and drops removed ones, stamps the
+// version and time, and saves. It mirrors Apply but targets the Agents map.
+func (s *Store) ApplyAgents(version string, installed []Installed, removed []string) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, in := range installed {
+		st.Agents[in.Name] = AgentRecord{Checksum: in.Checksum, InstalledAt: now}
+	}
+	for _, name := range removed {
+		delete(st.Agents, name)
 	}
 	st.Version = version
 	st.UpdatedAt = now

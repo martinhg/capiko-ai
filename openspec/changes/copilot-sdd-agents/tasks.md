@@ -95,7 +95,7 @@ Chain strategy: pending
 
 ### Phase 2.1 — RED: Host + state + drift tests
 
-- [ ] 2.1 Add to `internal/copilot/copilot_test.go`:
+- [x] 2.1 Add to `internal/copilot/copilot_test.go`:
   - `TestDetect_AgentsDirDerivation` — assert `h.AgentsDir == filepath.Join(h.ConfigDir, "agents")` (spec: AgentsDirOnHost / Scenario: Host is detected normally).
   - `TestHost_InstalledAgents_MixedFiles` — tmp `agentsDir` with `sdd-explore.agent.md`, `sdd-apply.agent.md`, `README.md`; assert result contains `sdd-explore` and `sdd-apply`, not `README` (spec: InstalledAgentsEnumeration / Scenario: AgentsDir exists with mixed files).
   - `TestHost_InstalledAgents_MissingDir` — non-existent `agentsDir`; assert empty map + nil error (spec: InstalledAgentsEnumeration / Scenario: AgentsDir does not exist).
@@ -103,18 +103,18 @@ Chain strategy: pending
   - `TestHost_UninstallAgent_Idempotent` — missing file; assert nil error (spec: UninstallAgentIdempotencyAndSafety / Scenario: Agent is already absent).
   - `TestHost_UninstallAgent_RefusesNonAgentMd` — name resolving outside `.agent.md` pattern; assert non-nil error + no file removed (spec: UninstallAgentIdempotencyAndSafety / Scenario: Name resolves to a non-agent-md file).
 
-- [ ] 2.2 Add to `internal/state/state_test.go`:
+- [x] 2.2 Add to `internal/state/state_test.go`:
   - `TestState_AgentsMap_InitializedOnLoad` — empty state.json loads with non-nil `Agents` map.
   - `TestStore_ApplyAgents_RecordsChecksums` — `ApplyAgents` persists `AgentRecord{Checksum, InstalledAt}` for given agent names.
 
-- [ ] 2.3 Add to `internal/drift/drift_test.go`:
+- [x] 2.3 Add to `internal/drift/drift_test.go`:
   - `TestStaleAgents_AllInSync` — catalog + matching state → zero entries (spec: DriftDetection / Scenario: All agents in sync).
   - `TestStaleAgents_MissingAgent` — agent in catalog absent from state → `missing` drift item (spec: DriftDetection / Scenario: One agent is missing).
   - `TestStaleAgents_ChangedContent` — agent in state with stale checksum → `changed` drift item (spec: DriftDetection / Scenario: One agent has changed content).
 
 ### Phase 2.2 — GREEN: Implement `copilot.Host` agent methods
 
-- [ ] 2.4 Modify `internal/copilot/copilot.go`:
+- [x] 2.4 Modify `internal/copilot/copilot.go`:
   - Add `AgentsDir string` field to `Host` struct.
   - Set `AgentsDir: filepath.Join(cfg, "agents")` in `Detect()` return.
   - Add `func (h *Host) InstalledAgents() (map[string]bool, error)` — enumerate `*.agent.md` files (not dirs) in `AgentsDir`; return empty map + nil on `os.IsNotExist`.
@@ -122,7 +122,7 @@ Chain strategy: pending
 
 ### Phase 2.3 — GREEN: Implement `state.Agents` map + `ApplyAgents`
 
-- [ ] 2.5 Modify `internal/state/state.go`:
+- [x] 2.5 Modify `internal/state/state.go`:
   - Add `AgentRecord struct { Checksum string; InstalledAt time.Time }` (JSON tags matching `SkillRecord` pattern).
   - Add `Agents map[string]AgentRecord` field to `State` (json tag `"agents,omitempty"`).
   - In `Load()`: after unmarshaling, add `if st.Agents == nil { st.Agents = map[string]AgentRecord{} }` guard.
@@ -130,14 +130,14 @@ Chain strategy: pending
 
 ### Phase 2.4 — GREEN: Implement `drift.StaleAgents`
 
-- [ ] 2.6 Modify `internal/drift/drift.go`:
+- [x] 2.6 Modify `internal/drift/drift.go`:
   - Add `func StaleAgents(catalog []agent.Agent, st *state.State) []string` — iterate catalog; for each agent, check `st.Agents[name]`; if absent → `missing`; if checksum mismatch → `changed`; collect stale names in catalog order.
 
 ### Slice 2 Verification Boundary
 
-- [ ] 2.7 Run `go test -race ./internal/copilot/... ./internal/state/... ./internal/drift/...` — must exit 0.
-- [ ] 2.8 Run `gofmt -l .` — must produce empty output.
-- [ ] 2.9 Run `go vet ./...` — must produce no diagnostics.
+- [x] 2.7 Run `go test -race ./internal/copilot/... ./internal/state/... ./internal/drift/...` — must exit 0.
+- [x] 2.8 Run `gofmt -l .` — must produce empty output.
+- [x] 2.9 Run `go vet ./...` — must produce no diagnostics.
 
 ---
 

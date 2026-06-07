@@ -21,6 +21,7 @@ type Host struct {
 	BinPath   string // absolute path to the copilot binary
 	ConfigDir string // ~/.copilot
 	SkillsDir string // ~/.copilot/skills
+	AgentsDir string // ~/.copilot/agents
 }
 
 // Test seams: swapped in tests so detection does not depend on the real PATH or
@@ -51,6 +52,7 @@ func Detect() (*Host, error) {
 		BinPath:   bin,
 		ConfigDir: cfg,
 		SkillsDir: filepath.Join(cfg, "skills"),
+		AgentsDir: filepath.Join(cfg, "agents"),
 	}, nil
 }
 
@@ -92,6 +94,56 @@ func (h *Host) InstalledSkills() (map[string]bool, error) {
 		}
 	}
 	return installed, nil
+}
+
+// InstalledAgents returns the set of agent names already present in the host's
+// agents directory — every file matching *.agent.md (by filename stem, not
+// directory structure). A missing agents directory is treated as "none
+// installed", not an error.
+func (h *Host) InstalledAgents() (map[string]bool, error) {
+	entries, err := os.ReadDir(h.AgentsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]bool{}, nil
+		}
+		return nil, err
+	}
+	installed := make(map[string]bool)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".agent.md") {
+			stem := strings.TrimSuffix(name, ".agent.md")
+			installed[stem] = true
+		}
+	}
+	return installed, nil
+}
+
+// UninstallAgent removes the agent file <name>.agent.md from the host's agents
+// directory. It is idempotent: removing an agent that is not present is not an
+// error. As a safety guard it refuses any name that resolves outside the agents
+// directory (path traversal) or into a subdirectory, and refuses to remove a
+// directory — so a bad name can never delete arbitrary files.
+func (h *Host) UninstallAgent(name string) error {
+	target := filepath.Join(h.AgentsDir, name+".agent.md")
+	rel, err := filepath.Rel(h.AgentsDir, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || strings.ContainsRune(rel, os.PathSeparator) {
+		return fmt.Errorf("refusing to remove %q: resolves outside the agents directory", name)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // already gone
+		}
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%q is not an agent file", name)
+	}
+	return os.Remove(target)
 }
 
 // UninstallSkill removes the skill directory <name> from the host's skills
