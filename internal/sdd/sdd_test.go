@@ -42,6 +42,26 @@ func TestRenderReflectsAssignments(t *testing.T) {
 	}
 }
 
+func TestRenderTriageGate(t *testing.T) {
+	out := Render(nil, false)
+
+	for _, want := range []string{
+		"When to use SDD (triage)",
+		"1–3 files to decide or verify",
+		"git/state check",
+		"4-file rule",
+		"Delegate a writer",
+		"2+ non-trivial files with new logic",
+		"proposal → spec/design → tasks → apply → verify → archive",
+		"Fresh review before a PR",
+		"When in doubt, stay inline",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("triage gate missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderStrictTDD(t *testing.T) {
 	out := Render(nil, true)
 	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {

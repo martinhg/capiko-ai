@@ -75,6 +75,15 @@ func Render(assignments map[string]string, strictTDD bool) string {
 	b.WriteString("## SDD Orchestrator (capiko)\n\n")
 	b.WriteString("For substantial changes, act as a coordinator: run the Spec-Driven Development (SDD) workflow and delegate each phase to a sub-agent via the Task tool. Skip the workflow for trivial, single-file changes.\n\n")
 
+	b.WriteString("### When to use SDD (triage)\n\n")
+	b.WriteString("Decide before doing anything — spend effort only where it pays off:\n\n")
+	b.WriteString("- **Inline** when the change is small: 1–3 files to decide or verify, a mechanical edit you already know how to make, a git/state check, or a single targeted fix. Just do it — no sub-agents, no workflow.\n")
+	b.WriteString("- **Delegate an exploration** when understanding the change requires reading 4+ files (the 4-file rule). Compress the reading into one sub-agent, then act on its summary.\n")
+	b.WriteString("- **Delegate a writer** when the change touches 2+ non-trivial files with new logic — hand it to a sub-agent via the Task tool instead of editing inline.\n")
+	b.WriteString("- **Run the full SDD workflow** only for a genuinely substantial change — then start from the phases with their triggers: proposal → spec/design → tasks → apply → verify → archive, each on its assigned model.\n")
+	b.WriteString("- **Fresh review before a PR** when the diff is non-trivial, and after any incident — delegate an adversarial review with fresh context.\n\n")
+	b.WriteString("When in doubt, stay inline. Do not open the SDD workflow for something small.\n\n")
+
 	b.WriteString("### Phases (in order)\n\n")
 	b.WriteString("explore → propose → spec → design → tasks → apply → verify → archive\n\n")
 	b.WriteString("Artifacts live in the **OpenSpec store**: in-flight changes under `openspec/changes/<change>/` (proposal, spec, design, tasks), the canonical specs in `openspec/specs/`, and completed changes in `openspec/changes/archive/`. Archive merges the change's spec delta into `openspec/specs/`. Run `sdd-init` once to create it.\n\n")

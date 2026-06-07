@@ -273,6 +273,28 @@ func TestCatalog_CoordinatorBodyExplicitDelegation(t *testing.T) {
 	}
 }
 
+func TestCatalog_CoordinatorTriageGate(t *testing.T) {
+	agents := loadRealCatalog(t)
+	byName := indexByName(agents)
+
+	coord, ok := byName["capiko-sdd-coordinator"]
+	if !ok {
+		t.Fatal("capiko-sdd-coordinator not found in catalog")
+	}
+	// Guard the triage gate so a future edit cannot silently drop the rules that
+	// keep small changes inline instead of forcing the full SDD phase DAG.
+	for _, want := range []string{
+		"Triage Gate",
+		"4-file rule",
+		"Delegate a writer",
+		"Fresh review before a PR",
+	} {
+		if !strings.Contains(coord.Content, want) {
+			t.Errorf("coordinator body must contain triage rule %q", want)
+		}
+	}
+}
+
 func TestCatalog_LanguageContract_Coordinator(t *testing.T) {
 	agents := loadRealCatalog(t)
 	byName := indexByName(agents)
