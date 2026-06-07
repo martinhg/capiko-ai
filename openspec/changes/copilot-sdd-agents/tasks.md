@@ -148,17 +148,17 @@ Chain strategy: pending
 
 ### Phase 3.1 — RED: TUI tests
 
-- [ ] 3.1 Add to `internal/tui/sync_test.go`:
+- [x] 3.1 Add to `internal/tui/sync_test.go`:
   - `TestRunSync_InstallsAgents` — mock agent catalog; assert `AgentsDir` receives `<name>.agent.md` files and `ApplyAgents` is called (spec: TUISurfacesAgentsAlongsideSkills / Scenario: Install screen shows agents).
   - `TestRunSync_AgentCountReturned` — assert returned count includes agents written.
 
-- [ ] 3.2 Add to `internal/tui/app_test.go`:
+- [x] 3.2 Add to `internal/tui/app_test.go`:
   - `TestApp_StaleBanner_IncludesAgents` — stale agent + stale skill in state; assert banner count covers both (spec: TUISurfacesAgentsAlongsideSkills / Scenario: Drift screen shows drifted agents).
   - `TestApp_DetectCmd_PopulatesInstalledAgents` — `detectedMsg` carries `installedAgents`; assert `a.installedAgents` set.
 
 ### Phase 3.2 — GREEN: Extend `RunSync` with agent install
 
-- [ ] 3.3 Modify `internal/tui/sync.go` — `RunSync` signature gains `agentCatalog []agent.Agent`:
+- [x] 3.3 Modify `internal/tui/sync.go` — `RunSync` signature gains `agentCatalog []agent.Agent`:
   - After skills install loop, iterate `agentCatalog`: call `a.Install(host.AgentsDir)`.
   - Collect `[]state.Installed` for agents; call `store.ApplyAgents(Version, agentRecorded, nil)` after skills `store.Apply`.
   - Return `len(recorded) + len(agentRecorded)` as total count.
@@ -166,7 +166,7 @@ Chain strategy: pending
 
 ### Phase 3.3 — GREEN: Extend `app.go` with agent awareness
 
-- [ ] 3.4 Modify `internal/tui/app.go`:
+- [x] 3.4 Modify `internal/tui/app.go`:
   - Add `agentCatalog []agent.Agent` and `installedAgents map[string]bool` and `staleAgents []string` fields to `App`.
   - Update `NewApp` signature to accept `agentCatalog []agent.Agent`.
   - In `detectCmd`/`detectedMsg`: call `h.InstalledAgents()`; populate `a.installedAgents`.
@@ -176,10 +176,39 @@ Chain strategy: pending
 
 ### Phase 3.4 — GREEN: Update call sites in `main`
 
-- [ ] 3.5 Update `main.go` (or wherever `NewApp` and `RunSync` are called): pass `catalog.LoadAgents()` result alongside skills catalog. Fail fast with error if agent catalog fails to load.
+- [x] 3.5 Update `main.go` (or wherever `NewApp` and `RunSync` are called): pass `catalog.LoadAgents()` result alongside skills catalog. Fail fast with error if agent catalog fails to load.
 
 ### Slice 3 Verification Boundary
 
-- [ ] 3.6 Run `go test -race ./...` — must exit 0 (spec: TestSuitePassesUnderStrictTDD / Scenario: CI gate passes).
-- [ ] 3.7 Run `gofmt -l .` — must produce empty output (spec: TestSuitePassesUnderStrictTDD / Scenario: Formatting gate passes).
-- [ ] 3.8 Run `go vet ./...` — must produce no diagnostics.
+- [x] 3.6 Run `go test -race ./...` — must exit 0 (spec: TestSuitePassesUnderStrictTDD / Scenario: CI gate passes).
+- [x] 3.7 Run `gofmt -l .` — must produce empty output (spec: TestSuitePassesUnderStrictTDD / Scenario: Formatting gate passes).
+- [x] 3.8 Run `go vet ./...` — must produce no diagnostics.
+
+---
+
+## Slice 3 — Spec Gap: TUI Render of Agents (review-identified)
+
+> **Spec requirement closed**: TUISurfacesAgentsAlongsideSkills — "Install screen shows agents" and "Drift screen shows drifted agents"
+> Closed on branch `feat/copilot-sdd-agents-slice3` (separate commit from Slice 3).
+
+### Spec Gap Description
+
+`installedAgents` and `staleAgents` were set in `App` (dead state) but never read by any screen.
+The sync done view showed `"Synced N skill(s) ✓"` — no visible "Agents" section.
+
+### Changes Made
+
+- [x] SG-1 Strengthen `TestApp_StaleBanner_IncludesAgents` — exact segment assertions: `"1 skill"` AND `"2 agents"`.
+- [x] SG-2 Add `TestApp_StaleBanner_AgentsOnly_Singular` — asserts `"1 agent out of date"` (no skill segment).
+- [x] SG-3 Add `TestApp_StaleBanner_AgentsOnly_Plural` — asserts `"2 agents out of date"` (no skill segment).
+- [x] SG-4 Add `skillNames []string` and `agentNames []string` fields to `syncScreen`.
+- [x] SG-5 Update `syncedMsg` to carry `skillNames` and `agentNames`.
+- [x] SG-6 Update `syncScreen.syncCmd()` to populate skill and agent names from catalogs.
+- [x] SG-7 Update `syncScreen.Update()` to store `skillNames` and `agentNames`.
+- [x] SG-8 Update `syncScreen.View()` `syncDone` case — render "Skills" section + "Agents" section with names and ✓ indicators.
+- [x] SG-9 Add `TestSyncDoneView_ShowsAgentsSection` — asserts "Agents" section + agent names in done view.
+- [x] SG-10 Add `TestSyncDoneView_ShowsSkillsSection` — asserts "Skills" section + skill names in done view.
+- [x] SG-11 Add `sync_done_agents.golden` — captures the rendered output with both sections.
+- [x] SG-12 Run `go test -race ./...` — all packages exit 0.
+- [x] SG-13 Run `gofmt -l .` — empty output.
+- [x] SG-14 Run `go vet ./...` — no diagnostics.

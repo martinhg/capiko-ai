@@ -227,21 +227,24 @@ The contract MUST appear in the coordinator and SHOULD appear in each worker.
 
 ### Requirement: TUI Surfaces Agents alongside Skills
 
-The TUI install/sync/drift screens MUST display agent install and drift status in the same
-flow as skills. Agents MUST appear in a distinct labeled section (e.g. "Agents") so the
-user can distinguish them from skills.
+The TUI MUST surface agent install and drift status in the same flow as skills, with
+parity to how skills are shown. Installed agents MUST appear in a distinct labeled
+"Agents" section, and agent drift MUST be surfaced the same way skill drift is — via the
+menu's "out of date" banner, which counts drifted agents alongside drifted skills. (capiko
+has no per-item drift screen for skills either; the banner is the established drift
+surface.)
 
-#### Scenario: Install screen shows agents
+#### Scenario: Sync view shows an Agents section
 
-- GIVEN the TUI install flow runs
-- WHEN agent installation completes
-- THEN the output includes an "Agents" section listing installed agent names and their result (installed/up-to-date)
+- GIVEN the TUI sync flow completes
+- WHEN the done view renders
+- THEN it includes a labeled "Agents" section listing the synced agent names, parallel to the "Skills" section
 
-#### Scenario: Drift screen shows drifted agents
+#### Scenario: Drift banner counts drifted agents
 
-- GIVEN one agent has drifted
-- WHEN the TUI drift screen renders
-- THEN the agent appears in the agents section with a drift indicator
+- GIVEN one or more agents have drifted (missing from state or content-changed)
+- WHEN the menu renders
+- THEN the "out of date" banner counts the drifted agents alongside any drifted skills, pointing the user at Sync configs
 
 ---
 

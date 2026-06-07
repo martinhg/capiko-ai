@@ -109,7 +109,8 @@ func (s *upgradeScreen) upgradeCmd() tea.Cmd {
 func (s *upgradeScreen) syncCmd() tea.Cmd {
 	svc, cat := s.svc, s.catalog
 	return func() tea.Msg {
-		n, err := RunSync(svc.host, cat, svc.state, svc.backup)
+		// upgradeScreen carries skills only; agents are synced via the main sync menu.
+		n, err := RunSync(svc.host, cat, nil, svc.state, svc.backup)
 		return syncedMsg{count: n, err: err}
 	}
 }

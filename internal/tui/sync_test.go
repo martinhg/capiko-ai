@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
 func TestSyncWritesWholeCatalog(t *testing.T) {
 	dir := t.TempDir()
-	s, ok := newSync(services{host: &copilot.Host{SkillsDir: dir}}, testCatalog()).(*syncScreen)
+	s, ok := newSync(services{host: &copilot.Host{SkillsDir: dir}}, testCatalog(), nil).(*syncScreen)
 	if !ok {
 		t.Fatal("newSync did not return *syncScreen")
 	}
@@ -45,7 +46,7 @@ func TestRunSyncWritesCatalogAndRecordsState(t *testing.T) {
 	dir := t.TempDir()
 	store := state.NewStore(t.TempDir())
 
-	n, err := RunSync(&copilot.Host{SkillsDir: dir}, testCatalog(), store, nil)
+	n, err := RunSync(&copilot.Host{SkillsDir: dir}, testCatalog(), nil, store, nil)
 	if err != nil {
 		t.Fatalf("RunSync: %v", err)
 	}
@@ -80,7 +81,7 @@ func TestRunSyncReappliesPersona(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := RunSync(host, testCatalog(), store, nil); err != nil {
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
 		t.Fatalf("RunSync: %v", err)
 	}
 
@@ -94,9 +95,127 @@ func TestRunSyncReappliesPersona(t *testing.T) {
 }
 
 func TestSyncQuitGoesBack(t *testing.T) {
-	s, _ := newSync(services{host: &copilot.Host{SkillsDir: t.TempDir()}}, testCatalog()).(*syncScreen)
+	s, _ := newSync(services{host: &copilot.Host{SkillsDir: t.TempDir()}}, testCatalog(), nil).(*syncScreen)
 	_, cmd := s.Update(key("q"))
 	if _, ok := cmd().(backMsg); !ok {
 		t.Error("q should emit backMsg")
+	}
+}
+
+// testAgentCatalog returns a small agent catalog for TUI tests.
+func testAgentCatalog() []agent.Agent {
+	return []agent.Agent{
+		{
+			Name:        "capiko-sdd-explore",
+			Description: "SDD explore phase",
+			Content:     "---\ndescription: SDD explore phase\ntools: [read]\nuser-invocable: false\n---\nExplore.",
+		},
+		{
+			Name:        "capiko-sdd-apply",
+			Description: "SDD apply phase",
+			Content:     "---\ndescription: SDD apply phase\ntools: [read,edit,execute]\nuser-invocable: false\n---\nApply.",
+		},
+	}
+}
+
+// TestRunSync_InstallsAgents asserts that RunSync writes agent files into AgentsDir
+// and calls ApplyAgents so agent state is recorded.
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Install screen shows agents.
+func TestRunSync_InstallsAgents(t *testing.T) {
+	skillsDir := t.TempDir()
+	agentsDir := t.TempDir()
+	store := state.NewStore(t.TempDir())
+	host := &copilot.Host{SkillsDir: skillsDir, AgentsDir: agentsDir}
+	agents := testAgentCatalog()
+
+	n, err := RunSync(host, testCatalog(), agents, store, nil)
+	if err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	// Each agent file must be written to AgentsDir.
+	for _, a := range agents {
+		p := filepath.Join(agentsDir, a.Name+".agent.md")
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("agent file %s not written: %v", a.Name, err)
+		}
+	}
+
+	// State must record agents.
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range agents {
+		if _, ok := st.Agents[a.Name]; !ok {
+			t.Errorf("agent %s not recorded in state", a.Name)
+		}
+	}
+
+	// Total count must include skills + agents.
+	want := len(testCatalog()) + len(agents)
+	if n != want {
+		t.Errorf("count = %d, want %d (skills + agents)", n, want)
+	}
+}
+
+// TestRunSync_AgentCountReturned asserts the returned count includes agents.
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Install screen shows agents.
+func TestRunSync_AgentCountReturned(t *testing.T) {
+	host := &copilot.Host{SkillsDir: t.TempDir(), AgentsDir: t.TempDir()}
+	agents := testAgentCatalog()
+
+	n, err := RunSync(host, testCatalog(), agents, nil, nil)
+	if err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+	want := len(testCatalog()) + len(agents)
+	if n != want {
+		t.Errorf("count = %d, want %d", n, want)
+	}
+}
+
+// TestSyncDoneView_ShowsAgentsSection asserts that when sync completes with an agent
+// catalog, the done view includes a distinct "Agents" section listing each agent name.
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Install screen shows agents.
+func TestSyncDoneView_ShowsAgentsSection(t *testing.T) {
+	agents := testAgentCatalog()
+	s := &syncScreen{
+		catalog:      testCatalog(),
+		agentCatalog: agents,
+		state:        syncDone,
+		skillNames:   []string{"capiko-hello", "capiko-conventions", "capiko-pr"},
+		agentNames:   []string{"capiko-sdd-explore", "capiko-sdd-apply"},
+	}
+	view := s.View()
+
+	if !strings.Contains(view, "Agents") {
+		t.Errorf("syncDone view missing 'Agents' section, got:\n%s", view)
+	}
+	for _, a := range agents {
+		if !strings.Contains(view, a.Name) {
+			t.Errorf("syncDone view missing agent name %q, got:\n%s", a.Name, view)
+		}
+	}
+}
+
+// TestSyncDoneView_ShowsSkillsSection asserts that the done view still shows a "Skills"
+// section listing each skill name, parallel to the "Agents" section.
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Install screen shows agents.
+func TestSyncDoneView_ShowsSkillsSection(t *testing.T) {
+	s := &syncScreen{
+		catalog:    testCatalog(),
+		state:      syncDone,
+		skillNames: []string{"capiko-hello", "capiko-conventions"},
+	}
+	view := s.View()
+
+	if !strings.Contains(view, "Skills") {
+		t.Errorf("syncDone view missing 'Skills' section, got:\n%s", view)
+	}
+	for _, sk := range testCatalog()[:2] {
+		if !strings.Contains(view, sk.Name) {
+			t.Errorf("syncDone view missing skill name %q, got:\n%s", sk.Name, view)
+		}
 	}
 }

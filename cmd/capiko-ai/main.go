@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/catalog"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -52,6 +53,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "capiko-ai: loading catalog:", err)
 		os.Exit(1)
 	}
+	agentCat, err := catalog.LoadAgents()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "capiko-ai: loading agent catalog:", err)
+		os.Exit(1)
+	}
 
 	// Nil stores degrade gracefully: changes apply but are not recorded or
 	// snapshotted.
@@ -70,10 +76,10 @@ func main() {
 	// new embedded catalog.
 	if os.Getenv(envPostUpgradeSync) == "1" {
 		os.Unsetenv(envPostUpgradeSync)
-		postUpgradeSync(copilot.Detect, cat, store, bkp, os.Stdout)
+		postUpgradeSync(copilot.Detect, cat, agentCat, store, bkp, os.Stdout)
 	}
 
-	final, err := tea.NewProgram(tui.NewApp(cat, store, bkp)).Run()
+	final, err := tea.NewProgram(tui.NewApp(cat, agentCat, store, bkp)).Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "capiko-ai:", err)
 		os.Exit(1)
@@ -94,14 +100,14 @@ func main() {
 // postUpgradeSync detects the Copilot host and syncs the catalog into it,
 // reporting the outcome. Detection is injected so the flow is testable; a nil
 // host (Copilot not installed/initialized) is a silent no-op.
-func postUpgradeSync(detect func() (*copilot.Host, error), cat []skill.Skill, store *state.Store, bkp *backup.Store, out io.Writer) {
+func postUpgradeSync(detect func() (*copilot.Host, error), cat []skill.Skill, agentCat []agent.Agent, store *state.Store, bkp *backup.Store, out io.Writer) {
 	host, err := detect()
 	if err != nil || host == nil {
 		return
 	}
-	if n, err := tui.RunSync(host, cat, store, bkp); err != nil {
+	if n, err := tui.RunSync(host, cat, agentCat, store, bkp); err != nil {
 		fmt.Fprintln(out, "capiko-ai: post-upgrade sync failed:", err)
 	} else {
-		fmt.Fprintf(out, "capiko-ai: synced %d skill(s) after upgrade\n", n)
+		fmt.Fprintf(out, "capiko-ai: synced %d item(s) after upgrade\n", n)
 	}
 }

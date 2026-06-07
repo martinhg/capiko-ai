@@ -2,11 +2,13 @@ package tui
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/state"
 )
 
 // readyApp returns an App already on the main menu.
@@ -16,7 +18,7 @@ func readyApp(t *testing.T, skillsDir string, installed ...string) App {
 	for _, n := range installed {
 		inst[n] = true
 	}
-	next, _ := NewApp(testCatalog(), nil, nil).Update(detectedMsg{
+	next, _ := NewApp(testCatalog(), nil, nil, nil).Update(detectedMsg{
 		host:      &copilot.Host{SkillsDir: skillsDir},
 		installed: inst,
 	})
@@ -42,7 +44,7 @@ func TestAppDetectTransitions(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			next, _ := NewApp(testCatalog(), nil, nil).Update(tc.msg)
+			next, _ := NewApp(testCatalog(), nil, nil, nil).Update(tc.msg)
 			if got := next.(App).state; got != tc.want {
 				t.Errorf("state = %d, want %d", got, tc.want)
 			}
@@ -184,5 +186,105 @@ func TestQuitKeys(t *testing.T) {
 				t.Errorf("%q did not quit", k)
 			}
 		})
+	}
+}
+
+// TestApp_StaleBanner_IncludesAgents asserts that when both skills and agents are stale,
+// the staleBanner mentions exact counts for each group.
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Drift screen shows drifted agents.
+func TestApp_StaleBanner_IncludesAgents(t *testing.T) {
+	store := state.NewStore(t.TempDir())
+	// Record one skill with a stale checksum.
+	if err := store.Apply("1.0.0", []state.Installed{{Name: "capiko-hello", Checksum: "stale-skill"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Record one agent with a stale checksum.
+	if err := store.ApplyAgents("1.0.0", []state.Installed{{Name: "capiko-sdd-explore", Checksum: "stale-agent"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	agents := testAgentCatalog() // 2 agents; capiko-sdd-explore has stale checksum, capiko-sdd-apply is missing from state
+	next, _ := NewApp(testCatalog(), agents, store, nil).Update(detectedMsg{
+		host:      &copilot.Host{SkillsDir: t.TempDir()},
+		installed: map[string]bool{"capiko-hello": true},
+	})
+	a, ok := next.(App)
+	if !ok {
+		t.Fatalf("Update returned %T, want App", next)
+	}
+
+	banner := a.staleBanner()
+	// 1 stale skill + 2 stale agents (explore stale, apply missing-from-state).
+	// The banner must mention both counts explicitly.
+	if strings.TrimSpace(banner) == "" {
+		t.Fatal("staleBanner should not be empty when agents are stale")
+	}
+	if !strings.Contains(banner, "1 skill") {
+		t.Errorf("staleBanner should mention '1 skill', got: %q", banner)
+	}
+	if !strings.Contains(banner, "2 agents") {
+		t.Errorf("staleBanner should mention '2 agents', got: %q", banner)
+	}
+}
+
+// TestApp_StaleBanner_AgentsOnly_Singular asserts that when only one agent is stale,
+// the banner reads "1 agent out of date" (no skill segment, singular noun).
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Drift screen shows drifted agents.
+func TestApp_StaleBanner_AgentsOnly_Singular(t *testing.T) {
+	banner := App{staleAgents: []string{"capiko-sdd-explore"}}.staleBanner()
+	if !strings.Contains(banner, "1 agent out of date") {
+		t.Errorf("want '1 agent out of date' in banner, got: %q", banner)
+	}
+	if strings.Contains(banner, "skill") {
+		t.Errorf("banner should not mention skills when only agents are stale, got: %q", banner)
+	}
+}
+
+// TestApp_StaleBanner_AgentsOnly_Plural asserts that when multiple agents are stale,
+// the banner reads "2 agents out of date" (plural noun, no skill segment).
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Drift screen shows drifted agents.
+func TestApp_StaleBanner_AgentsOnly_Plural(t *testing.T) {
+	banner := App{staleAgents: []string{"capiko-sdd-explore", "capiko-sdd-apply"}}.staleBanner()
+	if !strings.Contains(banner, "2 agents out of date") {
+		t.Errorf("want '2 agents out of date' in banner, got: %q", banner)
+	}
+	if strings.Contains(banner, "skill") {
+		t.Errorf("banner should not mention skills when only agents are stale, got: %q", banner)
+	}
+}
+
+// TestApp_DetectCmd_PopulatesInstalledAgents asserts that after a detectedMsg,
+// a.installedAgents is populated from the host.
+// Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Install screen shows agents.
+func TestApp_DetectCmd_PopulatesInstalledAgents(t *testing.T) {
+	agentsDir := t.TempDir()
+	// Write one .agent.md file in agentsDir to simulate an installed agent.
+	mustWriteFile(t, agentsDir, "capiko-sdd-explore.agent.md", "---\ndescription: test\ntools: [read]\nuser-invocable: false\n---\n")
+
+	host := &copilot.Host{
+		SkillsDir: t.TempDir(),
+		AgentsDir: agentsDir,
+	}
+
+	next, _ := NewApp(testCatalog(), testAgentCatalog(), nil, nil).Update(detectedMsg{
+		host:            host,
+		installed:       map[string]bool{},
+		installedAgents: map[string]bool{"capiko-sdd-explore": true},
+	})
+	a, ok := next.(App)
+	if !ok {
+		t.Fatalf("Update returned %T, want App", next)
+	}
+	if !a.installedAgents["capiko-sdd-explore"] {
+		t.Errorf("installedAgents should contain capiko-sdd-explore, got %v", a.installedAgents)
+	}
+}
+
+// mustWriteFile is a test helper that writes content to path/filename.
+func mustWriteFile(t *testing.T, dir, filename, content string) {
+	t.Helper()
+	p := dir + "/" + filename
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
