@@ -1,32 +1,54 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
 
-var (
-	capyBrown = lipgloss.NewStyle().Foreground(lipgloss.Color("#A0703B"))
-	capyRed   = lipgloss.NewStyle().Foreground(lipgloss.Color("#E23B3B"))
-	capyAmber = lipgloss.NewStyle().Bold(true).Foreground(brandColor)
+	"github.com/charmbracelet/lipgloss"
 )
 
-// logo renders the capiko mascot in braille art: a round brown capybara in a red
-// shirt with a "KO" wordmark beside it (capy + KO). Colors collapse to plain
-// shapes under a non-color profile, so golden snapshots stay deterministic.
+// capyBrown is the warm brand brown the capybara mascot is drawn in. Under a
+// non-color profile it collapses to plain text, so golden snapshots stay
+// deterministic.
+var capyBrown = lipgloss.NewStyle().Foreground(lipgloss.Color("#A0703B"))
+
+// capyArt is the capiko capybara mascot in ASCII shading: 56 columns wide and
+// 26 rows tall. The main menu box is sized to hold it. Leading spaces are
+// significant — they place the shape — so the literal must not be reflowed. The
+// leading newline keeps the block readable and is trimmed before rendering.
+const capyArt = `
+                               %=#
+                 %=+==   *%%%%%%%%
+                 %+++#==================%:
+                   %#=====+==*=========+++++%
+                  +===================++++++%%
+                 %===================++++++++%
+                #====================++++++++%
+                #====================+++++*++-
+               %=====================#+++%=%%
+             ============================:%
+           %=================+=========%= :%  :*+=++
+         %====================+++++++     :: +:%==:=:=
+       %=========================++++#     :     #+++%%
+      ===============================%     ::   %
+     ================================%   % +=   #  = +
+    +================================: @    %::--   %%
+   %=================================:*****#:  =#****#%
+   +===========+====================+:+#*************##
+  -++=============#==========%======#-*****#**********#
+  -++==============+=========%======  *=*************#%
+   +++=================+=====%=%===%  %+************##:
+   %+++=============*=+++====+  +++#   %********#**##%
+    ++++============++++++++++#:#++%#:-:%##*****####
+:::::%++++========#%%%%:-::++++%%++++%-::::%####%=::::::
+:::::::-%++++====+++++++*-:-++*+*%::::::::::::::::::::::
+         :-::--::--:-%%%::::::::::::::::::---::`
+
+// logo renders the capybara mascot in the warm brand brown, one line at a time
+// so each row keeps its own width inside the menu box.
 func logo() string {
-	capy := lipgloss.JoinVertical(lipgloss.Center,
-		capyBrown.Render("⢀⣀⡀⠀⠀⠀⠀⢀⣀⡀"),
-		capyBrown.Render("⣾⣿⣿⣶⣶⣶⣶⣿⣿⣷"),
-		capyBrown.Render("⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿"),
-		capyBrown.Render("⣿⠿⣿⣿⣿⣿⣿⣿⠿⣿"),
-		capyBrown.Render("⣿⣿⣿⣷⣶⣶⣾⣿⣿⣿"),
-		capyBrown.Render("⠘⢿⣿⡿⠟⠻⢿⣿⡿⠃"),
-		capyRed.Render("⢀⣾⣿⣿⣿⣿⣿⣿⣷⡀"),
-		capyRed.Render("⣾⣿⣿⣿⣿⣿⣿⣿⣿⣷"),
-		capyBrown.Render("⠛⠋⠁⠀⠀⠀⠀⠈⠙⠛"),
-	)
-	ko := lipgloss.JoinVertical(lipgloss.Left,
-		capyAmber.Render("⣿ ⣿ ⣿⣿⣿"),
-		capyAmber.Render("⣿⣿⠀ ⣿⠀⣿"),
-		capyAmber.Render("⣿ ⣿ ⣿⣿⣿"),
-	)
-	return lipgloss.JoinHorizontal(lipgloss.Center, capy, "   ", ko)
+	lines := strings.Split(strings.Trim(capyArt, "\n"), "\n")
+	for i, l := range lines {
+		lines[i] = capyBrown.Render(l)
+	}
+	return strings.Join(lines, "\n")
 }

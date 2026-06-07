@@ -19,7 +19,7 @@ var (
 // selection or banners change. Height is left to grow with the content.
 const (
 	menuCursor = "▸ " // prefix on the focused menu item
-	menuWidth  = 60   // fixed box width; lipgloss counts padding within this
+	menuWidth  = 64   // fixed box width; holds the 56-col mascot plus padding
 )
 
 var menuBoxSty = lipgloss.NewStyle().
