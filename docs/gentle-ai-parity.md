@@ -127,10 +127,14 @@ Ordered roughly by value for a Copilot-focused tool:
   no-sudo commands (Homebrew installs, the pnpm script) are one-click. gentle-ai
   itself never auto-runs sudo (it displays per-distro commands), so a TUI sudo
   handoff is not required for parity.
-- **Manage instructions in `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`** — System Detection
-  now *reports* those configured dirs, but capiko only *writes* the home file and
-  `~/.copilot/instructions/`. Writing/managing scoped files into the env-configured
-  dirs is a possible next step.
+- ~~**Manage instructions in `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`**~~ — **Done.**
+  System Detection reports the configured dirs, the "Install scoped instructions"
+  flow writes the curated `*.instructions.md` files into the home dir **and** every
+  `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` entry, and **Sync configs now re-applies them**
+  so they track the catalog like the persona/SDD blocks. Re-application is opt-in:
+  state records `instructions_installed` on first install, and sync only re-writes
+  scoped instructions once they are managed — a user who never installed them never
+  gets them silently created.
 
 ## Documentation
 
