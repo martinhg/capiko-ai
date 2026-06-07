@@ -37,6 +37,10 @@ const (
 type Phase string
 
 const (
+	PhasePropose Phase = "propose"
+	PhaseSpec    Phase = "spec"
+	PhaseDesign  Phase = "design"
+	PhaseTasks   Phase = "tasks"
 	PhaseApply   Phase = "apply"
 	PhaseVerify  Phase = "verify"
 	PhaseArchive Phase = "archive"
@@ -202,11 +206,18 @@ func resolveApplyState(coreReady bool, tp TaskProgress) ApplyState {
 }
 
 func resolveDependencies(artifacts map[string]ArtifactState, tp TaskProgress, applyState ApplyState, coreReady, verifyPassing bool) Dependencies {
+	// Planning phases follow the DAG proposal → spec/design → tasks. A phase is
+	// "ready" when its prerequisites are done but its own artifact is not, so the
+	// engine can route the next planning step deterministically instead of
+	// emitting a generic "resolve-blockers".
+	proposalDone := artifacts["proposal"] == ArtifactDone
+	specDone := artifacts["specs"] == ArtifactDone
+	designDone := artifacts["design"] == ArtifactDone
 	d := Dependencies{
-		Proposal: artifactDependency(artifacts["proposal"]),
-		Specs:    artifactDependency(artifacts["specs"]),
-		Design:   artifactDependency(artifacts["design"]),
-		Tasks:    artifactDependency(artifacts["tasks"]),
+		Proposal: planningDependency(true, artifacts["proposal"]),
+		Specs:    planningDependency(proposalDone, artifacts["specs"]),
+		Design:   planningDependency(proposalDone, artifacts["design"]),
+		Tasks:    planningDependency(specDone && designDone, artifacts["tasks"]),
 		Apply:    DependencyBlocked,
 		Verify:   DependencyBlocked,
 		Archive:  DependencyBlocked,
@@ -232,15 +243,30 @@ func resolveDependencies(artifacts map[string]ArtifactState, tp TaskProgress, ap
 	return d
 }
 
-func artifactDependency(state ArtifactState) DependencyState {
-	if state == ArtifactDone {
+// planningDependency reports a planning phase's readiness: all_done when its
+// own artifact is complete, ready when its prerequisites are met but the
+// artifact is not yet complete, blocked otherwise.
+func planningDependency(prereqsDone bool, own ArtifactState) DependencyState {
+	switch {
+	case own == ArtifactDone:
 		return DependencyAllDone
+	case prereqsDone:
+		return DependencyReady
+	default:
+		return DependencyBlocked
 	}
-	return DependencyBlocked
 }
 
 func resolveNextRecommended(d Dependencies, applyState ApplyState) string {
 	switch {
+	case d.Proposal == DependencyReady:
+		return string(PhasePropose)
+	case d.Specs == DependencyReady:
+		return string(PhaseSpec)
+	case d.Design == DependencyReady:
+		return string(PhaseDesign)
+	case d.Tasks == DependencyReady:
+		return string(PhaseTasks)
 	case d.Apply == DependencyReady:
 		return string(PhaseApply)
 	case d.Verify == DependencyReady:

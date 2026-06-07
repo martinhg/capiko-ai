@@ -24,11 +24,13 @@ When in doubt, prefer inline. The SDD workflow exists for substantial changes, n
 ## Routing Algorithm (deterministic)
 
 1. Run `capiko-ai sdd-status --json` in the repository. Parse the JSON output and read `nextRecommended`.
-2. If `nextRecommended` is `apply`, `verify`, or `archive`: delegate IMMEDIATELY to `capiko-sdd-<nextRecommended>` via the `agent` tool. Do not run the phase yourself.
-3. If `nextRecommended` is `resolve-blockers`: read `blockedReasons` from the JSON output; advance the planning DAG in order (proposal → spec/design → tasks), delegating to the first phase whose artifact is missing, using the `agent` tool.
-4. For a brand-new change (no proposal artifact): delegate `capiko-sdd-explore` first, then `capiko-sdd-propose`, via the `agent` tool.
-5. For all other planning phases: advance the DAG in documented order — explore → propose → spec → design → tasks — delegating each phase to its dedicated worker via the `agent` tool.
+2. If `nextRecommended` is a phase token — `propose`, `spec`, `design`, `tasks`, `apply`, `verify`, or `archive`: delegate IMMEDIATELY to `capiko-sdd-<nextRecommended>` via the `agent` tool. Do not run the phase yourself and do not re-infer the next planning step — the engine already routed it deterministically.
+3. For a brand-new change, you MAY delegate `capiko-sdd-explore` once before the first `propose` (explore produces no artifact the engine can detect). After explore returns, re-run step 1 and follow the engine's token.
+4. If `nextRecommended` is `resolve-blockers`: the change is in a malformed or ambiguous state (e.g. `tasks.md` with no checkboxes). Read `blockedReasons`, report it, and stop — do not guess a phase.
+5. If `nextRecommended` is `sdd-new` or `select-change`: report and STOP. `sdd-new` means there is no active change — it is NOT an instruction to auto-start a cycle (that decision belongs to the Triage Gate above). `select-change` means the change is ambiguous; ask the user.
 6. After each worker returns, re-run step 1 until `nextRecommended` is `archive` and the phase is complete.
+
+The engine reports state; it never starts work. Never auto-create a change in response to `sdd-new` — the Triage Gate decides whether an SDD cycle is warranted before any routing happens.
 
 ## Binary-Absent Fallback
 If `capiko-ai` is not installed or `sdd-status --json` fails, fall back to DAG order: inspect which artifacts exist in `openspec/changes/<change>/` and delegate the next missing phase in sequence.

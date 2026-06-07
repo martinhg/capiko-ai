@@ -20,9 +20,21 @@ for status and routing:
 
 Treat the native JSON as authoritative over prompt inference. Route only by
 `nextRecommended` and the dependency states; never re-derive status from prose when
-the binary answered. When `blockedReasons` is non-empty, report it and stop unless
-`nextRecommended` is `verify` (verification may run to refresh evidence). When
-`nextRecommended` is `resolve-blockers` or `select-change`, report and stop.
+the binary answered. The engine routes the planning phases deterministically too:
+`nextRecommended` may be `propose`, `spec`, `design`, or `tasks` — delegate to the
+matching `sdd-<phase>` worker exactly as you would for `apply`/`verify`/`archive`,
+without inferring the next planning step from `blockedReasons`. When `blockedReasons`
+is non-empty, report it and stop unless `nextRecommended` is `verify` (verification
+may run to refresh evidence). When `nextRecommended` is `resolve-blockers` or
+`select-change`, report and stop.
+
+Routing invariants (the engine reports state; it never starts work):
+
+- The engine routes changes that already exist under `openspec/changes/`. It never
+  fabricates a change. With zero active changes it returns `sdd-new` — that is a
+  signal to the orchestrator's triage gate, not an instruction to auto-start a cycle.
+- The orchestrator's triage gate runs FIRST, before `sdd-status`. A `nextRecommended`
+  of `propose` does not bypass triage; it only applies once a change has been started.
 
 If the binary is unavailable, fall back to this prompt contract: reconstruct status
 from the manual schema below by reading the change's OpenSpec artifacts. Manual
@@ -86,7 +98,7 @@ actionContext:
   mode: repo-local
   workspaceRoot: <absolute path>
   allowedEditRoots: [<absolute paths>]
-nextRecommended: apply | verify | archive | sdd-new | select-change | resolve-blockers
+nextRecommended: propose | spec | design | tasks | apply | verify | archive | sdd-new | select-change | resolve-blockers
 blockedReasons: []
 ```
 
@@ -107,8 +119,11 @@ only by `nextRecommended` and dependency states; human explanation belongs in
 
 ## Dependency States
 
-- `proposal`, `specs`, `design`, and `tasks` report whether prerequisite artifacts
-  are blocked, ready, or all done.
+- `proposal`, `specs`, `design`, and `tasks` follow the planning DAG
+  (proposal → spec/design → tasks). Each is `all_done` when its own artifact is
+  complete, `ready` when its prerequisites are complete but its artifact is not yet
+  (so it is the next planning step to run), and `blocked` otherwise. `proposal` has
+  no prerequisite; `specs` and `design` require `proposal`; `tasks` requires both.
 - `apply` is `ready` only when specs, design, and tasks exist and task progress is
   not all done.
 - `verify` is `ready` when tasks exist and either apply-progress exists or the
