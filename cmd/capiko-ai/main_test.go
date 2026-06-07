@@ -26,21 +26,21 @@ func TestPostUpgradeSyncWritesCatalog(t *testing.T) {
 
 	var out bytes.Buffer
 	detect := func() (*copilot.Host, error) { return &copilot.Host{SkillsDir: skillsDir}, nil }
-	postUpgradeSync(detect, cat, store, nil, &out)
+	postUpgradeSync(detect, cat, nil, store, nil, &out)
 
 	for _, sk := range cat {
 		if _, err := os.Stat(filepath.Join(skillsDir, sk.Name, "SKILL.md")); err != nil {
 			t.Errorf("%s not synced: %v", sk.Name, err)
 		}
 	}
-	if !bytes.Contains(out.Bytes(), []byte("synced 2 skill")) {
+	if !bytes.Contains(out.Bytes(), []byte("synced 2 item")) {
 		t.Errorf("missing summary, got %q", out.String())
 	}
 }
 
 func TestPostUpgradeSyncSkipsWhenNoHost(t *testing.T) {
 	var out bytes.Buffer
-	postUpgradeSync(func() (*copilot.Host, error) { return nil, nil }, testCatalog(), nil, nil, &out)
+	postUpgradeSync(func() (*copilot.Host, error) { return nil, nil }, testCatalog(), nil, nil, nil, &out)
 	if out.Len() != 0 {
 		t.Errorf("expected no output when Copilot is absent, got %q", out.String())
 	}
@@ -48,7 +48,7 @@ func TestPostUpgradeSyncSkipsWhenNoHost(t *testing.T) {
 
 func TestPostUpgradeSyncSkipsOnDetectError(t *testing.T) {
 	var out bytes.Buffer
-	postUpgradeSync(func() (*copilot.Host, error) { return nil, errors.New("boom") }, testCatalog(), nil, nil, &out)
+	postUpgradeSync(func() (*copilot.Host, error) { return nil, errors.New("boom") }, testCatalog(), nil, nil, nil, &out)
 	if out.Len() != 0 {
 		t.Errorf("detect error should be a silent no-op, got %q", out.String())
 	}

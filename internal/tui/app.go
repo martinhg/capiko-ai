@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/drift"
@@ -74,17 +75,20 @@ var menuItems = []menuItem{
 
 // App is the root Bubbletea model.
 type App struct {
-	catalog   []skill.Skill
-	svc       services
-	installed map[string]bool
-	state     appState
-	err       error
-	cursor    int
-	active    screen
-	latest    string   // newer version if an update is available; empty otherwise
-	stale     []string // installed skills whose catalog content has since changed
-	restart   bool     // set after a successful self-update; main re-execs on exit
-	postSync  bool     // set when the restart should sync skills with the new binary
+	catalog         []skill.Skill
+	agentCatalog    []agent.Agent
+	svc             services
+	installed       map[string]bool
+	installedAgents map[string]bool // agents present in AgentsDir
+	state           appState
+	err             error
+	cursor          int
+	active          screen
+	latest          string   // newer version if an update is available; empty otherwise
+	stale           []string // installed skills whose catalog content has since changed
+	staleAgents     []string // agents missing from state or whose checksum has changed
+	restart         bool     // set after a successful self-update; main re-execs on exit
+	postSync        bool     // set when the restart should sync skills with the new binary
 }
 
 // ShouldRestart reports whether a self-update succeeded and main should re-exec
@@ -97,20 +101,23 @@ func (a App) ShouldSyncAfterRestart() bool { return a.postSync }
 
 // NewApp builds the root model. The state and backup stores may be nil, in
 // which case operations still work but are not recorded or snapshotted.
-func NewApp(catalog []skill.Skill, st *state.Store, bkp *backup.Store) App {
+// agentCatalog may be nil; agents are simply skipped in that case.
+func NewApp(catalog []skill.Skill, agentCatalog []agent.Agent, st *state.Store, bkp *backup.Store) App {
 	return App{
-		state:   appDetecting,
-		catalog: catalog,
-		svc:     services{state: st, backup: bkp},
+		state:        appDetecting,
+		catalog:      catalog,
+		agentCatalog: agentCatalog,
+		svc:          services{state: st, backup: bkp},
 	}
 }
 
 func (a App) Init() tea.Cmd { return tea.Batch(detectCmd, checkLatestCmd) }
 
 type detectedMsg struct {
-	host      *copilot.Host
-	installed map[string]bool
-	err       error
+	host            *copilot.Host
+	installed       map[string]bool
+	installedAgents map[string]bool
+	err             error
 }
 
 func detectCmd() tea.Msg {
@@ -122,7 +129,11 @@ func detectCmd() tea.Msg {
 		return detectedMsg{}
 	}
 	inst, err := h.InstalledSkills()
-	return detectedMsg{host: h, installed: inst, err: err}
+	if err != nil {
+		return detectedMsg{host: h, err: err}
+	}
+	agentInst, err := h.InstalledAgents()
+	return detectedMsg{host: h, installed: inst, installedAgents: agentInst, err: err}
 }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -135,8 +146,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.state = appNotFound
 		default:
 			a.svc.host, a.installed = msg.host, msg.installed
+			a.installedAgents = msg.installedAgents
 			a.state = appMenu
 			a.stale = staleSkills(a.svc.state, a.catalog)
+			a.staleAgents = staleAgentsList(a.svc.state, a.agentCatalog)
 		}
 		return a, nil
 
@@ -198,7 +211,7 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 	case it.id == "uninstall":
 		a.active = newUninstall(a.svc, a.catalog, a.installed)
 	case it.id == "sync":
-		a.active = newSync(a.svc, a.catalog)
+		a.active = newSync(a.svc, a.catalog, a.agentCatalog)
 	case it.id == "backups":
 		a.active = newBackups(a.svc)
 	case it.id == "upgrade":
@@ -293,18 +306,47 @@ func staleSkills(store *state.Store, catalog []skill.Skill) []string {
 	return drift.Stale(catalog, st)
 }
 
-// staleBanner renders the "skills out of date" line when the catalog has newer
-// content than what is installed, pointing the user at Sync configs.
+// staleAgentsList loads the recorded state and reports which catalog agents are
+// missing from state or have changed content. A nil store or read error yields
+// no drift — detection is best-effort and never blocks the menu.
+func staleAgentsList(store *state.Store, catalog []agent.Agent) []string {
+	if store == nil {
+		return nil
+	}
+	st, err := store.Load()
+	if err != nil {
+		return nil
+	}
+	return drift.StaleAgents(catalog, st)
+}
+
+// staleBanner renders the "out of date" line when the catalog has newer content
+// than what is recorded in state, pointing the user at Sync configs. It covers
+// both skills and agents so the user sees a single actionable notice.
 func (a App) staleBanner() string {
-	n := len(a.stale)
-	if n == 0 {
+	nSkills := len(a.stale)
+	nAgents := len(a.staleAgents)
+	total := nSkills + nAgents
+	if total == 0 {
 		return ""
 	}
-	noun := "skill"
-	if n > 1 {
-		noun = "skills"
+
+	var parts []string
+	if nSkills > 0 {
+		noun := "skill"
+		if nSkills > 1 {
+			noun = "skills"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", nSkills, noun))
 	}
-	return warnSty.Render(fmt.Sprintf("%d %s out of date · Sync configs to update", n, noun))
+	if nAgents > 0 {
+		noun := "agent"
+		if nAgents > 1 {
+			noun = "agents"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", nAgents, noun))
+	}
+	return warnSty.Render(strings.Join(parts, ", ") + " out of date · Sync configs to update")
 }
 
 // updateBanner renders the "update available" line when a newer version is

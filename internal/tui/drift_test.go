@@ -39,7 +39,7 @@ func TestDetectComputesStale(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	next, _ := NewApp(testCatalog(), store, nil).Update(detectedMsg{
+	next, _ := NewApp(testCatalog(), nil, store, nil).Update(detectedMsg{
 		host:      &copilot.Host{SkillsDir: t.TempDir()},
 		installed: map[string]bool{"capiko-hello": true},
 	})
@@ -56,7 +56,7 @@ func TestDetectNoStaleWhenChecksumsMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	next, _ := NewApp(cat, store, nil).Update(detectedMsg{
+	next, _ := NewApp(cat, nil, store, nil).Update(detectedMsg{
 		host:      &copilot.Host{SkillsDir: t.TempDir()},
 		installed: map[string]bool{cat[0].Name: true},
 	})

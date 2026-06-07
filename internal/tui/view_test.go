@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
@@ -121,7 +122,15 @@ func TestViewGolden(t *testing.T) {
 		{"sdd", App{state: appScreen, active: sddView}.View()},
 		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
-		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog())}.View()},
+		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog(), nil)}.View()},
+		{"sync_done_agents", App{state: appScreen, active: &syncScreen{
+			catalog:      testCatalog(),
+			agentCatalog: []agent.Agent{{Name: "capiko-sdd-explore"}, {Name: "capiko-sdd-apply"}},
+			state:        syncDone,
+			count:        5,
+			skillNames:   []string{"capiko-hello", "capiko-conventions", "capiko-pr"},
+			agentNames:   []string{"capiko-sdd-explore", "capiko-sdd-apply"},
+		}}.View()},
 		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},
 		{"soon", App{state: appScreen, active: newSoon("Upgrade tools")}.View()},
 	}
