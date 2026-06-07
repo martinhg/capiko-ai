@@ -75,6 +75,28 @@ func TestRenderSkillResolution(t *testing.T) {
 	}
 }
 
+func TestRenderDeliveryChainStrategy(t *testing.T) {
+	out := Render(nil, false)
+	for _, want := range []string{
+		"### Delivery & chain strategy",
+		// The four delivery strategies, asked once and cached.
+		"ask-on-risk",
+		"auto-chain",
+		"single-pr",
+		"exception-ok",
+		// The guard that resolves them after tasks, before apply.
+		"Review Workload Forecast",
+		"size:exception",
+		// The two chain strategies, asked when chaining.
+		"stacked-to-main",
+		"feature-branch-chain",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("delivery/chain strategy section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderStrictTDD(t *testing.T) {
 	out := Render(nil, true)
 	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {

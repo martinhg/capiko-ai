@@ -107,6 +107,17 @@ func Render(assignments map[string]string, strictTDD bool) string {
 	b.WriteString("Before delegating to a sub-agent, resolve the skills it needs: run `capiko-ai skill-registry` to get the current index of installed skills by trigger and path. Match the relevant ones by their trigger, then pass the exact `SKILL.md` paths in the sub-agent handoff so it loads the full skill before doing any work.\n")
 	b.WriteString("Pass paths, not summaries — the `SKILL.md` is the source of truth, and a sub-agent that reads it directly preserves the author's intent. If the `capiko-ai` binary is unavailable, fall back to scanning `~/.copilot/skills` for the matching `SKILL.md` paths.\n")
 
+	b.WriteString("\n### Delivery & chain strategy\n\n")
+	b.WriteString("Keep the PR size matched to what a reviewer can hold in their head (the 400-line budget). On the first SDD cycle, ask once and cache a **delivery strategy**, then forward it to `sdd-tasks` and `sdd-apply`:\n\n")
+	b.WriteString("- `ask-on-risk` (default) — proceed normally, but stop and ask when the forecast says the work is oversized.\n")
+	b.WriteString("- `auto-chain` — when oversized, split into chained PRs without asking.\n")
+	b.WriteString("- `single-pr` — keep it one PR, but only with an explicitly recorded `size:exception`.\n")
+	b.WriteString("- `exception-ok` — proceed as one PR, accepting a `size:exception` for this run.\n\n")
+	b.WriteString("**Review Workload Guard.** After `sdd-tasks` returns, read its `Review Workload Forecast` before launching `sdd-apply`. If it reports `Chained PRs recommended: Yes`, `400-line budget risk: High`, or `Decision needed before apply: Yes`, resolve with the cached delivery strategy: `ask-on-risk` → STOP and ask (split into chained PRs or take a `size:exception`); `auto-chain` → do not ask, apply only the next autonomous slice with work-unit commits; `single-pr` → require a recorded `size:exception` first; `exception-ok` → continue as `size:exception`. Never start oversized apply work without resolving this guard.\n\n")
+	b.WriteString("When the resolution yields chained PRs, ask once and cache a **chain strategy**, then forward it alongside the delivery strategy:\n\n")
+	b.WriteString("- `stacked-to-main` — each PR merges to `main` in order. Fast iteration, fix on the go; best for independent slices.\n")
+	b.WriteString("- `feature-branch-chain` — a tracker branch accumulates the integration: PR #1 targets the tracker, each later PR targets the previous PR's branch, and only the tracker merges to `main`. Best for rollback control and a coordinated release.\n")
+
 	if strictTDD {
 		b.WriteString("\n### Strict TDD (active)\n\n")
 		b.WriteString("The apply and verify phases MUST follow strict Test-Driven Development: write a failing test FIRST, run it to see it fail, then write the minimal code to pass it, then refactor. Do not write any implementation before a failing test exists.\n")

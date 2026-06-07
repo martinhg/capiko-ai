@@ -81,6 +81,17 @@ SDD must protect reviewer cognitive load, not only generate tasks.
   rollback.
 - `sdd-apply` MUST NOT start oversized work unless the strategy resolves to
   chained/stacked slices or an explicitly accepted `size:exception`.
+- The delivery strategy resolves the guard: `ask-on-risk` → STOP and ask;
+  `auto-chain` → split without asking, one autonomous slice at a time;
+  `single-pr` → require a recorded `size:exception`; `exception-ok` → continue
+  as `size:exception`.
+- When the resolution yields chained PRs, the orchestrator caches a **chain
+  strategy** and forwards it alongside the delivery strategy:
+  - `stacked-to-main` — each PR merges to `main` in order (fast iteration,
+    independent slices).
+  - `feature-branch-chain` — a tracker branch accumulates the integration; PR #1
+    targets the tracker, each later PR targets the previous PR's branch, and only
+    the tracker merges to `main` (rollback control, coordinated release).
 
 This guard reduces reviewer burnout and keeps delivery safe. It is not optional
 process noise.
