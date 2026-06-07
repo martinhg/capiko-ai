@@ -1,6 +1,7 @@
 # Compiled binaries
 /capiko
 /capiko-ai
+/cmd/capiko-ai/capiko-ai
 *.exe
 *.test
 

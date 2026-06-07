@@ -62,6 +62,19 @@ func TestRenderTriageGate(t *testing.T) {
 	}
 }
 
+func TestRenderSkillResolution(t *testing.T) {
+	out := Render(nil, false)
+	for _, want := range []string{
+		"### Skill resolution",
+		"capiko-ai skill-registry",
+		"Pass paths, not summaries",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("skill-resolution rule missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderStrictTDD(t *testing.T) {
 	out := Render(nil, true)
 	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {
