@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -149,6 +150,66 @@ func TestSetInstructionsInstalled(t *testing.T) {
 	st, _ = s.Load()
 	if st.InstructionsInstalled {
 		t.Error("InstructionsInstalled should be false after SetInstructionsInstalled(false)")
+	}
+}
+
+func TestSetEngram(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := &EngramRecord{
+		Enabled:      true,
+		ArtifactMode: "hybrid",
+		CloudServer:  "https://engram.example.com",
+		Projects:     []string{"repo-core", "repo-back"},
+		Surfaces:     []string{"cli"},
+		Checksum:     "abc123",
+	}
+	if err := s.SetEngram(rec); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Engram == nil {
+		t.Fatal("Engram record should persist")
+	}
+	if !st.Engram.Enabled || st.Engram.ArtifactMode != "hybrid" || st.Engram.CloudServer != "https://engram.example.com" {
+		t.Errorf("engram = %+v", st.Engram)
+	}
+	if len(st.Engram.Projects) != 2 || st.Engram.Projects[0] != "repo-core" {
+		t.Errorf("projects = %v", st.Engram.Projects)
+	}
+
+	// Clearing it (nil) marks engram unmanaged again.
+	if err := s.SetEngram(nil); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.Engram != nil {
+		t.Errorf("engram should be nil after clear, got %+v", st.Engram)
+	}
+}
+
+func TestEngramTokenNeverPersisted(t *testing.T) {
+	// The state stores only the non-secret URL; the token lives in the environment.
+	s := NewStore(t.TempDir())
+	if err := s.SetEngram(&EngramRecord{Enabled: true, CloudServer: "https://engram.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(bytes.ToLower(data), []byte("token")) {
+		t.Errorf("state.json must never contain a token field, got:\n%s", data)
+	}
+}
+
+func TestEngramOmittedWhenUnset(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.Apply("1.0.0", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(data, []byte("engram")) {
+		t.Errorf("state without engram should omit the engram key, got:\n%s", data)
 	}
 }
 

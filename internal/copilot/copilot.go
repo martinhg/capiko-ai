@@ -18,10 +18,11 @@ const customInstructionDirsEnv = "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"
 
 // Host describes a detected and initialized Copilot CLI installation.
 type Host struct {
-	BinPath   string // absolute path to the copilot binary
-	ConfigDir string // ~/.copilot
-	SkillsDir string // ~/.copilot/skills
-	AgentsDir string // ~/.copilot/agents
+	BinPath       string // absolute path to the copilot binary
+	ConfigDir     string // ~/.copilot
+	SkillsDir     string // ~/.copilot/skills
+	AgentsDir     string // ~/.copilot/agents
+	MCPConfigPath string // ~/.copilot/mcp-config.json
 }
 
 // Test seams: swapped in tests so detection does not depend on the real PATH or
@@ -49,10 +50,11 @@ func Detect() (*Host, error) {
 		return nil, nil // installed but never logged in
 	}
 	return &Host{
-		BinPath:   bin,
-		ConfigDir: cfg,
-		SkillsDir: filepath.Join(cfg, "skills"),
-		AgentsDir: filepath.Join(cfg, "agents"),
+		BinPath:       bin,
+		ConfigDir:     cfg,
+		SkillsDir:     filepath.Join(cfg, "skills"),
+		AgentsDir:     filepath.Join(cfg, "agents"),
+		MCPConfigPath: filepath.Join(cfg, "mcp-config.json"),
 	}, nil
 }
 
