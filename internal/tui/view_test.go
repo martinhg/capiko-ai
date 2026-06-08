@@ -71,6 +71,10 @@ func TestViewGolden(t *testing.T) {
 	sddView.models["orchestrator"] = "claude-opus-4.8"
 	sddView.models["spec"] = "gemini-5.4"
 
+	engramView := newEngram(svc).(*engramScreen)
+	engramView.enabled = true
+	engramView.server = "https://engram.example.com"
+
 	uninstallEmpty := newUninstall(svc, testCatalog(), map[string]bool{})
 
 	// A fixed report keeps the detection golden deterministic across machines.
@@ -120,6 +124,7 @@ func TestViewGolden(t *testing.T) {
 		{"install_done", App{state: appScreen, active: installDone}.View()},
 		{"review", App{state: appScreen, active: reviewView}.View()},
 		{"sdd", App{state: appScreen, active: sddView}.View()},
+		{"engram", App{state: appScreen, active: engramView}.View()},
 		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
 		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog(), nil)}.View()},

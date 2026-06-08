@@ -1,0 +1,14 @@
+capiko-ai  ·  Copilot configurator
+
+Configure engram
+
+Cross-session memory for Copilot. Default mode hybrid: specs to git, memory to cloud.
+
+▸ Enabled         on
+  Mode            hybrid
+  Cloud server    https://engram.example.com
+
+  Apply
+  Back
+
+↑/↓ move · ←/→/space change · c edit server · enter select · esc back

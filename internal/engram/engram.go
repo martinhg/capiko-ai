@@ -23,6 +23,13 @@ import (
 // resolved from the environment by the engram process, never stored on disk.
 const tokenRef = "${ENGRAM_CLOUD_TOKEN}"
 
+// DefaultMode is the team default artifact-store mode: canonical specs in git,
+// memory and artifacts replicated through Engram Cloud.
+const DefaultMode = "hybrid"
+
+// Modes are the per-change artifact-store modes, in display order.
+var Modes = []string{"hybrid", "engram", "openspec", "none"}
+
 // run executes an engram subcommand. It is a test seam.
 var run = func(args ...string) error {
 	return exec.Command("engram", args...).Run()

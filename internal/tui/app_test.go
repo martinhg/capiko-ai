@@ -96,7 +96,7 @@ func TestEnterOpensSDD(t *testing.T) {
 
 func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 5 // Upgrade tools
+	a.cursor = 6 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -111,7 +111,7 @@ func TestEnterOpensUpgrade(t *testing.T) {
 
 func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 6 // Upgrade + sync
+	a.cursor = 7 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -137,7 +137,7 @@ func TestEnterOpensBackups(t *testing.T) {
 
 func TestEnterOpensInstructions(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 7 // Install instructions
+	a.cursor = 8 // Install instructions
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*instructionsScreen); !ok {
