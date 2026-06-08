@@ -113,6 +113,44 @@ func TestMergeMCPEntryPreservesOthers(t *testing.T) {
 	}
 }
 
+func TestRemoveMCPEntryPreservesOthers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp-config.json")
+	seed := `{"mcpServers":{"engram":{"command":"engram"},"github":{"command":"gh"}},"experimental":{"x":1}}`
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveMCPEntry(path, "mcpServers", "engram"); err != nil {
+		t.Fatal(err)
+	}
+	root := readJSON(t, path)
+	servers := root["mcpServers"].(map[string]any)
+	if _, ok := servers["engram"]; ok {
+		t.Error("engram entry should be removed")
+	}
+	if _, ok := servers["github"]; !ok {
+		t.Error("other servers must be preserved")
+	}
+	if _, ok := root["experimental"]; !ok {
+		t.Error("unknown top-level keys must be preserved")
+	}
+}
+
+func TestRemoveMCPEntryNoOpWhenAbsent(t *testing.T) {
+	if err := RemoveMCPEntry(filepath.Join(t.TempDir(), "nope.json"), "mcpServers", "engram"); err != nil {
+		t.Errorf("missing file should be a no-op, got %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mcp-config.json")
+	if err := os.WriteFile(path, []byte(`{"mcpServers":{"github":{"command":"gh"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveMCPEntry(path, "mcpServers", "engram"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := readJSON(t, path)["mcpServers"].(map[string]any)["github"]; !ok {
+		t.Error("github must survive a no-op remove")
+	}
+}
+
 func TestCopilotCLIEntryNeverWritesLiteralToken(t *testing.T) {
 	// Even with a real-looking secret in the environment, capiko writes only the
 	// ${ENGRAM_CLOUD_TOKEN} reference, never the value.

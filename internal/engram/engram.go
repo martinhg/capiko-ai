@@ -183,6 +183,47 @@ func CLIEntryChecksum(mcpConfigPath string) (checksum string, ok bool) {
 	return EntryChecksum(entry), true
 }
 
+// RemoveMCPEntry deletes the named server entry under topKey from the JSON config
+// at path, preserving every other top-level key and every other server. A missing
+// file, key, or entry is a no-op. The write is atomic.
+func RemoveMCPEntry(path, topKey, name string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	root := map[string]json.RawMessage{}
+	if len(bytes.TrimSpace(data)) > 0 {
+		if err := json.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+	}
+	raw, ok := root[topKey]
+	if !ok {
+		return nil
+	}
+	servers := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &servers); err != nil {
+		return fmt.Errorf("parse %q in %s: %w", topKey, path, err)
+	}
+	if _, ok := servers[name]; !ok {
+		return nil
+	}
+	delete(servers, name)
+	serversJSON, err := json.Marshal(servers)
+	if err != nil {
+		return err
+	}
+	root[topKey] = serversJSON
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicWrite(path, out)
+}
+
 type projectConfig struct {
 	ProjectName string `json:"project_name"`
 }

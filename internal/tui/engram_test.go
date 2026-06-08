@@ -137,6 +137,31 @@ func TestApplyEngramConfigSkipsVSCodeWhenNotSelected(t *testing.T) {
 	}
 }
 
+func TestApplyEngramConfigDisableRemovesEntry(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, MCPConfigPath: filepath.Join(cfgDir, "mcp-config.json")}
+	store := state.NewStore(t.TempDir())
+	workspace := t.TempDir()
+
+	if err := applyEngramConfig(services{host: host, state: store}, workspace, &state.EngramRecord{Enabled: true, ArtifactMode: "hybrid"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := engram.CLIEntryChecksum(host.MCPConfigPath); !ok {
+		t.Fatal("precondition: entry should exist after enable")
+	}
+
+	if err := applyEngramConfig(services{host: host, state: store}, workspace, &state.EngramRecord{Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := engram.CLIEntryChecksum(host.MCPConfigPath); ok {
+		t.Error("disable should remove the engram MCP entry")
+	}
+	st, _ := store.Load()
+	if st.Engram == nil || st.Engram.Enabled {
+		t.Errorf("state should record disabled engram, got %+v", st.Engram)
+	}
+}
+
 func TestEngramScreenToggleVSCode(t *testing.T) {
 	s := newEngram(services{}).(*engramScreen)
 	s.cursor = 3 // VS Code row
