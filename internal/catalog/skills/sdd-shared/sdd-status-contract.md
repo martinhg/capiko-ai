@@ -41,6 +41,18 @@ from the manual schema below by reading the change's OpenSpec artifacts. Manual
 fallback output MUST stay shape-compatible with the native JSON so consumers parse
 both the same way.
 
+## Artifact Store
+
+In capiko the SDD artifact store is ALWAYS file-based: every phase reads and writes
+the change's artifacts under `openspec/changes/<change>/`, and the native engine
+detects phase state by scanning those files. The engram artifact-store *mode*
+(`hybrid | engram | openspec | none`) only toggles the engram cross-session memory
+backend (the MCP server and optional Cloud sync) — it never moves the SDD artifacts
+out of the OpenSpec store. This differs from prompt-only tools where `engram` mode
+keeps artifacts solely in memory with no files: here the files are mandatory because
+the engine routes off them. Phase skills are OpenSpec-only by design; do not branch
+their artifact reads/writes on the mode.
+
 ## Change Selection
 
 - If a change name is provided, use that exact change after confirming it exists
