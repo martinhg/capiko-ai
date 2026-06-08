@@ -217,6 +217,28 @@ func TestMergeMCPEntryServersKeyPreservesOthers(t *testing.T) {
 	}
 }
 
+func TestVSCodeUserMCPPath(t *testing.T) {
+	origHome, origGOOS := userHomeDir, goos
+	t.Cleanup(func() { userHomeDir, goos = origHome, origGOOS })
+	userHomeDir = func() (string, error) { return "/home/u", nil }
+
+	goos = "darwin"
+	if p, err := VSCodeUserMCPPath(); err != nil || p != filepath.Join("/home/u", "Library", "Application Support", "Code", "User", "mcp.json") {
+		t.Errorf("darwin path = %q (err %v)", p, err)
+	}
+
+	goos = "linux"
+	if p, err := VSCodeUserMCPPath(); err != nil || p != filepath.Join("/home/u", ".config", "Code", "User", "mcp.json") {
+		t.Errorf("linux path = %q (err %v)", p, err)
+	}
+
+	goos = "windows"
+	t.Setenv("APPDATA", "/appdata")
+	if p, err := VSCodeUserMCPPath(); err != nil || p != filepath.Join("/appdata", "Code", "User", "mcp.json") {
+		t.Errorf("windows path = %q (err %v)", p, err)
+	}
+}
+
 func TestEntryChecksumStableAndDistinct(t *testing.T) {
 	local := EntryChecksum(CopilotCLIEntry(""))
 	if local != EntryChecksum(CopilotCLIEntry("")) {

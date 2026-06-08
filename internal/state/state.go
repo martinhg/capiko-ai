@@ -40,6 +40,7 @@ type EngramRecord struct {
 	CloudServer  string   `json:"cloud_server,omitempty"`  // server URL only, never the token
 	Projects     []string `json:"projects,omitempty"`      // enrolled project names
 	Surfaces     []string `json:"surfaces,omitempty"`      // "cli", "vscode"
+	VSCodeScope  string   `json:"vscode_scope,omitempty"`  // "workspace" or "user" when the vscode surface is on
 	Checksum     string   `json:"checksum,omitempty"`      // of the rendered MCP entry, for drift
 }
 
