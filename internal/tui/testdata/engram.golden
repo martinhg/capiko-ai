@@ -7,6 +7,7 @@ Cross-session memory for Copilot. Default mode hybrid: specs to git, memory to c
 ▸ Enabled         on
   Mode            hybrid
   Cloud server    https://engram.example.com
+  VS Code         off
 
   Apply
   Back

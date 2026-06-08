@@ -105,6 +105,50 @@ func TestApplyEngramConfigLocalOnlySkipsCloud(t *testing.T) {
 	}
 }
 
+func TestApplyEngramConfigWritesVSCodeSurface(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, MCPConfigPath: filepath.Join(cfgDir, "mcp-config.json")}
+	store := state.NewStore(t.TempDir())
+	workspace := t.TempDir()
+	rec := &state.EngramRecord{Enabled: true, ArtifactMode: "hybrid", Surfaces: []string{"cli", "vscode"}}
+
+	if err := applyEngramConfig(services{host: host, state: store}, workspace, rec); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := engram.CLIEntryChecksum(host.MCPConfigPath); !ok {
+		t.Error("CLI MCP entry not written")
+	}
+	if _, err := os.Stat(filepath.Join(workspace, ".vscode", "mcp.json")); err != nil {
+		t.Errorf("VS Code mcp.json not written: %v", err)
+	}
+}
+
+func TestApplyEngramConfigSkipsVSCodeWhenNotSelected(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, MCPConfigPath: filepath.Join(cfgDir, "mcp-config.json")}
+	workspace := t.TempDir()
+	rec := &state.EngramRecord{Enabled: true, Surfaces: []string{"cli"}}
+
+	if err := applyEngramConfig(services{host: host, state: state.NewStore(t.TempDir())}, workspace, rec); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, ".vscode", "mcp.json")); err == nil {
+		t.Error("VS Code mcp.json should not be written when the vscode surface is off")
+	}
+}
+
+func TestEngramScreenToggleVSCode(t *testing.T) {
+	s := newEngram(services{}).(*engramScreen)
+	s.cursor = 3 // VS Code row
+	if s.vscode {
+		t.Fatal("vscode should start off")
+	}
+	s.Update(key("space"))
+	if !s.vscode {
+		t.Error("space should toggle the vscode surface on")
+	}
+}
+
 func TestEngramScreenToggleAndCycleMode(t *testing.T) {
 	s := newEngram(services{}).(*engramScreen)
 	if s.enabled {
