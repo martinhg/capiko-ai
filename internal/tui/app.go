@@ -67,6 +67,7 @@ var menuItems = []menuItem{
 	{"Sync configs", "sync", true},
 	{"Manage backups", "backups", true},
 	{"Configure SDD", "sdd", true},
+	{"Configure engram", "engram", true},
 	{"Upgrade tools", "upgrade", true},
 	{"Upgrade + sync", "upgrade-sync", true},
 	{"Install instructions", "instructions", true},
@@ -218,6 +219,8 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newUpgrade(a.svc, a.latest)
 	case it.id == "sdd":
 		a.active = newSDD(a.svc, a.catalog, a.installed, false)
+	case it.id == "engram":
+		a.active = newEngram(a.svc)
 	case it.id == "upgrade-sync":
 		a.active = newUpgradeSync(a.svc, a.catalog, a.latest)
 	case it.id == "instructions":
