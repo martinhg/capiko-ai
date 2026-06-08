@@ -53,6 +53,19 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "doctor":
+			// Read-only ecosystem health check: print pass/warn/fail diagnostics
+			// without launching the TUI. A failed check exits non-zero so the
+			// command is usable in scripts and CI.
+			_, healthy, err := doctorCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+				os.Exit(1)
+			}
+			if !healthy {
+				os.Exit(1)
+			}
+			return
 		}
 	}
 

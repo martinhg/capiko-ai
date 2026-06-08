@@ -53,6 +53,7 @@ client and never runs the infra.
 | Capability | What it does |
 |---|---|
 | **System Detection** | Reports OS/shell, the tools capiko relies on, dependency versions, and which Copilot/engram configs exist. |
+| **Health check** | `capiko-ai doctor` runs a read-only diagnosis — OS support, required prerequisites (copilot/node/npm/pnpm/git/curl), Copilot init, `state.json` validity, skill/agent drift, and the engram backend — printing `pass`/`warn`/`fail` per check with a remedy, or `--json` for tooling. Exits non-zero when any check fails. |
 | **One-click dependency install** | Shows a per-distro install command for each missing dependency (apt/pacman/dnf/winget/brew, detected from `/etc/os-release`). **Install missing** runs the safe, no-sudo ones; sudo commands are shown but never auto-run. |
 | **Backups** | Snapshot-before-mutate: every change copies the affected skills and standalone files to `~/.capiko/backups/<id>/` with a manifest first. Browse, restore, or delete them from **Manage backups**. |
 | **Persistent state** | `~/.capiko/state.json` (atomic writes) records every installed skill with a content checksum, plus the persona, SDD config, scoped-instruction flag, and engram config. |
