@@ -138,6 +138,10 @@ func TestApplyEngramConfigSkipsVSCodeWhenNotSelected(t *testing.T) {
 }
 
 func TestApplyEngramConfigDisableRemovesEntry(t *testing.T) {
+	origUser := vscodeUserMCPath
+	t.Cleanup(func() { vscodeUserMCPath = origUser })
+	vscodeUserMCPath = func() (string, error) { return filepath.Join(t.TempDir(), "user-mcp.json"), nil }
+
 	cfgDir := t.TempDir()
 	host := &copilot.Host{ConfigDir: cfgDir, MCPConfigPath: filepath.Join(cfgDir, "mcp-config.json")}
 	store := state.NewStore(t.TempDir())
@@ -162,15 +166,45 @@ func TestApplyEngramConfigDisableRemovesEntry(t *testing.T) {
 	}
 }
 
-func TestEngramScreenToggleVSCode(t *testing.T) {
+func TestEngramScreenCycleVSCodeScope(t *testing.T) {
 	s := newEngram(services{}).(*engramScreen)
 	s.cursor = 3 // VS Code row
-	if s.vscode {
-		t.Fatal("vscode should start off")
+	if s.vscodeScope != "off" {
+		t.Fatalf("vscode should start off, got %q", s.vscodeScope)
 	}
 	s.Update(key("space"))
-	if !s.vscode {
-		t.Error("space should toggle the vscode surface on")
+	if s.vscodeScope != "workspace" {
+		t.Errorf("space → workspace, got %q", s.vscodeScope)
+	}
+	s.Update(key("space"))
+	if s.vscodeScope != "user" {
+		t.Errorf("space → user, got %q", s.vscodeScope)
+	}
+	s.Update(key("space"))
+	if s.vscodeScope != "off" {
+		t.Errorf("space should wrap → off, got %q", s.vscodeScope)
+	}
+}
+
+func TestApplyEngramConfigWritesVSCodeUserScope(t *testing.T) {
+	origUser := vscodeUserMCPath
+	t.Cleanup(func() { vscodeUserMCPath = origUser })
+	userPath := filepath.Join(t.TempDir(), "user-mcp.json")
+	vscodeUserMCPath = func() (string, error) { return userPath, nil }
+
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, MCPConfigPath: filepath.Join(cfgDir, "mcp-config.json")}
+	workspace := t.TempDir()
+	rec := &state.EngramRecord{Enabled: true, ArtifactMode: "hybrid", Surfaces: []string{"cli", "vscode"}, VSCodeScope: "user"}
+
+	if err := applyEngramConfig(services{host: host, state: state.NewStore(t.TempDir())}, workspace, rec); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(userPath); err != nil {
+		t.Errorf("user-level VS Code mcp.json not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, ".vscode", "mcp.json")); err == nil {
+		t.Error("workspace .vscode/mcp.json should not be written for the user scope")
 	}
 }
 

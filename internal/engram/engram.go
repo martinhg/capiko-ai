@@ -17,7 +17,36 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
+
+// Test seams for OS-specific path resolution.
+var (
+	userHomeDir = os.UserHomeDir
+	goos        = runtime.GOOS
+)
+
+// VSCodeUserMCPPath returns the OS-specific user-level VS Code MCP config path
+// (Code/User/mcp.json), which applies to every VS Code window — unlike the
+// workspace-level .vscode/mcp.json.
+func VSCodeUserMCPPath() (string, error) {
+	home, err := userHomeDir()
+	if err != nil {
+		return "", err
+	}
+	switch goos {
+	case "darwin":
+		return filepath.Join(home, "Library", "Application Support", "Code", "User", "mcp.json"), nil
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			appData = filepath.Join(home, "AppData", "Roaming")
+		}
+		return filepath.Join(appData, "Code", "User", "mcp.json"), nil
+	default: // linux and other unix
+		return filepath.Join(home, ".config", "Code", "User", "mcp.json"), nil
+	}
+}
 
 // tokenRef is the reference capiko writes for the cloud token. The real value is
 // resolved from the environment by the engram process, never stored on disk.

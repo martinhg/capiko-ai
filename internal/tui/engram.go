@@ -14,12 +14,25 @@ import (
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
-// Cloud client seams, swapped in tests so apply never shells out to the real
-// engram binary.
+// Seams swapped in tests so apply never shells out to the real engram binary or
+// touches the real user-level VS Code config.
 var (
-	cloudConfig = engram.CloudConfig
-	cloudEnroll = engram.CloudEnroll
+	cloudConfig      = engram.CloudConfig
+	cloudEnroll      = engram.CloudEnroll
+	vscodeUserMCPath = engram.VSCodeUserMCPPath
 )
+
+// vscodeScopes are the VS Code surface states cycled on the Configure engram
+// screen: off, the workspace .vscode/mcp.json, or the user-level Code/User/mcp.json.
+var vscodeScopes = []string{"off", "workspace", "user"}
+
+// vscodeMCPPath resolves the VS Code mcp.json for the chosen scope.
+func vscodeMCPPath(workspace, scope string) (string, error) {
+	if scope == "user" {
+		return vscodeUserMCPath()
+	}
+	return filepath.Join(workspace, ".vscode", "mcp.json"), nil
+}
 
 // applyEngram writes the engram MCP server entry into Copilot's mcp-config.json
 // (merging, never clobbering other servers), backing the file up only when the
@@ -76,7 +89,10 @@ func applyEngramConfig(svc services, workspace string, rec *state.EngramRecord) 
 		return err
 	}
 	if hasSurface(rec.Surfaces, "vscode") {
-		path := filepath.Join(workspace, ".vscode", "mcp.json")
+		path, err := vscodeMCPPath(workspace, rec.VSCodeScope)
+		if err != nil {
+			return err
+		}
 		if err := engram.MergeMCPEntry(path, "servers", "engram", engram.VSCodeEntry(rec.CloudServer)); err != nil {
 			return err
 		}
@@ -109,6 +125,11 @@ func disableEngram(svc services, workspace string, rec *state.EngramRecord) erro
 	if err := engram.RemoveMCPEntry(filepath.Join(workspace, ".vscode", "mcp.json"), "servers", "engram"); err != nil {
 		return err
 	}
+	if userPath, err := vscodeUserMCPath(); err == nil {
+		if err := engram.RemoveMCPEntry(userPath, "servers", "engram"); err != nil {
+			return err
+		}
+	}
 	rec.Checksum = ""
 	if svc.state != nil {
 		return svc.state.SetEngram(rec)
@@ -132,16 +153,16 @@ func hasSurface(surfaces []string, name string) bool {
 // server. Disabling and applying leaves the recorded config but turns sync
 // re-application off.
 type engramScreen struct {
-	svc     services
-	enabled bool
-	mode    string
-	server  string
-	vscode  bool // also wire the VS Code surface (.vscode/mcp.json)
-	cursor  int  // 0 enabled, 1 mode, 2 server, 3 vscode, 4 Apply, 5 Back
-	editing bool
-	editBuf string
-	state   engramState
-	err     error
+	svc         services
+	enabled     bool
+	mode        string
+	server      string
+	vscodeScope string // off | workspace | user
+	cursor      int    // 0 enabled, 1 mode, 2 server, 3 vscode, 4 Apply, 5 Back
+	editing     bool
+	editBuf     string
+	state       engramState
+	err         error
 }
 
 type engramState int
@@ -156,7 +177,7 @@ const (
 type engramAppliedMsg struct{ err error }
 
 func newEngram(svc services) screen {
-	s := &engramScreen{svc: svc, mode: engram.DefaultMode}
+	s := &engramScreen{svc: svc, mode: engram.DefaultMode, vscodeScope: "off"}
 	if svc.state != nil {
 		if st, err := svc.state.Load(); err == nil && st.Engram != nil {
 			s.enabled = st.Engram.Enabled
@@ -164,7 +185,12 @@ func newEngram(svc services) screen {
 				s.mode = st.Engram.ArtifactMode
 			}
 			s.server = st.Engram.CloudServer
-			s.vscode = hasSurface(st.Engram.Surfaces, "vscode")
+			if hasSurface(st.Engram.Surfaces, "vscode") {
+				s.vscodeScope = st.Engram.VSCodeScope
+				if s.vscodeScope == "" {
+					s.vscodeScope = "workspace"
+				}
+			}
 		}
 	}
 	return s
@@ -227,8 +253,28 @@ func (s *engramScreen) adjust(key string) {
 	case 1:
 		s.cycleMode(key == "left" || key == "h")
 	case 3:
-		s.vscode = !s.vscode
+		s.cycleVSCode(key == "left" || key == "h")
 	}
+}
+
+func (s *engramScreen) cycleVSCode(back bool) {
+	cur := s.vscodeScope
+	if cur == "" {
+		cur = "off"
+	}
+	idx := 0
+	for i, v := range vscodeScopes {
+		if v == cur {
+			idx = i
+			break
+		}
+	}
+	n := len(vscodeScopes)
+	delta := 1
+	if back {
+		delta = -1
+	}
+	s.vscodeScope = vscodeScopes[((idx+delta)%n+n)%n]
 }
 
 func (s *engramScreen) cycleMode(back bool) {
@@ -267,10 +313,12 @@ func (s *engramScreen) handleEdit(msg tea.KeyMsg) (screen, tea.Cmd) {
 func (s *engramScreen) applyCmd() tea.Cmd {
 	svc := s.svc
 	surfaces := []string{"cli"}
-	if s.vscode {
+	scope := ""
+	if s.vscodeScope != "" && s.vscodeScope != "off" {
 		surfaces = append(surfaces, "vscode")
+		scope = s.vscodeScope
 	}
-	rec := &state.EngramRecord{Enabled: s.enabled, ArtifactMode: s.mode, CloudServer: s.server, Surfaces: surfaces}
+	rec := &state.EngramRecord{Enabled: s.enabled, ArtifactMode: s.mode, CloudServer: s.server, Surfaces: surfaces, VSCodeScope: scope}
 	return func() tea.Msg {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -313,8 +361,8 @@ func (s *engramScreen) View() string {
 		server = dimSty.Render("(local only — none)")
 	}
 	vscodeVal := dimSty.Render("off")
-	if s.vscode {
-		vscodeVal = okSty.Render("on")
+	if s.vscodeScope != "" && s.vscodeScope != "off" {
+		vscodeVal = okSty.Render(s.vscodeScope)
 	}
 	rows := []struct{ label, val string }{
 		{"Enabled", enabledVal},

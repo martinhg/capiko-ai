@@ -74,6 +74,7 @@ func TestViewGolden(t *testing.T) {
 	engramView := newEngram(svc).(*engramScreen)
 	engramView.enabled = true
 	engramView.server = "https://engram.example.com"
+	engramView.vscodeScope = "workspace"
 
 	uninstallEmpty := newUninstall(svc, testCatalog(), map[string]bool{})
 
