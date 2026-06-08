@@ -66,6 +66,12 @@ Copilot CLI**, so some gentle-ai features are intentionally out of scope.
   small changes, delegate an exploration on the 4-file rule, delegate a writer for
   2+ non-trivial files, full SDD only for substantial work, and a fresh review
   before a non-trivial PR. Keeps the token cost matched to the change size.
+- Engram backend + Engram Cloud — capiko detects engram, wires its MCP server into
+  Copilot CLI and VS Code (merging, not clobbering), writes per-repo
+  `.engram/config.json`, configures the cloud client, and ships a hardened server
+  scaffold + setup doc for devops. `hybrid` is the team default; the token never
+  hits disk. Tracked in `state.json`, re-applied on sync, drift-detected. See
+  [`engram-cloud-setup.md`](engram-cloud-setup.md).
 
 ## Intentionally out of scope (Copilot-only)
 
@@ -82,13 +88,26 @@ Ordered roughly by value for a Copilot-focused tool:
 
 - **Model configuration** — gentle-ai has per-agent model pickers. Copilot CLI
   model selection could be surfaced here if/when it exposes one.
-- **More SDD machinery (TODO).** The OpenSpec file store is in place (config /
-  changes / specs / archive + merge-on-archive). The pieces still missing vs
-  gentle-ai, to evolve the SDD from convention-driven to machine-coordinated:
-  - **engram backend + `hybrid` mode** — a cross-session memory DB (engram) as an
-    alternative/companion artifact store, so the cycle's state survives across
-    sessions and machines without relying on the repo's files. `hybrid` = files +
-    engram together. gentle-ai selects `engram | openspec | hybrid | none` per change.
+- ~~**More SDD machinery**~~ — **Done.** Every piece that evolved capiko's SDD
+  from convention-driven to machine-coordinated has shipped; the history is kept
+  below for reference:
+  - ~~**engram backend + `hybrid` mode**~~ — **Done.** capiko now configures
+    [engram](https://github.com/Gentleman-Programming/engram) as a cross-session
+    memory backend for Copilot, with `hybrid` the team default. System Detection
+    reports engram; "Configure engram" enables it, picks the artifact-store mode
+    (`engram | openspec | hybrid | none`), sets the optional Engram Cloud URL, and
+    wires the MCP server into Copilot CLI (`~/.copilot/mcp-config.json`, key
+    `mcpServers`) and VS Code (`.vscode/mcp.json`, key `servers`) — merging without
+    clobbering other servers. A per-repo `.engram/config.json` scopes memories to
+    the right project in multi-repo workspaces; the cloud client is pointed and the
+    project enrolled; the token is never written to disk (only the
+    `${ENGRAM_CLOUD_TOKEN}` reference). The config is tracked in `state.json`,
+    re-applied on sync, and surfaced as drift. The SDD orchestrator block documents
+    the two layers and the four modes; the native `sdd-status` engine stays
+    openspec-only (in engram/hybrid mode the agent reads engram directly). capiko
+    ships a hardened server scaffold + `docs/engram-cloud-setup.md` for the team's
+    devops; it configures the client and never runs infra. Engram Cloud syncs engram
+    memories; OpenSpec files travel via git. **This closes the parity backlog.**
   - ~~**`_shared` status contracts**~~ — **Done.** Shipped as the `sdd-shared`
     multi-file skill bundle (`sdd-status-contract.md` + `sdd-phase-common.md`),
     enabled by the multi-file skill installer. A structured status object
