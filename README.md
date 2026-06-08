@@ -153,7 +153,7 @@ the whole cycle on your real code. See [docs/usage.md](docs/usage.md) for the fu
 
 | Package | Responsibility |
 |---------|----------------|
-| `cmd/capiko-ai/` | Binary entry point; the `version`, `sdd-status`, `sdd-continue`, and `skill-registry` subcommands. |
+| `cmd/capiko-ai/` | Binary entry point; the `version`, `sdd-status`, `sdd-continue`, `skill-registry`, and `doctor` subcommands. |
 | `internal/tui/` | Bubbletea screens, the menu router, and every interactive flow. |
 | `internal/skill` · `internal/catalog` | The skill domain, and the embedded catalog of skills and agents. |
 | `internal/copilot` | Adapter to the Copilot CLI host (detect, list, uninstall). |
