@@ -163,3 +163,17 @@ func TestLoadCatalogBundlesExtraFiles(t *testing.T) {
 		t.Errorf("single-file skill should have no Extra, got %+v", bundles["plain"].Extra)
 	}
 }
+
+func TestParseHandlesCRLFLineEndings(t *testing.T) {
+	// Git for Windows with core.autocrlf=true checks SKILL.md out with \r\n.
+	// The parser must read the same name/description as it would with \n, and
+	// must not let a trailing \r leak into the description value.
+	content := "---\r\nname: ignored\r\ndescription: A CRLF skill\r\n---\r\n\r\n# Body\r\n"
+	sk, err := Parse("crlf-skill", content)
+	if err != nil {
+		t.Fatalf("Parse with CRLF returned error: %v", err)
+	}
+	if sk.Description != "A CRLF skill" {
+		t.Errorf("description = %q, want %q (a stray \\r likely leaked)", sk.Description, "A CRLF skill")
+	}
+}
