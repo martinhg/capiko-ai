@@ -66,6 +66,9 @@ func applyEngramConfig(svc services, workspace string, rec *state.EngramRecord) 
 	if len(rec.Surfaces) == 0 {
 		rec.Surfaces = []string{"cli"}
 	}
+	if !rec.Enabled {
+		return disableEngram(svc, workspace, rec)
+	}
 	if err := engram.WriteProjectConfig(workspace, project); err != nil {
 		return err
 	}
@@ -85,6 +88,30 @@ func applyEngramConfig(svc services, workspace string, rec *state.EngramRecord) 
 		if err := cloudEnroll(project); err != nil {
 			return fmt.Errorf("engram cloud enroll: %w", err)
 		}
+	}
+	return nil
+}
+
+// disableEngram unwires engram: it removes the MCP entry from both surfaces
+// (backing up the Copilot CLI config first) and records the disabled state, so
+// toggling engram off and applying fully removes the wiring.
+func disableEngram(svc services, workspace string, rec *state.EngramRecord) error {
+	if svc.backup != nil {
+		if _, err := os.Stat(svc.host.MCPConfigPath); err == nil {
+			if _, err := svc.backup.CreateFiles("engram", Version, []string{svc.host.MCPConfigPath}); err != nil {
+				return fmt.Errorf("backup failed, aborting: %w", err)
+			}
+		}
+	}
+	if err := engram.RemoveMCPEntry(svc.host.MCPConfigPath, "mcpServers", "engram"); err != nil {
+		return err
+	}
+	if err := engram.RemoveMCPEntry(filepath.Join(workspace, ".vscode", "mcp.json"), "servers", "engram"); err != nil {
+		return err
+	}
+	rec.Checksum = ""
+	if svc.state != nil {
+		return svc.state.SetEngram(rec)
 	}
 	return nil
 }
