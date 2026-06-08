@@ -92,6 +92,45 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+func TestEngramDetectedAsOptionalDependency(t *testing.T) {
+	origLook, origRun, origHome := lookPath, runVersion, userHomeDir
+	t.Cleanup(func() { lookPath, runVersion, userHomeDir = origLook, origRun, origHome })
+
+	lookPath = func(string) (string, error) { return "", errors.New("not found") }
+	userHomeDir = func() (string, error) { return t.TempDir(), nil }
+
+	get := func() Dependency {
+		t.Helper()
+		for _, d := range detectDependencies(runtime.GOOS) {
+			if d.Name == "engram" {
+				return d
+			}
+		}
+		t.Fatal("engram should be a detected dependency")
+		return Dependency{}
+	}
+
+	// Present with a version, reported as optional (capiko works without engram).
+	runVersion = func(name string, _ ...string) (string, error) {
+		if name == "engram" {
+			return "engram version 1.15.3\n", nil
+		}
+		return "", errors.New("not found")
+	}
+	if d := get(); !d.Found || d.Version != "1.15.3" {
+		t.Errorf("engram = %+v, want found 1.15.3", d)
+	}
+	if d := get(); d.Required {
+		t.Errorf("engram should be optional, got %+v", d)
+	}
+
+	// Missing -> carries an install hint that capiko does not auto-run.
+	runVersion = func(string, ...string) (string, error) { return "", errors.New("not found") }
+	if d := get(); d.Found || d.Install == "" || d.Auto {
+		t.Errorf("missing engram should carry a non-auto install hint, got %+v", d)
+	}
+}
+
 func TestCustomInstructionDirsInConfigs(t *testing.T) {
 	origHome := userHomeDir
 	t.Cleanup(func() { userHomeDir = origHome })

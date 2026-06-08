@@ -114,7 +114,8 @@ type depSpec struct {
 
 // dependencySpecs is the capiko prerequisite list: the Copilot CLI it configures,
 // the npm toolchain that installs Copilot, and git/curl. brew and go are optional
-// install paths.
+// install paths; engram is the optional cross-session memory backend capiko can wire
+// into Copilot (capiko works without it).
 func dependencySpecs(goos string) []depSpec {
 	specs := []depSpec{
 		{"copilot", true, []string{"--version"}},
@@ -127,7 +128,8 @@ func dependencySpecs(goos string) []depSpec {
 	if goos == "darwin" {
 		specs = append(specs, depSpec{"brew", false, []string{"--version"}})
 	}
-	return append(specs, depSpec{"go", false, []string{"version"}})
+	specs = append(specs, depSpec{"go", false, []string{"version"}})
+	return append(specs, depSpec{"engram", false, []string{"--version"}})
 }
 
 func detectDependencies(goos string) []Dependency {
@@ -249,6 +251,8 @@ func installInfo(name, pm string) (cmd string, auto bool) {
 		return brewScript, false // bootstrap prompts for sudo
 	case "npm":
 		return installInfo("node", pm) // npm ships with node
+	case "engram":
+		return manualHint("engram"), false // installed from its own release channel
 	}
 
 	switch pm {
@@ -311,6 +315,8 @@ func manualHint(name string) string {
 		return "install node from https://nodejs.org/"
 	case "go":
 		return "install go from https://go.dev/dl/"
+	case "engram":
+		return "install engram from https://github.com/Gentleman-Programming/engram"
 	default:
 		return "see the tool's website to install " + name
 	}
