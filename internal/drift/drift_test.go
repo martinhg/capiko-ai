@@ -1,13 +1,42 @@
 package drift
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
+	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
+
+func TestStaleEngram(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp-config.json")
+
+	if StaleEngram(path, &state.State{}) {
+		t.Error("unmanaged engram should not be stale")
+	}
+	if StaleEngram(path, &state.State{Engram: &state.EngramRecord{Enabled: false}}) {
+		t.Error("disabled engram should not be stale")
+	}
+
+	rec := &state.EngramRecord{Enabled: true, Checksum: engram.EntryChecksum(engram.CopilotCLIEntry(""))}
+	if !StaleEngram(path, &state.State{Engram: rec}) {
+		t.Error("enabled engram with no on-disk entry should be stale")
+	}
+
+	if err := engram.MergeMCPEntry(path, "mcpServers", "engram", engram.CopilotCLIEntry("")); err != nil {
+		t.Fatal(err)
+	}
+	if StaleEngram(path, &state.State{Engram: rec}) {
+		t.Error("a matching on-disk entry should not be stale")
+	}
+
+	if !StaleEngram(path, &state.State{Engram: &state.EngramRecord{Enabled: true, Checksum: "different"}}) {
+		t.Error("a diverged recorded checksum should be stale")
+	}
+}
 
 func catalog() []skill.Skill {
 	return []skill.Skill{

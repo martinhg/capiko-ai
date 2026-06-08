@@ -84,6 +84,44 @@ func TestCopilotCLIEntryLocalOnlyHasNoCloudEnv(t *testing.T) {
 	}
 }
 
+func TestEntryChecksumStableAndDistinct(t *testing.T) {
+	local := EntryChecksum(CopilotCLIEntry(""))
+	if local != EntryChecksum(CopilotCLIEntry("")) {
+		t.Error("checksum should be deterministic")
+	}
+	if local == EntryChecksum(CopilotCLIEntry("https://engram.example.com")) {
+		t.Error("cloud and local entries should checksum differently")
+	}
+}
+
+func TestCLIEntryChecksumMatchesWritten(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp-config.json")
+	entry := CopilotCLIEntry("https://engram.example.com")
+	if err := MergeMCPEntry(path, "mcpServers", "engram", entry); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := CLIEntryChecksum(path)
+	if !ok {
+		t.Fatal("should read the engram entry back")
+	}
+	if got != EntryChecksum(entry) {
+		t.Errorf("on-disk checksum %q != expected %q", got, EntryChecksum(entry))
+	}
+}
+
+func TestCLIEntryChecksumAbsent(t *testing.T) {
+	if _, ok := CLIEntryChecksum(filepath.Join(t.TempDir(), "nope.json")); ok {
+		t.Error("missing file should report not ok")
+	}
+	path := filepath.Join(t.TempDir(), "mcp-config.json")
+	if err := os.WriteFile(path, []byte(`{"mcpServers":{"github":{"command":"gh"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := CLIEntryChecksum(path); ok {
+		t.Error("a config without an engram entry should report not ok")
+	}
+}
+
 func TestWriteProjectConfig(t *testing.T) {
 	root := t.TempDir()
 	if err := WriteProjectConfig(root, "repo-core"); err != nil {

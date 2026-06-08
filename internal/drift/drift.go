@@ -6,9 +6,25 @@ package drift
 
 import (
 	"github.com/martinhg/capiko-ai/internal/agent"
+	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
+
+// StaleEngram reports whether the managed engram MCP entry has fallen behind what
+// capiko would write: missing from disk, or diverged from the recorded checksum
+// (e.g. after an upgrade changed the entry format, or a manual edit). It returns
+// false when engram is unmanaged or disabled.
+func StaleEngram(mcpConfigPath string, st *state.State) bool {
+	if st == nil || st.Engram == nil || !st.Engram.Enabled {
+		return false
+	}
+	cur, ok := engram.CLIEntryChecksum(mcpConfigPath)
+	if !ok {
+		return true
+	}
+	return cur != st.Engram.Checksum
+}
 
 // StaleAgents returns the names of catalog agents that are either missing from
 // state (never installed) or whose recorded checksum no longer matches the

@@ -9,6 +9,8 @@ package engram
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -79,6 +81,46 @@ func MergeMCPEntry(path, topKey, name string, entry any) error {
 		return err
 	}
 	return atomicWrite(path, out)
+}
+
+// EntryChecksum returns a canonical SHA-256 of an MCP entry. json.Marshal sorts
+// map keys, so the same logical entry always yields the same checksum regardless
+// of how it was built.
+func EntryChecksum(entry any) string {
+	b, _ := json.Marshal(entry)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// CLIEntryChecksum reads the engram entry from a Copilot CLI mcp-config.json and
+// returns its canonical checksum. ok is false when the file, the mcpServers key,
+// or the engram entry is absent or unreadable.
+func CLIEntryChecksum(mcpConfigPath string) (checksum string, ok bool) {
+	data, err := os.ReadFile(mcpConfigPath)
+	if err != nil {
+		return "", false
+	}
+	var root map[string]json.RawMessage
+	if json.Unmarshal(data, &root) != nil {
+		return "", false
+	}
+	raw, ok := root["mcpServers"]
+	if !ok {
+		return "", false
+	}
+	var servers map[string]json.RawMessage
+	if json.Unmarshal(raw, &servers) != nil {
+		return "", false
+	}
+	entryRaw, ok := servers["engram"]
+	if !ok {
+		return "", false
+	}
+	var entry any
+	if json.Unmarshal(entryRaw, &entry) != nil {
+		return "", false
+	}
+	return EntryChecksum(entry), true
 }
 
 type projectConfig struct {

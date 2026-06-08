@@ -80,6 +80,13 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying scoped instructions: %w", err)
 				}
 			}
+			// Re-apply the engram MCP wiring so it tracks the catalog, only once the
+			// user has enabled engram — mirroring the persona/SDD/instructions opt-in.
+			if st.Engram != nil && st.Engram.Enabled {
+				if err := applyEngram(host, store, bkp, st.Engram); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying engram: %w", err)
+				}
+			}
 		}
 	}
 	return len(recorded) + len(agentRecorded), nil
