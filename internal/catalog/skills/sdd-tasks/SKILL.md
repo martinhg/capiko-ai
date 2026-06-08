@@ -66,6 +66,35 @@ orchestrator resolves the split with the cached delivery strategy and, when it
 chains, a chain strategy (`stacked-to-main` or `feature-branch-chain`) — see
 `sdd-phase-common.md`, section F.
 
+## Task quality
+
+Each task MUST be:
+
+| Criterion | Good | Bad |
+|-----------|------|-----|
+| **Specific** | "Create `internal/auth/middleware.go` with JWT validation" | "Add auth" |
+| **Actionable** | "Add `ValidateToken()` to `AuthService`" | "Handle tokens" |
+| **Verifiable** | "Test: `POST /login` without a token returns 401" | "Make sure it works" |
+| **Small** | One file or one logical unit, doable in one session | "Implement the feature" |
+
+Reference concrete file paths in every task. Never write vague tasks like
+"implement feature" or "add tests". Use hierarchical numbering (1.1, 1.2, 2.1). If
+a task feels too big to finish in one session, split it. When strict TDD is
+active, split each behavior into RED (write failing test) → GREEN (make it pass) →
+REFACTOR tasks, and point testing tasks at specific scenarios from `spec.md`.
+
+## Phase organization
+
+Order phases so each depends only on earlier ones:
+
+1. **Foundation** — new types, interfaces, config; what other tasks build on.
+2. **Core** — the main logic and business rules.
+3. **Integration** — wiring, routes, UI; make the pieces work together.
+4. **Testing** — unit / golden / integration tests against the spec scenarios.
+5. **Cleanup** (if needed) — docs, remove dead code, polish.
+
+Keep the artifact tight: each task is 1–2 lines in checklist form, not prose.
+
 ## Language
 
 SDD artifacts are written in English regardless of the conversation language,

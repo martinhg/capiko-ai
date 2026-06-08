@@ -47,6 +47,44 @@ not HOW (that is the design phase).
 Write `openspec/changes/<change-name>/spec.md`: the numbered requirements with
 scenarios. A reader should be able to verify the implementation against it.
 
+## Requirement quality
+
+- Use RFC 2119 keywords for strength: **MUST / SHALL** (absolute requirement),
+  **MUST NOT / SHALL NOT** (absolute prohibition), **SHOULD** (recommended,
+  exceptions need justification), **MAY** (optional).
+- Every requirement MUST have at least one scenario in given / when / then form.
+- Cover the happy path AND edge cases AND error states — not just success.
+- Keep every scenario TESTABLE: a reader should be able to write an automated test
+  straight from it.
+- Describe WHAT, never HOW — no implementation detail leaks into a spec.
+
+## Delta structure
+
+Group requirements under the section that tells archive how to merge them:
+
+- **ADDED** — new behavior. Write the full requirement and its scenarios.
+- **MODIFIED** — changed behavior. See the guard below.
+- **REMOVED** — include a Reason, plus a Migration line when consumers, persisted
+  behavior, docs, or tests are affected.
+- **RENAMED** — state both old and new names; add Migration for references, tests,
+  and docs.
+
+For a brand-new domain with no canonical spec, write a FULL spec (Purpose +
+Requirements), not a delta.
+
+### MODIFIED requirements — copy the FULL block (CRITICAL)
+
+When you modify an existing requirement, do NOT write only the changed scenario:
+
+1. Find the requirement in `openspec/specs/<domain>/spec.md`.
+2. Copy the ENTIRE block — `### Requirement:` through ALL of its scenarios.
+3. Paste it under `## MODIFIED Requirements` and edit the copy.
+4. Add `(Previously: <one-line summary of what changed>)` under the requirement.
+
+Archive REPLACES the requirement in the canonical spec with your MODIFIED block, so
+a partial block silently DROPS every scenario you left out. If you are adding
+behavior without changing what exists, use ADDED instead.
+
 ## Language
 
 SDD artifacts are written in English regardless of the conversation language,
