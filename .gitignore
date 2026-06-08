@@ -20,6 +20,9 @@ go.work.sum
 # Local tooling state
 .atl/
 
+# Local notes / backlog (never committed)
+*.local.md
+
 # OS / editor noise
 .DS_Store
 .idea/
