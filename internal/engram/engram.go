@@ -62,10 +62,19 @@ func WriteServerScaffold(dir string) (string, error) {
 	return path, nil
 }
 
+// cloudEnv is the engram MCP process environment for cloud replication: the
+// server URL, autosync on, and the token as a reference (never the literal value).
+func cloudEnv(server string) map[string]string {
+	return map[string]string{
+		"ENGRAM_CLOUD_SERVER":   server,
+		"ENGRAM_CLOUD_AUTOSYNC": "1",
+		"ENGRAM_CLOUD_TOKEN":    tokenRef,
+	}
+}
+
 // CopilotCLIEntry builds the engram MCP server entry for Copilot CLI's
 // mcp-config.json (top-level key "mcpServers"). When cloudServer is non-empty the
-// entry carries the cloud env: the server URL, autosync on, and the token as a
-// reference (never the literal secret).
+// entry carries the cloud env.
 func CopilotCLIEntry(cloudServer string) map[string]any {
 	entry := map[string]any{
 		"type":    "local",
@@ -74,11 +83,21 @@ func CopilotCLIEntry(cloudServer string) map[string]any {
 		"tools":   []string{"*"},
 	}
 	if cloudServer != "" {
-		entry["env"] = map[string]string{
-			"ENGRAM_CLOUD_SERVER":   cloudServer,
-			"ENGRAM_CLOUD_AUTOSYNC": "1",
-			"ENGRAM_CLOUD_TOKEN":    tokenRef,
-		}
+		entry["env"] = cloudEnv(cloudServer)
+	}
+	return entry
+}
+
+// VSCodeEntry builds the engram MCP server entry for VS Code's mcp.json
+// (top-level key "servers"), which uses a leaner shape than Copilot CLI — no
+// "type"/"tools" fields. When cloudServer is non-empty it carries the cloud env.
+func VSCodeEntry(cloudServer string) map[string]any {
+	entry := map[string]any{
+		"command": "engram",
+		"args":    []string{"mcp"},
+	}
+	if cloudServer != "" {
+		entry["env"] = cloudEnv(cloudServer)
 	}
 	return entry
 }

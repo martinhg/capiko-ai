@@ -72,6 +72,12 @@ func applyEngramConfig(svc services, workspace string, rec *state.EngramRecord) 
 	if err := applyEngram(svc.host, svc.state, svc.backup, rec); err != nil {
 		return err
 	}
+	if hasSurface(rec.Surfaces, "vscode") {
+		path := filepath.Join(workspace, ".vscode", "mcp.json")
+		if err := engram.MergeMCPEntry(path, "servers", "engram", engram.VSCodeEntry(rec.CloudServer)); err != nil {
+			return err
+		}
+	}
 	if rec.CloudServer != "" {
 		if err := cloudConfig(rec.CloudServer); err != nil {
 			return fmt.Errorf("engram cloud config: %w", err)
@@ -81,6 +87,16 @@ func applyEngramConfig(svc services, workspace string, rec *state.EngramRecord) 
 		}
 	}
 	return nil
+}
+
+// hasSurface reports whether surfaces contains the named surface.
+func hasSurface(surfaces []string, name string) bool {
+	for _, s := range surfaces {
+		if s == name {
+			return true
+		}
+	}
+	return false
 }
 
 // engramScreen enables and configures the engram backend: a toggle, the
@@ -93,7 +109,8 @@ type engramScreen struct {
 	enabled bool
 	mode    string
 	server  string
-	cursor  int // 0 enabled, 1 mode, 2 server, 3 Apply, 4 Back
+	vscode  bool // also wire the VS Code surface (.vscode/mcp.json)
+	cursor  int  // 0 enabled, 1 mode, 2 server, 3 vscode, 4 Apply, 5 Back
 	editing bool
 	editBuf string
 	state   engramState
@@ -120,12 +137,13 @@ func newEngram(svc services) screen {
 				s.mode = st.Engram.ArtifactMode
 			}
 			s.server = st.Engram.CloudServer
+			s.vscode = hasSurface(st.Engram.Surfaces, "vscode")
 		}
 	}
 	return s
 }
 
-const engramRows = 3 // enabled, mode, server
+const engramRows = 4 // enabled, mode, server, vscode
 
 func (s *engramScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -181,6 +199,8 @@ func (s *engramScreen) adjust(key string) {
 		s.enabled = !s.enabled
 	case 1:
 		s.cycleMode(key == "left" || key == "h")
+	case 3:
+		s.vscode = !s.vscode
 	}
 }
 
@@ -219,7 +239,11 @@ func (s *engramScreen) handleEdit(msg tea.KeyMsg) (screen, tea.Cmd) {
 
 func (s *engramScreen) applyCmd() tea.Cmd {
 	svc := s.svc
-	rec := &state.EngramRecord{Enabled: s.enabled, ArtifactMode: s.mode, CloudServer: s.server}
+	surfaces := []string{"cli"}
+	if s.vscode {
+		surfaces = append(surfaces, "vscode")
+	}
+	rec := &state.EngramRecord{Enabled: s.enabled, ArtifactMode: s.mode, CloudServer: s.server, Surfaces: surfaces}
 	return func() tea.Msg {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -261,10 +285,15 @@ func (s *engramScreen) View() string {
 	} else if server == "" {
 		server = dimSty.Render("(local only — none)")
 	}
+	vscodeVal := dimSty.Render("off")
+	if s.vscode {
+		vscodeVal = okSty.Render("on")
+	}
 	rows := []struct{ label, val string }{
 		{"Enabled", enabledVal},
 		{"Mode", dimSty.Render(s.mode)},
 		{"Cloud server", server},
+		{"VS Code", vscodeVal},
 	}
 	for i, r := range rows {
 		marker, nameSty := "  ", textSty

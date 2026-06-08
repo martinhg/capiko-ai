@@ -139,6 +139,46 @@ func TestCopilotCLIEntryLocalOnlyHasNoCloudEnv(t *testing.T) {
 	}
 }
 
+func TestVSCodeEntryLeanShapeAndTokenReference(t *testing.T) {
+	local := VSCodeEntry("")
+	if local["command"] != "engram" {
+		t.Errorf("command = %v, want engram", local["command"])
+	}
+	if _, ok := local["type"]; ok {
+		t.Error("VS Code entry should not carry the Copilot-CLI 'type' field")
+	}
+	if _, ok := local["env"]; ok {
+		t.Error("local-only VS Code entry should not carry cloud env")
+	}
+
+	t.Setenv("ENGRAM_CLOUD_TOKEN", "super-secret-value-123")
+	cloud := VSCodeEntry("https://engram.example.com")
+	env := cloud["env"].(map[string]string)
+	if env["ENGRAM_CLOUD_TOKEN"] != "${ENGRAM_CLOUD_TOKEN}" {
+		t.Errorf("token = %q, want the ${ENGRAM_CLOUD_TOKEN} reference", env["ENGRAM_CLOUD_TOKEN"])
+	}
+	if blob, _ := json.Marshal(cloud); bytes.Contains(blob, []byte("super-secret-value-123")) {
+		t.Fatal("the literal token leaked into the VS Code entry")
+	}
+}
+
+func TestMergeMCPEntryServersKeyPreservesOthers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	if err := os.WriteFile(path, []byte(`{"servers":{"other":{"command":"x"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := MergeMCPEntry(path, "servers", "engram", VSCodeEntry("")); err != nil {
+		t.Fatal(err)
+	}
+	servers := readJSON(t, path)["servers"].(map[string]any)
+	if _, ok := servers["other"]; !ok {
+		t.Error("an existing server under the servers key must be preserved")
+	}
+	if _, ok := servers["engram"]; !ok {
+		t.Error("engram must be added under the servers key")
+	}
+}
+
 func TestEntryChecksumStableAndDistinct(t *testing.T) {
 	local := EntryChecksum(CopilotCLIEntry(""))
 	if local != EntryChecksum(CopilotCLIEntry("")) {
