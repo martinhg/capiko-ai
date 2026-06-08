@@ -18,8 +18,10 @@ How to drive capiko-ai. For install/build, see the [README](../README.md).
 4. **Pick skills** → **Review and Confirm** → apply. Review shows what will install
    and remove before anything is written.
 
-You can also reach Persona, SDD config, and instructions from their own menu items
-to change them later.
+**Configure SDD** and **Install instructions** are also their own menu items, so you
+can change them later without re-running the whole flow. The persona is set inside
+**Start installation**; re-run it (or **Sync configs**, which re-applies the active
+persona) to change it.
 
 ## The other menu items
 
@@ -29,6 +31,7 @@ to change them later.
 | Sync configs | Overwrite all installed skills to match the catalog; re-applies the persona and SDD blocks. |
 | Manage backups | Browse / restore / delete the snapshots taken before each change. |
 | Configure SDD | Edit the per-phase model table and strict-TDD toggle. |
+| Configure engram | Enable cross-session memory: pick the artifact-store mode, set the cloud URL, and wire the engram MCP server into Copilot CLI and VS Code. |
 | Install instructions | Write the curated scoped `*.instructions.md` into `~/.copilot/instructions/`. |
 | Upgrade tools | Self-update capiko to the latest release, then restart. |
 | Upgrade + sync | Upgrade, restart, and sync skills with the new catalog. |

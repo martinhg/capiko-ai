@@ -37,8 +37,9 @@ Persona and the SDD orchestrator are **marker-bound blocks** in
 - `Version` (in `internal/tui`) is set by goreleaser ldflags; falls back to
   `debug.ReadBuildInfo()` then a base version, so it never shows a pseudo-version.
 - `internal/release` checks GitHub releases and self-updates (brew/go/binary),
-  then re-execs. Copilot's Task tool caps sub-agents to the session model — see
-  `docs/gentle-ai-parity.md` for the SDD model-assignment rationale.
+  then re-execs. (Note for the SDD model table: Copilot's Task tool caps sub-agents
+  to the session model, so the per-phase assignments are guidance the orchestrator
+  honors, not a hard runtime switch.)
 
 ## Testing
 

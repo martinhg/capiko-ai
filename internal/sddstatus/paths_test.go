@@ -71,9 +71,9 @@ func TestResolveArtifactPaths(t *testing.T) {
 
 func TestResolveArtifactPathsSpecIsDeltaFileOnly(t *testing.T) {
 	// capiko's per-change spec delta is a single spec.md. A specs/ directory under
-	// the change is NOT capiko's layout (that is gentle-ai's per-capability deltas,
-	// and the top-level openspec/specs/ holds the canonical specs) — it must be
-	// ignored, not mistaken for the change's spec.
+	// the change is NOT capiko's layout (a per-capability delta layout; the
+	// top-level openspec/specs/ holds the canonical specs) — it must be ignored,
+	// not mistaken for the change's spec.
 	cwd := t.TempDir()
 	root := filepath.Join(cwd, "openspec", "changes", "add-auth")
 	writeFile(t, filepath.Join(root, "spec.md"))

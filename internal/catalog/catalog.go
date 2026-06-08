@@ -1,7 +1,7 @@
 // Package catalog provides the built-in capiko skill and agent catalogs,
-// embedded in the binary at build time (the same approach gentle-ai uses).
-// Edit the SKILL.md files under skills/ or the .agent.md files under agents/
-// and rebuild to change what the configurator offers.
+// embedded in the binary at build time. Edit the SKILL.md files under skills/
+// or the .agent.md files under agents/ and rebuild to change what the
+// configurator offers.
 package catalog
 
 import (
