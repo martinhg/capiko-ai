@@ -55,6 +55,9 @@ func TestDetect(t *testing.T) {
 		if want := filepath.Join(home, ".copilot", "skills"); h.SkillsDir != want {
 			t.Errorf("SkillsDir = %q, want %q", h.SkillsDir, want)
 		}
+		if want := filepath.Join(home, ".copilot", "mcp-config.json"); h.MCPConfigPath != want {
+			t.Errorf("MCPConfigPath = %q, want %q", h.MCPConfigPath, want)
+		}
 	})
 }
 

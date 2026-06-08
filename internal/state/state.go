@@ -26,6 +26,21 @@ type State struct {
 	// InstructionsInstalled is true once the user installs the curated scoped
 	// instruction files; sync re-applies them only when managed, mirroring persona/SDD.
 	InstructionsInstalled bool `json:"instructions_installed,omitempty"`
+	// Engram records the managed engram backend configuration; nil = unmanaged.
+	// Sync re-applies the engram MCP wiring only when it is set, mirroring persona/SDD.
+	Engram *EngramRecord `json:"engram,omitempty"`
+}
+
+// EngramRecord is the managed engram backend configuration. It never stores the
+// cloud token (a secret) — only the non-secret server URL; the token is resolved
+// from the environment at runtime via the ${ENGRAM_CLOUD_TOKEN} reference.
+type EngramRecord struct {
+	Enabled      bool     `json:"enabled"`
+	ArtifactMode string   `json:"artifact_mode,omitempty"` // engram|openspec|hybrid|none
+	CloudServer  string   `json:"cloud_server,omitempty"`  // server URL only, never the token
+	Projects     []string `json:"projects,omitempty"`      // enrolled project names
+	Surfaces     []string `json:"surfaces,omitempty"`      // "cli", "vscode"
+	Checksum     string   `json:"checksum,omitempty"`      // of the rendered MCP entry, for drift
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -181,6 +196,18 @@ func (s *Store) SetStrictTDD(on bool) error {
 		return err
 	}
 	st.StrictTDD = on
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetEngram records the managed engram backend configuration (nil means
+// unmanaged). It never receives a token: the record carries only the server URL.
+func (s *Store) SetEngram(rec *EngramRecord) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.Engram = rec
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
