@@ -4,9 +4,8 @@ capiko configures **GitHub Copilot** to use [Engram](https://github.com/Gentlema
 as a shared, cross-session memory layer for the team. This document explains the
 model and how each role connects.
 
-> **Status:** this describes the target setup for parity item #1 (engram backend +
-> `hybrid` mode). The client-side wiring is being implemented in capiko; until the
-> enable flow ships, follow the **manual fallback** steps in each section.
+The client-side wiring is built into capiko's **Configure engram** flow; the
+**manual fallback** steps below are for connecting without the TUI.
 
 ## The model in one picture
 
@@ -90,12 +89,13 @@ ENGRAM_PG_PASSWORD=...  ENGRAM_JWT_SECRET=...  ENGRAM_CLOUD_ALLOWED_PROJECTS=rep
 
 ## For each team member: connect
 
-**Planned (capiko-automated).** capiko will detect Engram, register the Engram MCP
-server in your Copilot config (Copilot CLI under `~/.copilot/` first, VS Code under
-`Code/User/mcp.json` or `.vscode/mcp.json`), run `engram cloud config`, set the
-autosync env, and write the per-repo `.engram/config.json`.
+**With capiko (recommended).** Run **Configure engram**: capiko detects Engram,
+registers the Engram MCP server in your Copilot config (Copilot CLI under
+`~/.copilot/` first, VS Code under `Code/User/mcp.json` or `.vscode/mcp.json`), runs
+`engram cloud config`, sets the autosync env, and writes the per-repo
+`.engram/config.json`.
 
-**Manual fallback (until that ships):**
+**Manual fallback (without the TUI):**
 
 ```bash
 # 1. Install engram (see its INSTALLATION docs)

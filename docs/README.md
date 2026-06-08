@@ -5,13 +5,14 @@ The project's knowledge base, in three layers.
 ## For users
 
 - [usage.md](usage.md) — the install flow, the menu, and the SDD workflow.
+- [capabilities.md](capabilities.md) — the full feature tour: everything capiko can do.
+- [engram-cloud-setup.md](engram-cloud-setup.md) — standing up shared team memory.
 - The root [README](../README.md) — install, quick path, status.
 
 ## For maintainers
 
 - [release.md](release.md) — cutting a release, rollback.
-- [gentle-ai-parity.md](gentle-ai-parity.md) — what's done, out of scope, and the
-  remaining gaps vs gentle-ai.
+- [native-sdd-engine.md](native-sdd-engine.md) — how the native SDD state engine works.
 
 ## For contributors (codebase guide)
 

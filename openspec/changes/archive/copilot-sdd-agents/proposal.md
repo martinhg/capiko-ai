@@ -2,7 +2,7 @@
 
 ## Intent
 
-capiko's SDD phase skills already predicate STRICT delegation — every skill carries a `## Gate` ("Orchestrator: DELEGATE to a fresh sub-agent... running phase work yourself is an orchestration error"). But capiko ships NO Copilot custom agents, so on the Copilot side there is **no delegation target**: the gate dangles. Live spikes on Copilot CLI v1.0.59 (obs #57, #58) verified that global `~/.copilot/agents/*.agent.md` reading, explicit `--agent` selection, body injection, description inference, and coordinator→worker delegation via the `agent` tool + `agents:` allowlist all work. This change ships a catalog of Copilot custom agents for the SDD phases and installs them to `~/.copilot/agents/`, **materializing** the strict delegation the skills already assume. This is innovation beyond gentle-ai (which ships NO Copilot agents — obs #56).
+capiko's SDD phase skills already predicate STRICT delegation — every skill carries a `## Gate` ("Orchestrator: DELEGATE to a fresh sub-agent... running phase work yourself is an orchestration error"). But capiko ships NO Copilot custom agents, so on the Copilot side there is **no delegation target**: the gate dangles. Live spikes on Copilot CLI v1.0.59 (obs #57, #58) verified that global `~/.copilot/agents/*.agent.md` reading, explicit `--agent` selection, body injection, description inference, and coordinator→worker delegation via the `agent` tool + `agents:` allowlist all work. This change ships a catalog of Copilot custom agents for the SDD phases and installs them to `~/.copilot/agents/`, **materializing** the strict delegation the skills already assume.
 
 ## Scope
 
@@ -15,7 +15,7 @@ capiko's SDD phase skills already predicate STRICT delegation — every skill ca
 - `tools` mapped to Copilot aliases (read/edit/search/execute/agent). NO Anthropic model aliases in `model:` — omit the field (inherit default) or use a valid Copilot model name.
 
 ### Out of Scope
-- Q4 interactive proposal round (gentle-ai's "Step 0") — separate future change.
+- Q4 interactive proposal round (a "Step 0") — separate future change.
 - Per-phase model-assignment debt (#22/#23) beyond noting workers must not use Anthropic aliases.
 - judgment-day (jd-*) agents — SDD phases only.
 

@@ -149,7 +149,7 @@ func detectDependencies(goos string) []Dependency {
 	return deps
 }
 
-// Linux distro families capiko recognizes, mirroring gentle-ai's support matrix:
+// Linux distro families capiko recognizes:
 // Ubuntu/Debian (apt), Arch (pacman), and Fedora/RHEL (dnf).
 const (
 	linuxDistroUnknown = "unknown"
@@ -238,8 +238,8 @@ func matchesDistro(id, idLike string, wants ...string) bool {
 // installInfo returns how to install a missing dependency: the command (or a
 // manual hint) and whether capiko may run it via one-click. Only no-sudo commands
 // (Homebrew installs, the pnpm script) are auto-runnable; sudo, winget, and manual
-// hints are reported with auto=false (shown, not run) — matching gentle-ai, which
-// shows per-distro commands rather than auto-running them.
+// hints are reported with auto=false (shown, not run) — per-distro commands are
+// shown rather than auto-run.
 func installInfo(name, pm string) (cmd string, auto bool) {
 	const brewScript = `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
 	const pnpmScript = "curl -fsSL https://get.pnpm.io/install.sh | sh -"

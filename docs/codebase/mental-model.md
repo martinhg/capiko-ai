@@ -3,8 +3,8 @@
 ## What capiko is
 
 capiko-ai is a **configurator** that mounts a company "capiko layer" onto the
-**GitHub Copilot CLI** — the same pattern gentle-ai uses over Claude Code. It is a
-terminal app (Go + Bubbletea) that **writes files** Copilot then auto-discovers.
+**GitHub Copilot CLI**. It is a terminal app (Go + Bubbletea) that **writes files**
+Copilot then auto-discovers.
 
 | capiko IS | capiko is NOT |
 |---|---|

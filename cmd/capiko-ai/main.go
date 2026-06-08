@@ -1,6 +1,5 @@
 // Command capiko-ai is a configurator TUI that mounts the capiko layer
-// (skills, and later memory, SDD workflow, and MCP) onto the GitHub Copilot
-// CLI — the same pattern gentle-ai uses over Claude Code and other agents.
+// (skills, memory, the SDD workflow, and MCP) onto the GitHub Copilot CLI.
 package main
 
 import (
