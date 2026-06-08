@@ -97,6 +97,29 @@ func TestRenderDeliveryChainStrategy(t *testing.T) {
 	}
 }
 
+func TestRenderArtifactStore(t *testing.T) {
+	out := Render(nil, false)
+	for _, want := range []string{
+		"### Artifact store",
+		// The four modes, with hybrid as the default.
+		"hybrid",
+		"engram",
+		"openspec",
+		"none",
+		// In engram/hybrid mode the agent reads engram directly.
+		"mem_search",
+		"mem_get_observation",
+		// The native engine stays openspec-only.
+		"sdd-status",
+		// Multi-repo project attribution.
+		".engram/config.json",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("artifact store section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderStrictTDD(t *testing.T) {
 	out := Render(nil, true)
 	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {

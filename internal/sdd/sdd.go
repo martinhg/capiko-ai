@@ -86,7 +86,18 @@ func Render(assignments map[string]string, strictTDD bool) string {
 
 	b.WriteString("### Phases (in order)\n\n")
 	b.WriteString("explore → propose → spec → design → tasks → apply → verify → archive\n\n")
-	b.WriteString("Artifacts live in the **OpenSpec store**: in-flight changes under `openspec/changes/<change>/` (proposal, spec, design, tasks), the canonical specs in `openspec/specs/`, and completed changes in `openspec/changes/archive/`. Archive merges the change's spec delta into `openspec/specs/`. Run `sdd-init` once to create it.\n\n")
+	b.WriteString("The **OpenSpec store** holds file-based artifacts: in-flight changes under `openspec/changes/<change>/` (proposal, spec, design, tasks), the canonical specs in `openspec/specs/`, and completed changes in `openspec/changes/archive/`. Archive merges the change's spec delta into `openspec/specs/`. Run `sdd-init` once to create it.\n\n")
+
+	b.WriteString("### Artifact store\n\n")
+	b.WriteString("The cycle has two layers:\n\n")
+	b.WriteString("- **Memory (always on, when engram is configured).** Search local engram for prior context while working (`mem_search` / `mem_context`) and save decisions plus a session summary at close (`mem_save` / `mem_session_summary`). engram is local-first; with Engram Cloud enabled it replicates to teammates in the background.\n")
+	b.WriteString("- **Artifact store (per change).** Where the formal proposal/spec/design/tasks live:\n")
+	b.WriteString("  - `hybrid` (default when engram is configured) — canonical specs as files in `openspec/` (reviewed via git) **and** the working memory/artifacts in engram.\n")
+	b.WriteString("  - `engram` — artifacts as engram observations (`sdd/<change>/<artifact>`); repo-clean, but no canonical spec merge layer.\n")
+	b.WriteString("  - `openspec` (default otherwise) — file artifacts only, with the canonical `openspec/specs/` and merge-on-archive.\n")
+	b.WriteString("  - `none` — ephemeral; return progress only, persist nothing.\n\n")
+	b.WriteString("In `engram`/`hybrid` mode, read artifacts directly with `mem_search` + `mem_get_observation` (search results are truncated previews — always fetch the full observation). The native `sdd-status` engine reads the OpenSpec files only, so in those modes route from engram directly rather than the engine. Engram Cloud syncs engram memories; OpenSpec files travel via git.\n\n")
+	b.WriteString("Multi-repo: each repo carries a `.engram/config.json` naming its project, so engram attributes memories to the right repo even when a parent folder is the workspace root.\n\n")
 
 	b.WriteString("### Model assignments\n\n")
 	b.WriteString("Run the session on the most capable assigned model. Delegate each phase to its model via the Task tool's `model` parameter. Copilot honors any model whose cost is ≤ the session model and downgrades anything more expensive, so keep the orchestrator on the top model. `default` means inherit the session model.\n\n")
