@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/martinhg/capiko-ai/internal/skill"
+	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
 
@@ -20,6 +21,7 @@ type detectionScreen struct {
 	catalog    []skill.Skill
 	installed  map[string]bool
 	report     sysinfo.Report
+	engram     *state.EngramRecord // managed engram config, nil = unmanaged
 	cursor     int
 	installing bool
 	status     string // result of the last install run
@@ -31,7 +33,21 @@ func newDetection(svc services, catalog []skill.Skill, installed map[string]bool
 		catalog:   catalog,
 		installed: installed,
 		report:    sysinfo.Detect(),
+		engram:    loadEngramRecord(svc.state),
 	}
+}
+
+// loadEngramRecord returns the managed engram config, or nil when unmanaged or
+// unreadable — detection is best-effort and never blocks on state.
+func loadEngramRecord(store *state.Store) *state.EngramRecord {
+	if store == nil {
+		return nil
+	}
+	st, err := store.Load()
+	if err != nil {
+		return nil
+	}
+	return st.Engram
 }
 
 type depsInstalledMsg struct{ summary string }
@@ -160,6 +176,9 @@ func (s *detectionScreen) View() string {
 	}
 	b.WriteString("\n")
 
+	b.WriteString(titleSty.Render("Engram") + "\n")
+	fmt.Fprintf(&b, "  %s  %s\n\n", textSty.Render(pad("status", 18)), engramStatus(s.engram))
+
 	if s.installing {
 		b.WriteString("Installing missing dependencies…\n")
 		return b.String()
@@ -178,6 +197,21 @@ func (s *detectionScreen) View() string {
 
 	b.WriteString("\n" + dimSty.Render("↑/↓ move · enter select · esc back") + "\n")
 	return b.String()
+}
+
+// engramStatus renders the managed engram configuration for the detection screen.
+func engramStatus(rec *state.EngramRecord) string {
+	if rec == nil {
+		return dimSty.Render("not configured")
+	}
+	if !rec.Enabled {
+		return dimSty.Render("disabled")
+	}
+	cloud := "local only"
+	if rec.CloudServer != "" {
+		cloud = "cloud " + rec.CloudServer
+	}
+	return okSty.Render("enabled") + dimSty.Render(fmt.Sprintf(" · %s · %s", rec.ArtifactMode, cloud))
 }
 
 func dependencyStatus(d sysinfo.Dependency) string {

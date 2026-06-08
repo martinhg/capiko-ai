@@ -1,11 +1,29 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
+
+func TestDetectionShowsEngramStatus(t *testing.T) {
+	configured := &detectionScreen{
+		report: sysinfo.Report{},
+		engram: &state.EngramRecord{Enabled: true, ArtifactMode: "hybrid", CloudServer: "https://e.example.com"},
+	}
+	v := configured.View()
+	if !strings.Contains(v, "Engram") || !strings.Contains(v, "hybrid") || !strings.Contains(v, "https://e.example.com") {
+		t.Errorf("detection should show the configured engram status:\n%s", v)
+	}
+
+	unmanaged := &detectionScreen{report: sysinfo.Report{}}
+	if !strings.Contains(unmanaged.View(), "not configured") {
+		t.Error("detection should show engram as not configured when unmanaged")
+	}
+}
 
 // newDetectionT builds the screen directly (no real sysinfo.Detect, which would
 // shell out) since these tests only exercise navigation and transitions.
