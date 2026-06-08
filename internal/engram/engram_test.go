@@ -5,8 +5,63 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestCloudCommandsShellOutWithExactArgs(t *testing.T) {
+	orig := run
+	t.Cleanup(func() { run = orig })
+	var got []string
+	run = func(args ...string) error { got = args; return nil }
+
+	if err := CloudConfig("https://engram.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"cloud", "config", "--server", "https://engram.example.com"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("CloudConfig args = %v, want %v", got, want)
+	}
+
+	if err := CloudEnroll("repo-core"); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"cloud", "enroll", "repo-core"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("CloudEnroll args = %v, want %v", got, want)
+	}
+
+	if err := CloudStatus(); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"cloud", "status"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("CloudStatus args = %v, want %v", got, want)
+	}
+}
+
+func TestWriteServerScaffoldIsHardened(t *testing.T) {
+	dir := t.TempDir()
+	path, err := WriteServerScaffold(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "docker-compose.cloud.yml"); path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(data)
+	if strings.Contains(s, `ENGRAM_CLOUD_INSECURE_NO_AUTH: "1"`) {
+		t.Error("scaffold must not enable insecure no-auth mode")
+	}
+	if !strings.Contains(s, "ENGRAM_JWT_SECRET") {
+		t.Error("scaffold should require a JWT secret")
+	}
+	if !strings.Contains(s, "cloud") {
+		t.Error("scaffold should run engram cloud serve")
+	}
+}
 
 func readJSON(t *testing.T, path string) map[string]any {
 	t.Helper()

@@ -10,16 +10,50 @@ package engram
 import (
 	"bytes"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
 // tokenRef is the reference capiko writes for the cloud token. The real value is
 // resolved from the environment by the engram process, never stored on disk.
 const tokenRef = "${ENGRAM_CLOUD_TOKEN}"
+
+// run executes an engram subcommand. It is a test seam.
+var run = func(args ...string) error {
+	return exec.Command("engram", args...).Run()
+}
+
+// CloudConfig points the local engram at the team's cloud server. The URL is
+// persisted by engram to ~/.engram/cloud.json.
+func CloudConfig(server string) error { return run("cloud", "config", "--server", server) }
+
+// CloudEnroll enrolls a project for cloud replication.
+func CloudEnroll(project string) error { return run("cloud", "enroll", project) }
+
+// CloudStatus prints the cloud configuration and daemon health.
+func CloudStatus() error { return run("cloud", "status") }
+
+//go:embed templates/docker-compose.cloud.yml
+var serverScaffold string
+
+// WriteServerScaffold writes a hardened Engram Cloud docker-compose template into
+// dir for the team's devops to adapt. capiko configures the client side and ships
+// this scaffold; it never runs the server itself.
+func WriteServerScaffold(dir string) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "docker-compose.cloud.yml")
+	if err := os.WriteFile(path, []byte(serverScaffold), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
 
 // CopilotCLIEntry builds the engram MCP server entry for Copilot CLI's
 // mcp-config.json (top-level key "mcpServers"). When cloudServer is non-empty the

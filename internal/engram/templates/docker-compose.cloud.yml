@@ -1,0 +1,50 @@
+# Engram Cloud — team server scaffold written by capiko.
+#
+# These defaults are SAFE-BY-INTENT, not the dev/smoke defaults: auth is required
+# and every secret is read from the environment (the `${VAR:?}` form fails fast
+# when unset). Set the variables, then start it:
+#
+#   ENGRAM_PG_PASSWORD=...  ENGRAM_JWT_SECRET=...  ENGRAM_CLOUD_ALLOWED_PROJECTS=repo-core,repo-back \
+#     docker compose -f docker-compose.cloud.yml up -d
+#
+# Terminate TLS with a reverse proxy (Caddy/Traefik) in front of port 18080;
+# do not expose 18080 publicly without it. See engram-cloud-setup.md for hosting
+# options, the hardening checklist, and how clients connect.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: engram-cloud-postgres
+    environment:
+      POSTGRES_USER: engram
+      POSTGRES_PASSWORD: ${ENGRAM_PG_PASSWORD:?set a strong postgres password}
+      POSTGRES_DB: engram_cloud
+    volumes:
+      - engram-cloud-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engram"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  engram-cloud:
+    image: ghcr.io/gentleman-programming/engram:latest
+    container_name: engram-cloud
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENGRAM_DATABASE_URL: postgres://engram:${ENGRAM_PG_PASSWORD:?}@postgres:5432/engram_cloud?sslmode=disable
+      ENGRAM_JWT_SECRET: ${ENGRAM_JWT_SECRET:?set a strong jwt secret}
+      ENGRAM_CLOUD_ALLOWED_PROJECTS: ${ENGRAM_CLOUD_ALLOWED_PROJECTS:?comma-separated project names}
+      # Authentication stays ON. Issue per-member client tokens per engram's cloud
+      # docs; clients pass theirs via ENGRAM_CLOUD_TOKEN. Never set this to "1".
+      ENGRAM_CLOUD_INSECURE_NO_AUTH: "0"
+      ENGRAM_PORT: "18080"
+    command: ["cloud", "serve"]
+    ports:
+      # Bind to localhost; the reverse proxy publishes HTTPS to the team.
+      - "127.0.0.1:18080:18080"
+
+volumes:
+  engram-cloud-pg:
