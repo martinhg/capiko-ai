@@ -7,4 +7,4 @@ package versions
 // CopilotCLI is the GitHub Copilot CLI version capiko-ai targets and is tested
 // against. capiko configures Copilot; this records the version it expects.
 // renovate: datasource=npm depName=@github/copilot
-const CopilotCLI = "1.0.60"
+const CopilotCLI = "1.0.62"
