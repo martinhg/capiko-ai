@@ -112,7 +112,7 @@ func NewApp(catalog []skill.Skill, agentCatalog []agent.Agent, st *state.Store, 
 	}
 }
 
-func (a App) Init() tea.Cmd { return tea.Batch(detectCmd, checkLatestCmd) }
+func (a App) Init() tea.Cmd { return tea.Batch(detectCmd, checkLatestCmd(a.svc.state)) }
 
 type detectedMsg struct {
 	host            *copilot.Host
