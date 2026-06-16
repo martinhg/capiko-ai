@@ -84,7 +84,11 @@ func (a App) viewPrompt() string {
 	b.WriteString(titleSty.Render("Capiko AI - v"+Version) + dimSty.Render("  ·  "+tagline))
 	b.WriteString("\n")
 	b.WriteString(warnSty.Render(fmt.Sprintf("Update available: capiko-ai %s → %s", Version, a.latest)))
-	b.WriteString("\n\n")
+	b.WriteString("\n")
+	if a.advisory != "" {
+		b.WriteString(dimSty.Render("Advisory: "+a.advisory) + "\n")
+	}
+	b.WriteString("\n")
 
 	for i, label := range promptItems {
 		if i == a.cursor {

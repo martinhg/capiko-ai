@@ -87,6 +87,7 @@ type App struct {
 	cursor          int
 	active          screen
 	latest          string   // newer version if an update is available; empty otherwise
+	advisory        string   // remote advisory text; empty when absent or fetch failed
 	stale           []string // installed skills whose catalog content has since changed
 	staleAgents     []string // agents missing from state or whose checksum has changed
 	menuTouched     bool     // true after any menu interaction or prompt dismissal
@@ -114,7 +115,9 @@ func NewApp(catalog []skill.Skill, agentCatalog []agent.Agent, st *state.Store, 
 	}
 }
 
-func (a App) Init() tea.Cmd { return tea.Batch(detectCmd, checkLatestCmd(a.svc.state)) }
+func (a App) Init() tea.Cmd {
+	return tea.Batch(detectCmd, checkLatestCmd(a.svc.state), checkAdvisoryCmd())
+}
 
 type detectedMsg struct {
 	host            *copilot.Host
@@ -154,6 +157,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.stale = staleSkills(a.svc.state, a.catalog)
 			a.staleAgents = staleAgentsList(a.svc.state, a.agentCatalog)
 		}
+		return a, nil
+
+	case advisoryMsg:
+		a.advisory = msg.text
 		return a, nil
 
 	case latestVersionMsg:
@@ -277,6 +284,9 @@ func (a App) viewMenu() string {
 	}
 	if banner := a.staleBanner(); banner != "" {
 		b.WriteString(banner + "\n")
+	}
+	if a.advisory != "" {
+		b.WriteString(dimSty.Render("Advisory: "+a.advisory) + "\n")
 	}
 	b.WriteString("\n")
 	b.WriteString(titleSty.Render("Menu"))
