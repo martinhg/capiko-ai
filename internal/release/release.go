@@ -28,16 +28,25 @@ var (
 	httpClient = &http.Client{Timeout: 5 * time.Second}
 )
 
+// newGitHubRequest builds a GET request with the headers GitHub expects.
+func newGitHubRequest(ctx context.Context, url string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "capiko-ai")
+	return req, nil
+}
+
 // Latest returns the most recent published release version, without a leading
 // "v". A repository with no releases yet (HTTP 404) returns an error, which
 // callers treat as "no update".
 func Latest(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestURL, nil)
+	req, err := newGitHubRequest(ctx, latestURL)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "capiko-ai")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

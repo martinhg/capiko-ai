@@ -119,6 +119,7 @@ func TestViewGolden(t *testing.T) {
 		{"menu", App{state: appMenu, catalog: testCatalog()}.View()},
 		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "9.9.9"}.View()},
 		{"menu_stale", App{state: appMenu, catalog: testCatalog(), stale: []string{"capiko-hello", "capiko-pr"}}.View()},
+		{"menu_advisory", App{state: appMenu, catalog: testCatalog(), advisory: "engram 1.17 recommended"}.View()},
 		{"detection", App{state: appScreen, active: detection}.View()},
 		{"persona", App{state: appScreen, active: newPersona(svc, testCatalog(), map[string]bool{})}.View()},
 		{"install_picking", App{state: appScreen, active: installPicking}.View()},
