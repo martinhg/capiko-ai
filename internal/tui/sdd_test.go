@@ -127,6 +127,41 @@ func TestSDDStrictToggleAppliesAndPersists(t *testing.T) {
 	}
 }
 
+func TestSDDCycleEffort(t *testing.T) {
+	s, _, _ := newSDDT(t, false)
+	// orchestrator defaults to "high"
+	if s.efforts["orchestrator"] != "high" {
+		t.Fatalf("start effort = %q, want high", s.efforts["orchestrator"])
+	}
+	s.Update(key("e"))
+	if s.efforts["orchestrator"] != "low" {
+		t.Errorf("e should cycle effort to low, got %q", s.efforts["orchestrator"])
+	}
+	s.Update(key("e"))
+	if s.efforts["orchestrator"] != "medium" {
+		t.Errorf("e should cycle effort to medium, got %q", s.efforts["orchestrator"])
+	}
+	s.Update(key("e"))
+	if s.efforts["orchestrator"] != "high" {
+		t.Errorf("e should cycle effort back to high, got %q", s.efforts["orchestrator"])
+	}
+}
+
+func TestSDDEffortPersistsOnApply(t *testing.T) {
+	s, svc, _ := newSDDT(t, false)
+	s.efforts["orchestrator"] = "low"
+	s.cursor = len(sdd.Phases) // Apply
+	_, cmd := s.Update(key("enter"))
+	applied, ok := cmd().(sddAppliedMsg)
+	if !ok || applied.err != nil {
+		t.Fatalf("apply failed: %+v", applied)
+	}
+	st, _ := svc.state.Load()
+	if st.SDDEfforts["orchestrator"] != "low" {
+		t.Errorf("state SDD efforts = %v, want orchestrator=low", st.SDDEfforts)
+	}
+}
+
 func TestSDDBackGoesToMenu(t *testing.T) {
 	s, _, _ := newSDDT(t, false)
 	_, cmd := s.Update(key("esc"))

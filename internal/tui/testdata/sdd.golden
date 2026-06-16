@@ -5,17 +5,17 @@ Configure SDD models
 Run the orchestrator on the top model; cheaper phases auto-downgrade.
   Strict TDD     off  (t to toggle)
 
-▸ orchestrator   claude-opus-4.8
-  explore        default
-  propose        default
-  spec           gemini-5.4
-  design         default
-  tasks          default
-  apply          default
-  verify         default
-  archive        default
+▸ orchestrator   claude-opus-4.8       high
+  explore        default               low
+  propose        default               medium
+  spec           gemini-5.4            medium
+  design         default               high
+  tasks          default               low
+  apply          default               medium
+  verify         default               high
+  archive        default               low
 
   Apply
   Back
 
-↑/↓ move · ←/→ change model · c custom · t strict TDD · enter select · esc back
+↑/↓ move · ←/→ model · e effort · c custom · t strict TDD · enter select · esc back

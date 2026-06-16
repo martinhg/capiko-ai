@@ -43,6 +43,9 @@ var Models = []string{
 	"gemini-5.4",
 }
 
+// Efforts are the reasoning effort levels offered in the picker.
+var Efforts = []string{"low", "medium", "high"}
+
 // DefaultAssignments maps every phase to DefaultModel until the user configures
 // specifics.
 func DefaultAssignments() map[string]string {
@@ -51,6 +54,21 @@ func DefaultAssignments() map[string]string {
 		m[p] = DefaultModel
 	}
 	return m
+}
+
+// DefaultEfforts maps every phase to a sensible reasoning effort level.
+func DefaultEfforts() map[string]string {
+	return map[string]string{
+		"orchestrator": "high",
+		"explore":      "low",
+		"propose":      "medium",
+		"spec":         "medium",
+		"design":       "high",
+		"tasks":        "low",
+		"apply":        "medium",
+		"verify":       "high",
+		"archive":      "low",
+	}
 }
 
 // normalize returns a full phase→model map, filling missing/empty phases with
@@ -65,11 +83,24 @@ func normalize(a map[string]string) map[string]string {
 	return out
 }
 
+// normalizeEfforts returns a full phase→effort map, filling missing/empty
+// phases with the defaults so rendering is stable regardless of the input.
+func normalizeEfforts(e map[string]string) map[string]string {
+	out := DefaultEfforts()
+	for k, v := range e {
+		if _, ok := out[k]; ok && strings.TrimSpace(v) != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // Render builds the orchestrator instruction block for the given assignments.
 // When strictTDD is true, the block requires the apply/verify phases to follow
 // strict Test-Driven Development.
-func Render(assignments map[string]string, strictTDD bool) string {
+func Render(assignments map[string]string, efforts map[string]string, strictTDD bool) string {
 	a := normalize(assignments)
+	e := normalizeEfforts(efforts)
 
 	var b strings.Builder
 	b.WriteString("## SDD Orchestrator (capiko)\n\n")
@@ -112,14 +143,15 @@ func Render(assignments map[string]string, strictTDD bool) string {
 
 	b.WriteString("### Model assignments\n\n")
 	b.WriteString("Run the session on the most capable assigned model. Delegate each phase to its model via the Task tool's `model` parameter. Copilot honors any model whose cost is ≤ the session model and downgrades anything more expensive, so keep the orchestrator on the top model. `default` means inherit the session model.\n\n")
-	b.WriteString("| Phase | Model |\n| --- | --- |\n")
+	b.WriteString("The **Effort** column sets reasoning effort (`low`/`medium`/`high`) per phase. Forward it in the sub-agent prompt so the worker calibrates its depth: `low` for structural/mechanical work, `medium` for balanced implementation, `high` for architectural decisions and validation. The orchestrator should include a line like `Reasoning effort: <level>` in every sub-agent handoff.\n\n")
+	b.WriteString("| Phase | Model | Effort |\n| --- | --- | --- |\n")
 	for _, p := range Phases {
-		fmt.Fprintf(&b, "| %s | %s |\n", p, a[p])
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", p, a[p], e[p])
 	}
 	b.WriteString("\n")
 
 	b.WriteString("### Rules\n\n")
-	b.WriteString("- Delegate each phase's work to a sub-agent (Task tool); pass the phase's assigned model.\n")
+	b.WriteString("- Delegate each phase's work to a sub-agent (Task tool); pass the phase's assigned model and reasoning effort.\n")
 	b.WriteString("- Each phase has a matching `sdd-<phase>` skill (e.g. `sdd-spec`); load it when running that phase.\n")
 	b.WriteString("- Run `sdd-init` once per project (creates `sdd/context.md`) before the first cycle; use `sdd-onboard` for a guided walkthrough.\n")
 	b.WriteString("- Keep one thin orchestrator thread and synthesize the sub-agents' results.\n")

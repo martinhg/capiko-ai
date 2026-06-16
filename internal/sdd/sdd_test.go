@@ -22,6 +22,8 @@ func TestRenderReflectsAssignments(t *testing.T) {
 		"orchestrator": "claude-opus-4.8",
 		"spec":         "gemini-5.4",
 		// the rest fall back to default
+	}, map[string]string{
+		"explore": "high", // override default low
 	}, false)
 	if strings.Contains(out, "Strict TDD") {
 		t.Error("strict TDD section should be absent when off")
@@ -29,9 +31,9 @@ func TestRenderReflectsAssignments(t *testing.T) {
 
 	for _, want := range []string{
 		"SDD Orchestrator",
-		"| orchestrator | claude-opus-4.8 |",
-		"| spec | gemini-5.4 |",
-		"| explore | default |", // unspecified phase defaults
+		"| orchestrator | claude-opus-4.8 | high |",
+		"| spec | gemini-5.4 | medium |",
+		"| explore | default | high |", // effort overridden, model defaults
 		"Task tool",
 		"openspec/changes/", // OpenSpec store
 		"openspec/specs/",
@@ -43,7 +45,7 @@ func TestRenderReflectsAssignments(t *testing.T) {
 }
 
 func TestRenderTriageGate(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 
 	for _, want := range []string{
 		"When to use SDD (triage)",
@@ -63,7 +65,7 @@ func TestRenderTriageGate(t *testing.T) {
 }
 
 func TestRenderResultContract(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 	for _, want := range []string{
 		"### Result contract",
 		"status",
@@ -81,7 +83,7 @@ func TestRenderResultContract(t *testing.T) {
 }
 
 func TestRenderExecutionMode(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 	for _, want := range []string{
 		"### Execution mode",
 		"Automatic",
@@ -95,7 +97,7 @@ func TestRenderExecutionMode(t *testing.T) {
 }
 
 func TestRenderAutomaticModeGatekeeper(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 	for _, want := range []string{
 		"### Automatic mode gatekeeper",
 		"Inline checks (all phases)",
@@ -118,7 +120,7 @@ func TestRenderAutomaticModeGatekeeper(t *testing.T) {
 }
 
 func TestRenderSkillResolution(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 	for _, want := range []string{
 		"### Skill resolution",
 		"capiko-ai skill-registry",
@@ -131,7 +133,7 @@ func TestRenderSkillResolution(t *testing.T) {
 }
 
 func TestRenderDeliveryChainStrategy(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 	for _, want := range []string{
 		"### Delivery & chain strategy",
 		// The four delivery strategies, asked once and cached.
@@ -153,7 +155,7 @@ func TestRenderDeliveryChainStrategy(t *testing.T) {
 }
 
 func TestRenderArtifactStore(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 	for _, want := range []string{
 		"### Artifact store",
 		// The four modes, with hybrid as the default.
@@ -175,8 +177,43 @@ func TestRenderArtifactStore(t *testing.T) {
 	}
 }
 
+func TestDefaultEfforts(t *testing.T) {
+	e := DefaultEfforts()
+	if len(e) != len(Phases) {
+		t.Fatalf("efforts = %d, want %d", len(e), len(Phases))
+	}
+	want := map[string]string{
+		"orchestrator": "high", "explore": "low", "propose": "medium",
+		"spec": "medium", "design": "high", "tasks": "low",
+		"apply": "medium", "verify": "high", "archive": "low",
+	}
+	for p, w := range want {
+		if e[p] != w {
+			t.Errorf("%s effort = %q, want %q", p, e[p], w)
+		}
+	}
+}
+
+func TestRenderEffortColumn(t *testing.T) {
+	out := Render(nil, nil, false)
+	for _, want := range []string{
+		"| Phase | Model | Effort |",
+		"Reasoning effort:",
+		"| explore | default | low |",
+		"| design | default | high |",
+		"| tasks | default | low |",
+		"| apply | default | medium |",
+		"| verify | default | high |",
+		"| archive | default | low |",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("effort column missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderEngramLifecycleGuardrails(t *testing.T) {
-	out := Render(nil, false)
+	out := Render(nil, nil, false)
 	for _, want := range []string{
 		"### Engram lifecycle guardrails",
 		"needs_review",
@@ -195,7 +232,7 @@ func TestRenderEngramLifecycleGuardrails(t *testing.T) {
 }
 
 func TestRenderStrictTDD(t *testing.T) {
-	out := Render(nil, true)
+	out := Render(nil, nil, true)
 	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {
 		t.Errorf("strict TDD section missing when on:\n%s", out)
 	}
@@ -207,14 +244,14 @@ func TestRenderStrictTDD(t *testing.T) {
 // `strict_tdd: true` token the reference files key off), not merely state the
 // rule. When off, that token must be absent so the worker takes the standard flow.
 func TestRenderStrictTDDForwarding(t *testing.T) {
-	on := Render(nil, true)
+	on := Render(nil, nil, true)
 	for _, want := range []string{"forward", "strict_tdd: true", "test command"} {
 		if !strings.Contains(on, want) {
 			t.Errorf("strict-TDD forwarding instruction missing %q when on:\n%s", want, on)
 		}
 	}
 
-	off := Render(nil, false)
+	off := Render(nil, nil, false)
 	if strings.Contains(off, "strict_tdd: true") {
 		t.Error("forwarding token strict_tdd: true must not appear when strict TDD is off")
 	}
@@ -224,8 +261,8 @@ func TestRenderIgnoresUnknownAndEmpty(t *testing.T) {
 	out := Render(map[string]string{
 		"orchestrator": "", // empty → default
 		"bogus-phase":  "x",
-	}, false)
-	if !strings.Contains(out, "| orchestrator | default |") {
+	}, nil, false)
+	if !strings.Contains(out, "| orchestrator | default | high |") {
 		t.Error("empty assignment should fall back to default")
 	}
 	if strings.Contains(out, "bogus-phase") {
