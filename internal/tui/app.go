@@ -51,6 +51,7 @@ const (
 	appDetecting appState = iota
 	appNotFound
 	appMenu
+	appUpdatePrompt
 	appScreen
 	appFailed
 )
@@ -88,6 +89,7 @@ type App struct {
 	latest          string   // newer version if an update is available; empty otherwise
 	stale           []string // installed skills whose catalog content has since changed
 	staleAgents     []string // agents missing from state or whose checksum has changed
+	menuTouched     bool     // true after any menu interaction or prompt dismissal
 	restart         bool     // set after a successful self-update; main re-execs on exit
 	postSync        bool     // set when the restart should sync skills with the new binary
 }
@@ -156,6 +158,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case latestVersionMsg:
 		a.latest = msg.version
+		if msg.version != "" && a.state == appMenu && !a.menuTouched {
+			a.state = appUpdatePrompt
+			a.cursor = promptDefaultCursor
+		}
 		return a, nil
 
 	case restartMsg:
@@ -169,6 +175,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
+		}
+		if a.state == appUpdatePrompt {
+			return a.updatePrompt(msg)
 		}
 		if a.state == appMenu {
 			return a.updateMenu(msg)
@@ -184,6 +193,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a App) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	a.menuTouched = true
 	switch msg.String() {
 	case "q":
 		return a, tea.Quit
@@ -245,6 +255,8 @@ func (a App) View() string {
 			dimSty.Render("q to quit") + "\n"
 	case appMenu:
 		return a.viewMenu()
+	case appUpdatePrompt:
+		return a.viewPrompt()
 	case appScreen:
 		if a.active != nil {
 			return head() + a.active.View()

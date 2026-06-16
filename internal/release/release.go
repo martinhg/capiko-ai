@@ -64,6 +64,12 @@ func Latest(ctx context.Context) (string, error) {
 	return strings.TrimPrefix(tag, "v"), nil
 }
 
+// ReleaseURL returns the GitHub Releases URL for a given version.
+func ReleaseURL(version string) string {
+	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	return fmt.Sprintf("https://github.com/%s/%s/releases/tag/v%s", owner, repo, v)
+}
+
 // IsNewer reports whether latest is a strictly higher MAJOR.MINOR.PATCH than
 // current. Either value may carry a leading "v". A current version that carries
 // pre-release or build metadata (a local or snapshot build, e.g.
