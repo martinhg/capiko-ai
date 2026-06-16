@@ -66,6 +66,17 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "install":
+			// Headless additive-only install: writes every catalog skill and
+			// agent not already present, without launching the TUI.
+			_, exitCode, err := installCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		}
 	}
 
