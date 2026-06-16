@@ -16,13 +16,14 @@ import (
 
 // State is capiko's persisted view of its managed installation.
 type State struct {
-	Version   string                 `json:"version"`
-	UpdatedAt time.Time              `json:"updated_at"`
-	Skills    map[string]SkillRecord `json:"skills"`
-	Agents    map[string]AgentRecord `json:"agents,omitempty"`
-	Persona   string                 `json:"persona,omitempty"`    // active persona id, "" = unmanaged
-	SDDModels map[string]string      `json:"sdd_models,omitempty"` // SDD phase → model, empty = SDD unmanaged
-	StrictTDD bool                   `json:"strict_tdd,omitempty"` // SDD apply/verify must follow strict TDD
+	Version    string                 `json:"version"`
+	UpdatedAt  time.Time              `json:"updated_at"`
+	Skills     map[string]SkillRecord `json:"skills"`
+	Agents     map[string]AgentRecord `json:"agents,omitempty"`
+	Persona    string                 `json:"persona,omitempty"`     // active persona id, "" = unmanaged
+	SDDModels  map[string]string      `json:"sdd_models,omitempty"`  // SDD phase → model, empty = SDD unmanaged
+	SDDEfforts map[string]string      `json:"sdd_efforts,omitempty"` // SDD phase → reasoning effort (low/medium/high)
+	StrictTDD  bool                   `json:"strict_tdd,omitempty"`  // SDD apply/verify must follow strict TDD
 	// InstructionsInstalled is true once the user installs the curated scoped
 	// instruction files; sync re-applies them only when managed, mirroring persona/SDD.
 	InstructionsInstalled bool `json:"instructions_installed,omitempty"`
@@ -194,6 +195,17 @@ func (s *Store) SetSDDModels(models map[string]string) error {
 		return err
 	}
 	st.SDDModels = models
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetSDDEfforts records the SDD phase→effort assignments (nil means defaults).
+func (s *Store) SetSDDEfforts(efforts map[string]string) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.SDDEfforts = efforts
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

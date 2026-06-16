@@ -16,15 +16,15 @@ import (
 )
 
 // applySDD injects the SDD orchestrator block (with the given per-phase model
-// assignments) into Copilot's instructions file, backing the file up only when
-// it changes, then records the assignments in state. Shared by the config screen
-// and the post-sync re-apply.
-func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models map[string]string, strict bool) error {
+// and effort assignments) into Copilot's instructions file, backing the file up
+// only when it changes, then records the assignments in state. Shared by the
+// config screen and the post-sync re-apply.
+func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models, efforts map[string]string, strict bool) error {
 	if host == nil {
 		return nil
 	}
 	path := filepath.Join(host.ConfigDir, "copilot-instructions.md")
-	content, changed, err := instructions.Render(path, sdd.MarkerStart, sdd.MarkerEnd, sdd.Render(models, strict))
+	content, changed, err := instructions.Render(path, sdd.MarkerStart, sdd.MarkerEnd, sdd.Render(models, efforts, strict))
 	if err != nil {
 		return err
 	}
@@ -42,20 +42,25 @@ func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models 
 		if err := store.SetSDDModels(models); err != nil {
 			return err
 		}
+		if err := store.SetSDDEfforts(efforts); err != nil {
+			return err
+		}
 		return store.SetStrictTDD(strict)
 	}
 	return nil
 }
 
-// sddScreen configures the model assigned to each SDD phase. Each phase cycles
-// through a curated model list (←/→) or takes a custom id (c). Apply injects the
-// orchestrator block; in the install flow it then continues to the skill selector.
+// sddScreen configures the model and reasoning effort assigned to each SDD
+// phase. Each phase cycles model (←/→) or effort (e), or takes a custom model
+// id (c). Apply injects the orchestrator block; in the install flow it then
+// continues to the skill selector.
 type sddScreen struct {
 	svc       services
 	catalog   []skill.Skill
 	installed map[string]bool
 	inFlow    bool // reached from install flow → Apply continues to the selector
 	models    map[string]string
+	efforts   map[string]string
 	strict    bool // strict TDD for apply/verify
 	cursor    int  // 0..len-1 phases, len = Apply, len+1 = Back
 	editing   bool
@@ -76,6 +81,7 @@ type sddAppliedMsg struct{ err error }
 
 func newSDD(svc services, catalog []skill.Skill, installed map[string]bool, inFlow bool) screen {
 	models := sdd.DefaultAssignments()
+	efforts := sdd.DefaultEfforts()
 	strict := false
 	if svc.state != nil {
 		if st, err := svc.state.Load(); err == nil {
@@ -84,10 +90,15 @@ func newSDD(svc services, catalog []skill.Skill, installed map[string]bool, inFl
 					models[k] = v
 				}
 			}
+			for k, v := range st.SDDEfforts {
+				if _, ok := efforts[k]; ok {
+					efforts[k] = v
+				}
+			}
 			strict = st.StrictTDD
 		}
 	}
-	return &sddScreen{svc: svc, catalog: catalog, installed: installed, inFlow: inFlow, models: models, strict: strict}
+	return &sddScreen{svc: svc, catalog: catalog, installed: installed, inFlow: inFlow, models: models, efforts: efforts, strict: strict}
 }
 
 func (s *sddScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
@@ -125,6 +136,8 @@ func (s *sddScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.cycle(-1)
 		case "right", "l":
 			s.cycle(1)
+		case "e":
+			s.cycleEffort(1)
 		case "t":
 			s.strict = !s.strict
 		case "c":
@@ -190,10 +203,26 @@ func (s *sddScreen) cycle(delta int) {
 	s.models[phase] = sdd.Models[((idx+delta)%n+n)%n]
 }
 
+func (s *sddScreen) cycleEffort(delta int) {
+	if !s.onPhase() {
+		return
+	}
+	phase := sdd.Phases[s.cursor]
+	idx := 0
+	for i, e := range sdd.Efforts {
+		if e == s.efforts[phase] {
+			idx = i
+			break
+		}
+	}
+	n := len(sdd.Efforts)
+	s.efforts[phase] = sdd.Efforts[((idx+delta)%n+n)%n]
+}
+
 func (s *sddScreen) applyCmd() tea.Cmd {
-	host, store, bkp, models, strict := s.svc.host, s.svc.state, s.svc.backup, s.models, s.strict
+	host, store, bkp, models, efforts, strict := s.svc.host, s.svc.state, s.svc.backup, s.models, s.efforts, s.strict
 	return func() tea.Msg {
-		if err := applySDD(host, store, bkp, models, strict); err != nil {
+		if err := applySDD(host, store, bkp, models, efforts, strict); err != nil {
 			return sddAppliedMsg{err: err}
 		}
 		return sddAppliedMsg{err: applyTriggerRules(host, store, bkp, true)}
@@ -231,7 +260,8 @@ func (s *sddScreen) View() string {
 		if s.editing && i == s.cursor {
 			model = s.editBuf + "▏"
 		}
-		fmt.Fprintf(&b, "%s%s  %s\n", marker, nameSty.Render(pad(phase, 13)), dimSty.Render(model))
+		effort := s.efforts[phase]
+		fmt.Fprintf(&b, "%s%s  %s  %s\n", marker, nameSty.Render(pad(phase, 13)), dimSty.Render(pad(model, 20)), dimSty.Render(effort))
 	}
 	b.WriteString("\n")
 
@@ -245,6 +275,6 @@ func (s *sddScreen) View() string {
 		b.WriteString(marker + optSty.Render(opt) + "\n")
 	}
 
-	b.WriteString("\n" + dimSty.Render("↑/↓ move · ←/→ change model · c custom · t strict TDD · enter select · esc back") + "\n")
+	b.WriteString("\n" + dimSty.Render("↑/↓ move · ←/→ model · e effort · c custom · t strict TDD · enter select · esc back") + "\n")
 	return b.String()
 }
