@@ -72,6 +72,50 @@ func TestLoadEmbedded(t *testing.T) {
 			t.Errorf("expected sdd-%s in catalog", name)
 		}
 	}
+
+	// The 4R review skills must be present.
+	for _, name := range []string{
+		"review-risk", "review-readability", "review-reliability", "review-resilience",
+	} {
+		if !byName[name] {
+			t.Errorf("expected %s in catalog", name)
+		}
+	}
+}
+
+// TestFourRReviewSkillsStructuredOutput pins the 4R review skills to their
+// structured output contract: each must define a severity-tagged output format
+// and a "no issues" statement so consumers can parse findings programmatically.
+func TestFourRReviewSkillsStructuredOutput(t *testing.T) {
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	byName := map[string]string{}
+	for _, s := range got {
+		byName[s.Name] = s.Content
+	}
+
+	for _, name := range []string{
+		"review-risk", "review-readability", "review-reliability", "review-resilience",
+	} {
+		body, ok := byName[name]
+		if !ok {
+			t.Errorf("%s not found in catalog", name)
+			continue
+		}
+		for _, want := range []string{
+			"## Output format",
+			"SEVERITY",
+			"Category",
+			"Location",
+			"No ",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s must contain %q for structured output", name, want)
+			}
+		}
+	}
 }
 
 // TestTasksSkillEmitsWorkloadGuard pins the review-workload guard contract to the
