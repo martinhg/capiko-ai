@@ -35,6 +35,20 @@ func TestIsNewer(t *testing.T) {
 	}
 }
 
+func TestReleaseURL(t *testing.T) {
+	tests := []struct {
+		version, want string
+	}{
+		{"1.4.0", "https://github.com/martinhg/capiko-ai/releases/tag/v1.4.0"},
+		{"v2.0.0", "https://github.com/martinhg/capiko-ai/releases/tag/v2.0.0"},
+	}
+	for _, tc := range tests {
+		if got := ReleaseURL(tc.version); got != tc.want {
+			t.Errorf("ReleaseURL(%q) = %q, want %q", tc.version, got, tc.want)
+		}
+	}
+}
+
 func TestLatestParsesTag(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("User-Agent"); got == "" {

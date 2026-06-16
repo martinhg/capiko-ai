@@ -138,6 +138,7 @@ func TestViewGolden(t *testing.T) {
 			agentNames:   []string{"capiko-sdd-explore", "capiko-sdd-apply"},
 		}}.View()},
 		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},
+		{"update_prompt", App{state: appUpdatePrompt, latest: "9.9.9", cursor: promptDefaultCursor}.View()},
 		{"soon", App{state: appScreen, active: newSoon("Upgrade tools")}.View()},
 	}
 
