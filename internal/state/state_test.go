@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadMissingReturnsEmpty(t *testing.T) {
@@ -287,6 +288,65 @@ func TestStore_ApplyAgents_RecordsChecksums(t *testing.T) {
 	}
 	if _, ok := st.Agents["capiko-sdd-apply"]; !ok {
 		t.Error("capiko-sdd-apply should remain")
+	}
+}
+
+func TestSetLastUpdateCheck(t *testing.T) {
+	s := NewStore(t.TempDir())
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.SetLastUpdateCheck(now); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.LastUpdateCheck == nil {
+		t.Fatal("LastUpdateCheck should be set")
+	}
+	if !st.LastUpdateCheck.Equal(now) {
+		t.Errorf("LastUpdateCheck = %v, want %v", st.LastUpdateCheck, now)
+	}
+}
+
+func TestLastUpdateCheckOmittedWhenNil(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.Apply("1.0.0", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(data, []byte("last_update_check")) {
+		t.Errorf("state without last_update_check should omit the key, got:\n%s", data)
+	}
+}
+
+func TestLastUpdateCheckPreservedAcrossApply(t *testing.T) {
+	s := NewStore(t.TempDir())
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.SetLastUpdateCheck(now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Apply("2.0.0", []Installed{{Name: "x", Checksum: "h"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := s.Load()
+	if st.LastUpdateCheck == nil || !st.LastUpdateCheck.Equal(now) {
+		t.Errorf("Apply should preserve LastUpdateCheck, got %v", st.LastUpdateCheck)
+	}
+}
+
+func TestLastUpdateCheckBackwardCompat(t *testing.T) {
+	dir := t.TempDir()
+	old := `{"version":"1.0.0","updated_at":"2026-01-01T00:00:00Z","skills":{}}`
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := NewStore(dir).Load()
+	if err != nil {
+		t.Fatalf("Load old state: %v", err)
+	}
+	if st.LastUpdateCheck != nil {
+		t.Errorf("old state should have nil LastUpdateCheck, got %v", st.LastUpdateCheck)
 	}
 }
 

@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLatestVersionMsgSetsLatest(t *testing.T) {
@@ -41,3 +42,33 @@ func TestUpdateBannerVisibility(t *testing.T) {
 		})
 	}
 }
+
+func TestWithinCooldown(t *testing.T) {
+	tests := []struct {
+		name string
+		last *time.Time
+		want bool
+	}{
+		{"nil means never checked", nil, false},
+		{"recent check within cooldown", timePtr(time.Now().Add(-1 * time.Hour)), true},
+		{"check at cooldown boundary minus 1s", timePtr(time.Now().Add(-updateCheckCooldown + time.Second)), true},
+		{"expired cooldown", timePtr(time.Now().Add(-7 * time.Hour)), false},
+		{"far past", timePtr(time.Now().Add(-30 * 24 * time.Hour)), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := withinCooldown(tc.last); got != tc.want {
+				t.Errorf("withinCooldown = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckLatestCmdNilStoreAlwaysChecks(t *testing.T) {
+	cmd := checkLatestCmd(nil)
+	if cmd == nil {
+		t.Fatal("checkLatestCmd(nil) should return a non-nil Cmd")
+	}
+}
+
+func timePtr(t time.Time) *time.Time { return &t }

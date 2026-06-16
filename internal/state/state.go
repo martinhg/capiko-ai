@@ -29,6 +29,11 @@ type State struct {
 	// Engram records the managed engram backend configuration; nil = unmanaged.
 	// Sync re-applies the engram MCP wiring only when it is set, mirroring persona/SDD.
 	Engram *EngramRecord `json:"engram,omitempty"`
+	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
+	// means "never checked" — the next launch will always call the API. The
+	// timestamp is advanced only on a successful check, so failures don't
+	// suppress retries.
+	LastUpdateCheck *time.Time `json:"last_update_check,omitempty"`
 }
 
 // EngramRecord is the managed engram backend configuration. It never stores the
@@ -210,6 +215,18 @@ func (s *Store) SetEngram(rec *EngramRecord) error {
 	}
 	st.Engram = rec
 	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetLastUpdateCheck records the time of the last successful GitHub release
+// check. Only successful checks should advance this; failed checks must not
+// call this method so the next launch retries.
+func (s *Store) SetLastUpdateCheck(t time.Time) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.LastUpdateCheck = &t
 	return s.Save(st)
 }
 
