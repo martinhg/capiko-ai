@@ -29,6 +29,9 @@ type State struct {
 	// Engram records the managed engram backend configuration; nil = unmanaged.
 	// Sync re-applies the engram MCP wiring only when it is set, mirroring persona/SDD.
 	Engram *EngramRecord `json:"engram,omitempty"`
+	// TriggerRules is true once the user enables declarative trigger rules;
+	// sync re-applies them only when managed, mirroring persona/SDD.
+	TriggerRules bool `json:"trigger_rules,omitempty"`
 	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
 	// means "never checked" — the next launch will always call the API. The
 	// timestamp is advanced only on a successful check, so failures don't
@@ -238,6 +241,18 @@ func (s *Store) SetInstructionsInstalled(on bool) error {
 		return err
 	}
 	st.InstructionsInstalled = on
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetTriggerRules records whether declarative trigger rules are managed by
+// capiko, so sync re-applies them only when enabled.
+func (s *Store) SetTriggerRules(on bool) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.TriggerRules = on
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

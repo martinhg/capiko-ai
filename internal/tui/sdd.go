@@ -193,7 +193,10 @@ func (s *sddScreen) cycle(delta int) {
 func (s *sddScreen) applyCmd() tea.Cmd {
 	host, store, bkp, models, strict := s.svc.host, s.svc.state, s.svc.backup, s.models, s.strict
 	return func() tea.Msg {
-		return sddAppliedMsg{err: applySDD(host, store, bkp, models, strict)}
+		if err := applySDD(host, store, bkp, models, strict); err != nil {
+			return sddAppliedMsg{err: err}
+		}
+		return sddAppliedMsg{err: applyTriggerRules(host, store, bkp, true)}
 	}
 }
 
