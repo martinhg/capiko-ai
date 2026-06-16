@@ -175,6 +175,25 @@ func TestRenderArtifactStore(t *testing.T) {
 	}
 }
 
+func TestRenderEngramLifecycleGuardrails(t *testing.T) {
+	out := Render(nil, false)
+	for _, want := range []string{
+		"### Engram lifecycle guardrails",
+		"needs_review",
+		"mem_review",
+		"forward-compatible",
+		"Never mark an observation as `reviewed` automatically",
+		"mem_context",
+		"mem_search",
+		"mem_save",
+		"mem_update",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("engram lifecycle guardrails section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderStrictTDD(t *testing.T) {
 	out := Render(nil, true)
 	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {

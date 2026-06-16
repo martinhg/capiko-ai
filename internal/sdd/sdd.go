@@ -99,6 +99,17 @@ func Render(assignments map[string]string, strictTDD bool) string {
 	b.WriteString("In `engram`/`hybrid` mode, read artifacts directly with `mem_search` + `mem_get_observation` (search results are truncated previews — always fetch the full observation). The native `sdd-status` engine reads the OpenSpec files only, so in those modes route from engram directly rather than the engine. Engram Cloud syncs engram memories; OpenSpec files travel via git.\n\n")
 	b.WriteString("Multi-repo: each repo carries a `.engram/config.json` naming its project, so engram attributes memories to the right repo even when a parent folder is the workspace root.\n\n")
 
+	b.WriteString("### Engram lifecycle guardrails\n\n")
+	b.WriteString("Engram observations may carry lifecycle state (`active`, `needs_review`). These guardrails are forward-compatible: they are a no-op on engram versions that do not expose lifecycle, and activate automatically when the server does.\n\n")
+	b.WriteString("**Reading memories:**\n\n")
+	b.WriteString("- Prefer `mem_review` for lifecycle-aware queries when the tool is available. It surfaces staleness metadata alongside content.\n")
+	b.WriteString("- Fall back to `mem_context` / `mem_search` on older engram versions that do not expose `mem_review`. The absence of lifecycle fields means the observation is implicitly `active`.\n")
+	b.WriteString("- When an observation is `needs_review`, treat it with extra caution: flag it to the user before acting on it, note that it may be outdated, and prefer corroborating evidence from the codebase or git history.\n\n")
+	b.WriteString("**Writing lifecycle state:**\n\n")
+	b.WriteString("- Never mark an observation as `reviewed` automatically. Only the user may confirm that a `needs_review` observation is still valid.\n")
+	b.WriteString("- When saving new observations (`mem_save`), do not set lifecycle fields — let engram assign the default (`active`).\n")
+	b.WriteString("- When updating an existing observation (`mem_update`), preserve its current lifecycle state unless the user explicitly asks to change it.\n\n")
+
 	b.WriteString("### Model assignments\n\n")
 	b.WriteString("Run the session on the most capable assigned model. Delegate each phase to its model via the Task tool's `model` parameter. Copilot honors any model whose cost is ≤ the session model and downgrades anything more expensive, so keep the orchestrator on the top model. `default` means inherit the session model.\n\n")
 	b.WriteString("| Phase | Model |\n| --- | --- |\n")
