@@ -62,6 +62,61 @@ func TestRenderTriageGate(t *testing.T) {
 	}
 }
 
+func TestRenderResultContract(t *testing.T) {
+	out := Render(nil, false)
+	for _, want := range []string{
+		"### Result contract",
+		"status",
+		"executive_summary",
+		"artifacts",
+		"next_recommended",
+		"risks",
+		"skill_resolution",
+		"malformed result",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("result contract section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderExecutionMode(t *testing.T) {
+	out := Render(nil, false)
+	for _, want := range []string{
+		"### Execution mode",
+		"Automatic",
+		"Interactive",
+		"ask once and cache",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("execution mode section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderAutomaticModeGatekeeper(t *testing.T) {
+	out := Render(nil, false)
+	for _, want := range []string{
+		"### Automatic mode gatekeeper",
+		"Inline checks (all phases)",
+		"Result contract completeness",
+		"Artifact retrievability",
+		"Scope consistency",
+		"Fresh-context review",
+		"Anti-hallucination",
+		"Routing coherence",
+		"On gate failure",
+		"Re-run the failed phase once",
+		"corrective feedback",
+		"retry also fails",
+		"Never skip a gate failure",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("automatic mode gatekeeper section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderSkillResolution(t *testing.T) {
 	out := Render(nil, false)
 	for _, want := range []string{
