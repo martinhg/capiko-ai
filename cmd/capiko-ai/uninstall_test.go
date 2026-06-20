@@ -65,8 +65,10 @@ func TestUninstallCommandTextOutput(t *testing.T) {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "removed") && !strings.Contains(out, "capiko-hello") {
-		t.Errorf("text output missing uninstall summary:\n%s", out)
+	// Both facts are required: the removal action AND the item name. Using && here
+	// would let the test pass if one silently regressed.
+	if !strings.Contains(out, "removed") || !strings.Contains(out, "capiko-hello") {
+		t.Errorf("text output missing uninstall summary (need both 'removed' and item name):\n%s", out)
 	}
 }
 

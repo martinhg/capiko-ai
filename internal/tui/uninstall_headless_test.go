@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
@@ -195,6 +196,16 @@ func TestUninstallAll_SkillErrorFailsFast(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error when UninstallSkill fails")
 	}
+
+	// Fail-fast must not have recorded a phantom removal: the skill that could
+	// not be removed must still be present in state (state matches disk).
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Skills[sk.Name]; !ok {
+		t.Errorf("skill %s failed to uninstall but was cleared from state — divergence", sk.Name)
+	}
 }
 
 func TestUninstallAll_AgentErrorFailsFast(t *testing.T) {
@@ -219,13 +230,27 @@ func TestUninstallAll_AgentErrorFailsFast(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error when UninstallAgent fails")
 	}
+
+	// Fail-fast must not have recorded a phantom removal: the agent that could
+	// not be removed must still be present in state.
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Agents[a.Name]; !ok {
+		t.Errorf("agent %s failed to uninstall but was cleared from state — divergence", a.Name)
+	}
 }
 
-func TestUninstallAll_NilStore_FallsBackToDiskScan(t *testing.T) {
+func TestUninstallAll_NilStore_Refuses(t *testing.T) {
+	// A nil store is a failure condition (DefaultStore() could not resolve a home
+	// dir), NOT a request to wipe the disk. Because uninstall is destructive and
+	// capiko cannot tell its own items from user-authored ones without state, it
+	// must REFUSE — and must not delete anything on disk.
 	host := uninstallHost(t)
 	bkp := backup.NewStore(t.TempDir())
 
-	// Write skills and agents directly to disk (no state store).
+	// Write skills and agents directly to disk to prove they survive the refusal.
 	cat := testCatalog()
 	agents := testAgentCatalog()
 	for _, sk := range cat {
@@ -247,21 +272,88 @@ func TestUninstallAll_NilStore_FallsBackToDiskScan(t *testing.T) {
 	}
 
 	res, err := UninstallAll(host, nil, bkp)
-	if err != nil {
-		t.Fatalf("UninstallAll with nil store: %v", err)
+	if err == nil {
+		t.Fatal("UninstallAll with a nil store must refuse, not delete everything on disk")
 	}
-	if len(res.RemovedSkills) != len(cat) {
-		t.Errorf("RemovedSkills = %v, want %d items (disk scan)", res.RemovedSkills, len(cat))
-	}
-	if len(res.RemovedAgents) != len(agents) {
-		t.Errorf("RemovedAgents = %v, want %d items (disk scan)", res.RemovedAgents, len(agents))
+	if res.TotalChanged() != 0 {
+		t.Errorf("refused uninstall must report no changes, got %+v", res)
 	}
 
-	// Everything must be gone from disk.
+	// Nothing on disk may have been touched.
 	for _, sk := range cat {
-		if _, err := os.Stat(filepath.Join(host.SkillsDir, sk.Name)); !os.IsNotExist(err) {
-			t.Errorf("skill %s must be removed when nil store falls back to disk", sk.Name)
+		if _, statErr := os.Stat(filepath.Join(host.SkillsDir, sk.Name, "SKILL.md")); statErr != nil {
+			t.Errorf("skill %s must survive a refused (nil-store) uninstall: %v", sk.Name, statErr)
 		}
+	}
+	for _, a := range agents {
+		if _, statErr := os.Stat(filepath.Join(host.AgentsDir, a.Name+".agent.md")); statErr != nil {
+			t.Errorf("agent %s must survive a refused (nil-store) uninstall: %v", a.Name, statErr)
+		}
+	}
+}
+
+func TestUninstallAll_PartialFailureKeepsStateConsistent(t *testing.T) {
+	// When a removal fails mid-loop, the items already removed from disk MUST be
+	// flushed to state before the error returns — state can never claim an item
+	// is installed after it has been deleted from disk.
+	host := uninstallHost(t)
+	store := state.NewStore(t.TempDir())
+	bkp := backup.NewStore(t.TempDir())
+	seedInstalled(t, host, store)
+
+	cat := testCatalog()
+	if len(cat) < 2 {
+		t.Skip("need >=2 skills to exercise a mid-loop partial failure")
+	}
+
+	// UninstallAll processes skills in sorted order. Sabotage the LAST one so the
+	// earlier skills are removed (and recorded) before the failure fires.
+	names := make([]string, len(cat))
+	for i, sk := range cat {
+		names[i] = sk.Name
+	}
+	sort.Strings(names)
+	bad := names[len(names)-1]
+
+	badDir := filepath.Join(host.SkillsDir, bad)
+	if err := os.RemoveAll(badDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(badDir, 0o755); err != nil { // dir without SKILL.md → UninstallSkill refuses
+		t.Fatal(err)
+	}
+
+	_, err := UninstallAll(host, store, bkp)
+	if err == nil {
+		t.Fatal("expected a mid-loop failure on the sabotaged skill")
+	}
+
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Invariant: no skill may be gone from disk yet still present in state.
+	removedAtLeastOne := false
+	for _, sk := range cat {
+		_, statErr := os.Stat(filepath.Join(host.SkillsDir, sk.Name))
+		goneFromDisk := os.IsNotExist(statErr)
+		_, inState := st.Skills[sk.Name]
+		if goneFromDisk && inState {
+			t.Errorf("skill %s removed from disk but still recorded in state — divergence", sk.Name)
+		}
+		if goneFromDisk {
+			removedAtLeastOne = true
+		}
+	}
+
+	// The sabotaged skill must remain in state (it was never removed).
+	if _, ok := st.Skills[bad]; !ok {
+		t.Errorf("sabotaged skill %s must remain recorded in state", bad)
+	}
+	// And the test must have actually exercised a partial removal before failing.
+	if !removedAtLeastOne {
+		t.Error("expected at least one skill removed before the failure (partial removal not exercised)")
 	}
 }
 
