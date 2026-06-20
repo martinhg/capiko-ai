@@ -1,0 +1,71 @@
+# capiko-ai
+
+> capiko-ai turns the GitHub Copilot CLI into a senior teammate that already knows
+> your team's playbook. It installs a curated catalog of skills, a teaching-first
+> persona, cross-session memory (engram), and a full Spec-Driven Development (SDD)
+> workflow into `~/.copilot`. capiko **directs**; Copilot **executes** — capiko
+> never calls a model itself, so everything it installs is reproducible and auditable.
+
+It targets GitHub Copilot only and ships as a single native Go binary (a Bubbletea
+TUI plus headless subcommands). Configs land in `~/.copilot/`; state, backups, and
+drift tracking live in `~/.capiko/`. Module path: `github.com/martinhg/capiko-ai`.
+License: MIT.
+
+## Install
+
+- Homebrew (macOS/Linux): `brew install martinhg/homebrew-tap/capiko-ai`
+- Script (macOS/Linux): `curl -sL https://raw.githubusercontent.com/martinhg/capiko-ai/main/scripts/install.sh | bash`
+- PowerShell (Windows): `irm https://raw.githubusercontent.com/martinhg/capiko-ai/main/scripts/install.ps1 | iex`
+- Scoop (Windows): `scoop bucket add capiko-ai https://github.com/martinhg/scoop-bucket && scoop install capiko-ai`
+- From source (Go 1.26+): `go install github.com/martinhg/capiko-ai/cmd/capiko-ai@latest`
+
+## CLI surface
+
+Run with no arguments to launch the interactive TUI. Headless subcommands:
+
+- `capiko-ai install [--all] [--json]` — install skills, agents, persona, and configs non-interactively
+- `capiko-ai sync [--json]` — reconcile installed configs with the catalog (auto-repair drift)
+- `capiko-ai uninstall [--json]` — remove capiko-managed configs
+- `capiko-ai doctor [--json]` — read-only ecosystem diagnostics (exit non-zero on failure)
+- `capiko-ai sdd-status [--json]` — deterministic SDD workflow state for a change
+- `capiko-ai sdd-continue` — advance the next dependency-ready SDD phase
+- `capiko-ai skill-registry` — index installed skills by trigger and path
+- `capiko-ai version` — print the version
+
+Exit codes for headless commands: 0 success, 1 error, 2 Copilot not found.
+
+## What capiko installs
+
+- **Skills** (`~/.copilot/skills/<name>/SKILL.md`) — 21 embedded skills Copilot auto-discovers:
+  the 10-skill SDD pipeline (explore, propose, spec, design, tasks, apply, verify, archive,
+  init, onboard) plus `sdd-shared`, `skill-creator`, `skill-registry`, `codebase-docs`,
+  the 4R review set (`review-risk`, `review-readability`, `review-reliability`, `review-resilience`),
+  and the capiko house skills (`capiko-conventions`, `capiko-pr`, `capiko-hello`).
+- **Copilot agents** (`~/.copilot/agents/<name>.agent.md`) — 8 SDD-phase agents plus a
+  coordinator; the real delegation targets the SDD workflow routes to.
+- **Persona** (`~/.copilot/copilot-instructions.md`) — a teaching-first (Rioplatense),
+  Neutral, or None instruction block shaping how Copilot talks and reasons.
+- **Scoped instructions** (`~/.copilot/instructions/*.instructions.md`) — applied per
+  matching file via `applyTo` globs.
+- **Engram memory** (`~/.copilot/mcp-config.json`, VS Code `mcp.json`) — wires the
+  [engram](https://github.com/Gentleman-Programming/engram) MCP server for cross-session
+  memory (local or `hybrid` cloud).
+- **Safety net** (`~/.capiko/`) — snapshot-before-mutate backups, per-skill checksum
+  state, drift detection, and self-update.
+
+## Architecture notes
+
+- capiko is an **install-time file writer**, not a runtime proxy or daemon. It writes
+  static configs Copilot auto-discovers; it never intercepts the request path.
+- It ships its own **native SDD engine** in Go (`internal/sddstatus`): `sdd-status` and
+  `sdd-continue` compute workflow state deterministically rather than asking a model.
+- It **configures** engram (never provisions/downloads it), the same boundary it keeps
+  for any external tool.
+
+## Docs
+
+- [README](https://github.com/martinhg/capiko-ai/blob/main/README.md) — full overview, quickstart, menu, SDD workflow
+- [Headless CLI](https://github.com/martinhg/capiko-ai/blob/main/README.md#-headless-cli) — scripting, CI, dotfiles
+- [Spec-Driven Development](https://github.com/martinhg/capiko-ai/blob/main/README.md#-spec-driven-development) — the 8-phase pipeline
+- [How it works](https://github.com/martinhg/capiko-ai/blob/main/README.md#-how-it-works) — the direct/execute split
+- [Releases](https://github.com/martinhg/capiko-ai/releases) — changelog and pre-built binaries
