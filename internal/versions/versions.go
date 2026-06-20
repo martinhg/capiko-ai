@@ -8,3 +8,9 @@ package versions
 // against. capiko configures Copilot; this records the version it expects.
 // renovate: datasource=npm depName=@github/copilot
 const CopilotCLI = "1.0.60"
+
+// Engram is the recommended engram version. capiko configures (never provisions)
+// engram, so this only drives an "engram is outdated" advisory in doctor — capiko
+// never installs or upgrades the binary itself.
+// renovate: datasource=github-releases depName=Gentleman-Programming/engram
+const Engram = "1.17.0"

@@ -126,6 +126,38 @@ func TestRenderTextError(t *testing.T) {
 	}
 }
 
+func TestRenderTextWarnings(t *testing.T) {
+	r := CommandResult{
+		OK:      true,
+		Command: "sync",
+		Items: ItemChanges{
+			InstalledSkills: []string{"capiko-dev"},
+		},
+		TotalChanged: 1,
+		Warnings:     []string{"engram 1.16.3 is behind the recommended 1.17.0"},
+	}
+	var buf bytes.Buffer
+	RenderText(&buf, r)
+	out := buf.String()
+	if !strings.Contains(out, "engram 1.16.3 is behind") {
+		t.Errorf("warning not rendered:\n%s", out)
+	}
+	if !strings.Contains(out, "1 item(s) installed.") {
+		t.Errorf("warning should not suppress the summary:\n%s", out)
+	}
+}
+
+func TestRenderJSONWarningsOmittedWhenEmpty(t *testing.T) {
+	r := CommandResult{OK: true, Command: "sync", TotalChanged: 0}
+	var buf bytes.Buffer
+	if err := RenderJSON(&buf, r); err != nil {
+		t.Fatalf("RenderJSON returned error: %v", err)
+	}
+	if strings.Contains(buf.String(), "warnings") {
+		t.Errorf("warnings key should be omitted when empty:\n%s", buf.String())
+	}
+}
+
 func TestRenderJSONSchema(t *testing.T) {
 	r := CommandResult{
 		OK:      true,

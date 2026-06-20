@@ -12,12 +12,13 @@ import (
 	"github.com/martinhg/capiko-ai/internal/drift"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
+	"github.com/martinhg/capiko-ai/internal/versions"
 )
 
 // gatherDoctorInputs collects the live environment for the doctor report. It is a
 // package var so tests can stub it without touching the real PATH, home, or state.
 var gatherDoctorInputs = func() doctor.Inputs {
-	in := doctor.Inputs{Env: sysinfo.Detect(), Now: time.Now()}
+	in := doctor.Inputs{Env: sysinfo.Detect(), Now: time.Now(), RecommendedEngram: versions.Engram}
 
 	host, _ := copilot.Detect()
 	in.CopilotHost = host

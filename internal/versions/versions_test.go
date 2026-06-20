@@ -13,6 +13,7 @@ func TestPinnedVersionsAreConcrete(t *testing.T) {
 
 	pins := map[string]string{
 		"CopilotCLI": CopilotCLI,
+		"Engram":     Engram,
 	}
 	for name, value := range pins {
 		if !semverish.MatchString(value) {
