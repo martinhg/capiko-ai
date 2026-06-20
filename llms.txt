@@ -26,7 +26,7 @@ Run with no arguments to launch the interactive TUI. Headless subcommands:
 - `capiko-ai install [--all] [--json]` — install skills, agents, persona, and configs non-interactively
 - `capiko-ai sync [--json]` — reconcile installed configs with the catalog (auto-repair drift)
 - `capiko-ai uninstall [--json]` — remove capiko-managed configs
-- `capiko-ai doctor [--json]` — read-only ecosystem diagnostics (exit non-zero on failure)
+- `capiko-ai doctor [--json] [--repair]` — ecosystem diagnostics (exit non-zero on failure); --repair re-applies the managed catalog when drift is found
 - `capiko-ai sdd-status [--json]` — deterministic SDD workflow state for a change
 - `capiko-ai sdd-continue` — advance the next dependency-ready SDD phase
 - `capiko-ai skill-registry` — index installed skills by trigger and path
