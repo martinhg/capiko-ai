@@ -25,7 +25,8 @@
 [SDD workflow](#-spec-driven-development) ·
 [How it works](#-how-it-works) ·
 [Docs](#-documentation) ·
-[Contributing](#-contributing)
+[Contributing](#-contributing) ·
+[llms.txt](llms.txt)
 
 </div>
 
