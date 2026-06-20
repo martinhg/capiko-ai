@@ -28,6 +28,9 @@ type CommandResult struct {
 	Items        ItemChanges `json:"items"`
 	TotalChanged int         `json:"total_changed"`
 	Error        string      `json:"error"`
+	// Warnings are non-fatal advisories (e.g. an outdated engram binary) that do
+	// not affect OK or the exit code. Omitted from JSON when empty.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // FromReconcileResult converts a tui.ReconcileResult (plus the error from the
@@ -120,5 +123,9 @@ func RenderText(w io.Writer, r CommandResult) {
 		fmt.Fprintf(w, "%d item(s) removed.\n", r.TotalChanged)
 	default:
 		fmt.Fprintf(w, "%d item(s) changed.\n", r.TotalChanged)
+	}
+
+	for _, warning := range r.Warnings {
+		fmt.Fprintf(w, "! %s\n", warning)
 	}
 }

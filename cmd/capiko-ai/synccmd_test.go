@@ -249,6 +249,41 @@ func TestSyncCommandAutoRepairNilStore(t *testing.T) {
 	}
 }
 
+// withStubEngramAdvisory swaps the engram advisory seam for the duration of a test.
+func withStubEngramAdvisory(t *testing.T, advisory string) {
+	t.Helper()
+	prev := engramAdvisory
+	engramAdvisory = func(_ *state.Store) string { return advisory }
+	t.Cleanup(func() { engramAdvisory = prev })
+}
+
+func TestSyncCommandSurfacesEngramAdvisory(t *testing.T) {
+	withStubSyncInputs(t, readySyncInputs(t))
+	withStubEngramAdvisory(t, "engram 1.16.3 is behind the recommended 1.17.0")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := syncCommand("sync", nil, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "engram 1.16.3 is behind") {
+		t.Errorf("expected engram advisory in sync output, got:\n%s", buf.String())
+	}
+}
+
+func TestSyncCommandNoEngramAdvisoryWhenEmpty(t *testing.T) {
+	withStubSyncInputs(t, readySyncInputs(t))
+	withStubEngramAdvisory(t, "") // not managed / up to date
+
+	var buf bytes.Buffer
+	if _, _, err := syncCommand("sync", []string{"--json"}, &buf); err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	if strings.Contains(buf.String(), "warnings") {
+		t.Errorf("no advisory should mean no warnings key:\n%s", buf.String())
+	}
+}
+
 // Sanity: gatherSyncInputs default var must exist and be callable.
 func TestGatherSyncInputsIsAFunctionVar(t *testing.T) {
 	if gatherSyncInputs == nil {

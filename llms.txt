@@ -24,7 +24,7 @@ License: MIT.
 Run with no arguments to launch the interactive TUI. Headless subcommands:
 
 - `capiko-ai install [--all] [--json]` — install skills, agents, persona, and configs non-interactively
-- `capiko-ai sync [--json]` — reconcile installed configs with the catalog (auto-repair drift)
+- `capiko-ai sync [--json]` — reconcile installed configs with the catalog (auto-repair drift); warns when a managed engram binary is outdated
 - `capiko-ai uninstall [--json]` — remove capiko-managed configs
 - `capiko-ai doctor [--json]` — read-only ecosystem diagnostics (exit non-zero on failure)
 - `capiko-ai sdd-status [--json]` — deterministic SDD workflow state for a change

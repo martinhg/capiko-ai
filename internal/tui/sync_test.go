@@ -220,6 +220,30 @@ func TestRunSync_AgentCountReturned(t *testing.T) {
 // TestSyncDoneView_ShowsAgentsSection asserts that when sync completes with an agent
 // catalog, the done view includes a distinct "Agents" section listing each agent name.
 // Spec: TUISurfacesAgentsAlongsideSkills / Scenario: Install screen shows agents.
+func TestSyncDoneView_ShowsEngramAdvisory(t *testing.T) {
+	s := &syncScreen{
+		catalog:       testCatalog(),
+		state:         syncDone,
+		skillNames:    []string{"capiko-hello"},
+		engramWarning: "engram 1.16.3 is behind the recommended 1.17.0",
+	}
+	view := s.View()
+	if !strings.Contains(view, "engram 1.16.3 is behind") {
+		t.Errorf("syncDone view should surface the engram advisory, got:\n%s", view)
+	}
+}
+
+func TestSyncDoneView_NoEngramAdvisoryWhenEmpty(t *testing.T) {
+	s := &syncScreen{
+		catalog:    testCatalog(),
+		state:      syncDone,
+		skillNames: []string{"capiko-hello"},
+	}
+	if strings.Contains(s.View(), "behind the recommended") {
+		t.Errorf("syncDone view should not show an advisory when none is set:\n%s", s.View())
+	}
+}
+
 func TestSyncDoneView_ShowsAgentsSection(t *testing.T) {
 	agents := testAgentCatalog()
 	s := &syncScreen{

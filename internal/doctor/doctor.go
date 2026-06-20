@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/release"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
@@ -92,6 +93,10 @@ type Inputs struct {
 	AgentDrift  []string       // from drift.StaleAgents(...)
 	EngramStale bool           // from drift.StaleEngram(...): managed entry drifted or missing
 	Now         time.Time      // from time.Now(); enables relative "checked X ago" reporting (zero = absolute only)
+
+	// RecommendedEngram is the engram version capiko configures against (from
+	// versions.Engram). It drives the "Engram version" advisory; "" disables it.
+	RecommendedEngram string
 }
 
 // requiredDeps are the prerequisites capiko cannot work without; each gets its
@@ -165,6 +170,12 @@ func Evaluate(in Inputs) Report {
 	// Engram backend (optional). Only meaningful when the user has it managed.
 	r.Checks = append(r.Checks, engramCheck(in))
 
+	// Engram version: a separate advisory when the managed engram binary is behind
+	// the recommended version. Only emitted when engram is managed AND present.
+	if c, ok := engramVersionCheck(in); ok {
+		r.Checks = append(r.Checks, c)
+	}
+
 	return r
 }
 
@@ -193,6 +204,43 @@ func engramCheck(in Inputs) Check {
 		}
 	}
 	return Check{Name: "Engram backend", Status: Pass, Detail: "configured (mode " + in.State.Engram.ArtifactMode + ")"}
+}
+
+// engramVersionCheck reports whether the installed engram binary is behind the
+// recommended version. It is emitted only when engram is managed AND present: an
+// unmanaged or missing engram is already handled by engramCheck, and capiko never
+// upgrades engram itself (it configures, it does not provision). ok is false when
+// no version line should be shown.
+func engramVersionCheck(in Inputs) (Check, bool) {
+	managed := in.State != nil && in.State.Engram != nil && in.State.Engram.Enabled
+	if !managed {
+		return Check{}, false
+	}
+	dep, ok := findDep(in.Env, "engram")
+	if !ok || !dep.Found {
+		return Check{}, false
+	}
+	if in.RecommendedEngram != "" && release.IsNewer(dep.Version, in.RecommendedEngram) {
+		return Check{
+			Name:   "Engram version",
+			Status: Warn,
+			Detail: fmt.Sprintf("engram %s is behind the recommended %s", versionLabel(dep.Version), in.RecommendedEngram),
+			Remedy: "upgrade engram from https://github.com/Gentleman-Programming/engram (capiko configures engram, it does not install it)",
+		}, true
+	}
+	detail := "engram " + versionLabel(dep.Version)
+	if in.RecommendedEngram != "" {
+		detail += " (recommended " + in.RecommendedEngram + ")"
+	}
+	return Check{Name: "Engram version", Status: Pass, Detail: detail}, true
+}
+
+// versionLabel renders a possibly-empty version string for display.
+func versionLabel(v string) string {
+	if v == "" {
+		return "(version unknown)"
+	}
+	return v
 }
 
 // updateCheck reports the last successful GitHub release check. A nil state or
