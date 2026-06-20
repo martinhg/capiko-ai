@@ -1,7 +1,9 @@
 package doctor
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/state"
@@ -176,6 +178,44 @@ func TestEvaluateDriftIgnoredWhenUnmanaged(t *testing.T) {
 	}
 	if !r.Healthy() {
 		t.Error("an unmanaged install with no real problems is healthy")
+	}
+}
+
+func TestEvaluateUpdateCheckNeverChecked(t *testing.T) {
+	// A managed install that has never recorded a successful release check still
+	// reports a Pass line — "never checked" is informational, not a problem.
+	r := Evaluate(Inputs{Env: healthyEnv(), State: &state.State{Version: "1.2.1"}})
+
+	c := find(t, r, "Update check")
+	if c.Status != Pass {
+		t.Errorf("Update check: want Pass, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "no successful update check") {
+		t.Errorf("Update check: want never-checked detail, got %q", c.Detail)
+	}
+	if !r.Healthy() {
+		t.Error("a never-checked update state must not break health")
+	}
+}
+
+func TestEvaluateUpdateCheckReportsLastTime(t *testing.T) {
+	last := time.Date(2026, 6, 20, 14, 3, 0, 0, time.UTC)
+	now := last.Add(2 * time.Hour)
+	r := Evaluate(Inputs{
+		Env:   healthyEnv(),
+		State: &state.State{Version: "1.2.1", LastUpdateCheck: &last},
+		Now:   now,
+	})
+
+	c := find(t, r, "Update check")
+	if c.Status != Pass {
+		t.Errorf("Update check: want Pass, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "2026-06-20 14:03") {
+		t.Errorf("Update check: want the last-check timestamp in detail, got %q", c.Detail)
+	}
+	if !strings.Contains(c.Detail, "2h0m0s ago") {
+		t.Errorf("Update check: want the relative age in detail, got %q", c.Detail)
 	}
 }
 

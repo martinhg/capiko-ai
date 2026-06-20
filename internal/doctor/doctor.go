@@ -8,6 +8,7 @@ package doctor
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/state"
@@ -90,6 +91,7 @@ type Inputs struct {
 	SkillDrift  []string       // from drift.Stale(...)
 	AgentDrift  []string       // from drift.StaleAgents(...)
 	EngramStale bool           // from drift.StaleEngram(...): managed entry drifted or missing
+	Now         time.Time      // from time.Now(); enables relative "checked X ago" reporting (zero = absolute only)
 }
 
 // requiredDeps are the prerequisites capiko cannot work without; each gets its
@@ -143,6 +145,11 @@ func Evaluate(in Inputs) Report {
 		r.add("State file", Pass, "valid (version "+in.State.Version+")", "")
 	}
 
+	// Update check: when capiko last successfully checked GitHub for a newer
+	// release (the 6h cooldown is driven off this timestamp). Informational —
+	// never a failure, since a fresh install simply has not checked yet.
+	r.Checks = append(r.Checks, updateCheck(in.State, in.Now))
+
 	// Drift: installed assets no longer match the embedded catalog. Only
 	// meaningful against a managed baseline — without one, every catalog entry
 	// looks "stale", so report n/a instead of crying wolf.
@@ -186,6 +193,24 @@ func engramCheck(in Inputs) Check {
 		}
 	}
 	return Check{Name: "Engram backend", Status: Pass, Detail: "configured (mode " + in.State.Engram.ArtifactMode + ")"}
+}
+
+// updateCheck reports the last successful GitHub release check. A nil state or
+// nil timestamp means capiko has never checked yet (a fresh install), which is
+// reported as a Pass — it is informational, not a problem. When Now is set, the
+// detail includes the relative age so the user can tell whether the next launch
+// will re-check (the cooldown is 6h).
+func updateCheck(st *state.State, now time.Time) Check {
+	if st == nil || st.LastUpdateCheck == nil {
+		return Check{Name: "Update check", Status: Pass, Detail: "no successful update check recorded yet"}
+	}
+	last := st.LastUpdateCheck.UTC()
+	stamp := last.Format("2006-01-02 15:04 MST")
+	if now.IsZero() {
+		return Check{Name: "Update check", Status: Pass, Detail: "last successful check: " + stamp}
+	}
+	ago := now.Sub(last).Round(time.Minute)
+	return Check{Name: "Update check", Status: Pass, Detail: fmt.Sprintf("last successful check: %s (%s ago)", stamp, ago)}
 }
 
 func driftStatus(stale []string) Status {
