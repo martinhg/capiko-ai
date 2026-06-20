@@ -1,0 +1,35 @@
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title follows Conventional Commits
+        # The PR title is squash-merged into the commit subject, so linting it
+        # keeps the git history conventional (a prerequisite for release automation).
+        # The title is passed via env (never interpolated into the script) to avoid
+        # shell injection from untrusted PR input.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|chore|docs|refactor|perf|test|build|ci|style|revert)(\([a-z0-9._/-]+\))?!?: .+'
+          if printf '%s' "$PR_TITLE" | grep -Eq "$pattern"; then
+            echo "✓ PR title follows Conventional Commits: $PR_TITLE"
+            exit 0
+          fi
+          echo "::error::PR title must follow Conventional Commits — see https://www.conventionalcommits.org/en/v1.0.0/"
+          {
+            echo "Got:      $PR_TITLE"
+            echo "Expected: <type>(<optional scope>)<optional !>: <subject>"
+            echo "Types:    feat, fix, chore, docs, refactor, perf, test, build, ci, style, revert"
+            echo "Examples: feat(headless): add uninstall command"
+            echo "          fix: handle empty state.json"
+          } >&2
+          exit 1
