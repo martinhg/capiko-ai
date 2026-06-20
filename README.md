@@ -166,7 +166,7 @@ machine-readable output.
 | `capiko-ai install` | Install every catalog skill + agent not already present (additive — never touches what's already there). | `--all`, `--json` |
 | `capiko-ai sync` | Overwrite all installed skills + agents to match the catalog; re-applies the persona, SDD, and engram blocks. | `--auto-repair`, `--json` |
 | `capiko-ai uninstall` | Remove every capiko-managed skill + agent and clear them from state. Leaves persona/SDD/engram blocks untouched. | `--all`, `--json` |
-| `capiko-ai doctor` | Read-only ecosystem health check (OS, prereqs, Copilot init, state, drift, engram). Non-zero exit on failure. | `--json` |
+| `capiko-ai doctor` | Ecosystem health check (OS, prereqs, Copilot init, state, drift, engram). Non-zero exit on failure. `--repair` re-applies the managed catalog when drift is found. | `--json`, `--repair` |
 | `capiko-ai sdd-status` · `sdd-continue` | Native SDD engine: print or advance the deterministic workflow state. | |
 | `capiko-ai skill-registry` | Print the skill index so an orchestrator can resolve exact `SKILL.md` paths. | |
 | `capiko-ai version` | Print the installed version and the targeted Copilot CLI version. | `-v`, `--version` |
