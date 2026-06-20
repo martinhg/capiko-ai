@@ -36,6 +36,39 @@ persona) to change it.
 | Upgrade tools | Self-update capiko to the latest release, then restart. |
 | Upgrade + sync | Upgrade, restart, and sync skills with the new catalog. |
 
+## Headless CLI
+
+Every install operation also runs non-interactively — no TUI, no TTY — so capiko fits
+CI, dotfiles bootstrap, and automation. Add `--json` to any command for machine-readable
+output.
+
+| Command | What it does | Flags |
+|---|---|---|
+| `capiko-ai install` | Install every catalog skill + agent not already present (additive). | `--all`, `--json` |
+| `capiko-ai sync` | Overwrite all installed skills + agents to match the catalog; re-applies the persona, SDD, and engram blocks. | `--auto-repair`, `--json` |
+| `capiko-ai uninstall` | Remove every capiko-managed skill + agent and clear them from state (leaves persona/SDD/engram blocks alone). | `--all`, `--json` |
+| `capiko-ai doctor` | Read-only ecosystem health check; non-zero exit on failure. | `--json` |
+| `capiko-ai sdd-status` · `sdd-continue` | Native SDD engine: print or advance the deterministic workflow state. | |
+| `capiko-ai skill-registry` | Print the skill index for an orchestrator to resolve `SKILL.md` paths. | |
+| `capiko-ai version` | Print the installed version and the targeted Copilot CLI version. | `-v`, `--version` |
+
+**Exit codes** (`install` / `sync` / `uninstall`): `0` success · `1` error · `2` Copilot
+CLI not found.
+
+```bash
+# Dotfiles / CI bootstrap
+capiko-ai install --all --json
+capiko-ai sync --auto-repair        # only writes when drift is detected
+capiko-ai doctor --json || echo "capiko environment unhealthy"
+```
+
+Notes:
+
+- `sync --auto-repair` checks for drift first and exits cleanly without writing when
+  nothing changed — safe to call repeatedly from post-upgrade hooks.
+- `uninstall` refuses (rather than guessing) when the state store is unavailable, so it
+  never deletes files capiko didn't install.
+
 ## The SDD workflow
 
 Once configured, ask Copilot to make a substantial change and it runs Spec-Driven

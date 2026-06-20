@@ -4,10 +4,10 @@ The project's knowledge base, in three layers.
 
 ## For users
 
-- [usage.md](usage.md) — the install flow, the menu, and the SDD workflow.
+- [usage.md](usage.md) — the install flow, the menu, the headless CLI, and the SDD workflow.
 - [capabilities.md](capabilities.md) — the full feature tour: everything capiko can do.
 - [engram-cloud-setup.md](engram-cloud-setup.md) — standing up shared team memory.
-- The root [README](../README.md) — install, quick path, status.
+- The root [README](../README.md) — install, quickstart, headless CLI, status.
 
 ## For maintainers
 
@@ -16,7 +16,8 @@ The project's knowledge base, in three layers.
 
 ## For contributors (codebase guide)
 
-Read these before changing the code:
+Start with the root [CONTRIBUTING.md](../CONTRIBUTING.md) for the workflow and the gate,
+then read these before changing the code:
 
 - [codebase/mental-model.md](codebase/mental-model.md) — what capiko is and is not.
 - [codebase/repository-map.md](codebase/repository-map.md) — which package owns

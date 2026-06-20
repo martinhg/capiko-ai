@@ -6,11 +6,12 @@ Use this when you know **what** you need to change but not **where** it belongs.
 
 | Path | Owns | Do not put here |
 |---|---|---|
-| `cmd/capiko-ai/` | Binary entry point; the `version`, `sdd-status`, `sdd-continue`, and `skill-registry` subcommands (resolved before the TUI); post-upgrade sync and re-exec after self-update. | Business logic, file mutation. |
-| `internal/tui/` | Bubbletea model, screen routing, async messages, every interactive screen and flow. | Domain rules, raw file IO details. |
+| `cmd/capiko-ai/` | Binary entry point; the `version`, `sdd-status`, `sdd-continue`, `skill-registry`, `doctor`, `install`, `sync`, and `uninstall` subcommands (resolved before the TUI); post-upgrade sync and re-exec after self-update. | Business logic, file mutation. |
+| `internal/tui/` | Bubbletea model, screen routing, async messages, every interactive screen and flow, **plus the headless `InstallAll`/`UninstallAll` engines** the CLI commands call. | Domain rules, raw file IO details. |
+| `internal/headless/` | Pure JSON/text renderers (`CommandResult`, `RenderJSON`/`RenderText`) for the headless `install`/`sync`/`uninstall` commands. | Domain logic, file IO. |
 | `internal/skill/` | The skill domain: a `Skill`, and loading a catalog from any `fs.FS`. | UI, install targets. |
 | `internal/catalog/` | The embedded skill **and** agent catalog (`go:embed`). | Go logic — only `SKILL.md` / `.agent.md` content. |
-| `internal/copilot/` | Adapter to the Copilot CLI host (detect, list installed, uninstall). | UI, skills, instructions. |
+| `internal/copilot/` | Adapter to the Copilot CLI host (detect, list installed, install, uninstall). | UI, skills, instructions. |
 | `internal/agent/` | The custom-agent domain: `.agent.md` SDD-phase agents installed to `~/.copilot/agents/`. | UI, file IO details. |
 | `internal/state/` | `~/.capiko/state.json` persistence (skills, persona, SDD models, strict TDD, scoped flag, engram config). | UI, business flows. |
 | `internal/backup/` | Snapshot/restore of skills and standalone files under `~/.capiko/backups/`. | UI. |

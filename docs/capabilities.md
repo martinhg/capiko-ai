@@ -18,6 +18,20 @@ deterministic engine it runs in Go.
 | **Custom agents** | Installs `.agent.md` SDD-phase agents into `~/.copilot/agents/` — the real delegation targets the SDD workflow routes to. |
 | **Review and Confirm** | A pre-apply summary (skills to install/remove, active persona) gates every reconcile, so nothing is written until you've seen it. |
 
+## Headless & scriptable
+
+Every install operation also runs non-interactively, so capiko drops straight into CI,
+dotfiles bootstrap, and automation.
+
+| Capability | What it does |
+|---|---|
+| **`install` / `sync` / `uninstall`** | The full reconcile surface without the TUI. `install` is additive (never touches what's present); `sync` overwrites to match the catalog (`--auto-repair` only writes when drift is detected); `uninstall` removes managed items and **refuses** when the state store is unavailable rather than risk deleting unmanaged files. |
+| **`--json` everywhere** | Machine-readable output on every command for scripting and assertions. |
+| **Deterministic exit codes** | `0` success · `1` error · `2` Copilot CLI not found — usable directly in pipelines. |
+| **No TTY required** | The command path never launches Bubbletea, so it runs headless in CI. |
+
+See [usage.md](usage.md#headless-cli) for the full command table.
+
 ## Spec-Driven Development
 
 The headline workflow. Ask Copilot to make a substantial change and it runs eight
