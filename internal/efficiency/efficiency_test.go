@@ -25,6 +25,16 @@ func TestRenderPreservesRigor(t *testing.T) {
 	}
 }
 
+func TestRenderDefersToPersona(t *testing.T) {
+	// Efficiency must never override a teaching persona's pedagogical intent — the
+	// block has to say so explicitly, so brevity can't cut the teaching the user
+	// opted into. (Guards the persona-deference carve-out from regressions.)
+	block := strings.ToLower(Render())
+	if !strings.Contains(block, "persona") || !strings.Contains(block, "teaching") {
+		t.Errorf("block must defer to an active persona's teaching intent:\n%s", Render())
+	}
+}
+
 func TestMarkersAreDistinctAndNamespaced(t *testing.T) {
 	if MarkerStart == MarkerEnd {
 		t.Fatal("start and end markers must differ")
