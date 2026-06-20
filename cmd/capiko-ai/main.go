@@ -77,6 +77,18 @@ func main() {
 				os.Exit(exitCode)
 			}
 			return
+		case "sync":
+			// Headless full sync: overwrites every catalog skill and agent on
+			// disk to match the embedded catalog exactly, without launching the
+			// TUI. --auto-repair skips the sync when no drift is detected.
+			_, exitCode, err := syncCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		}
 	}
 
