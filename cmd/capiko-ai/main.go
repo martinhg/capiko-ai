@@ -89,6 +89,17 @@ func main() {
 				os.Exit(exitCode)
 			}
 			return
+		case "uninstall":
+			// Headless uninstall: removes every managed skill and agent from
+			// the host, then clears them from state, without launching the TUI.
+			_, exitCode, err := uninstallCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		}
 	}
 
