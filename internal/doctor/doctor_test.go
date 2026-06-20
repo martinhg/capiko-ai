@@ -148,6 +148,37 @@ func TestEvaluateEngramManagedButBinaryMissing(t *testing.T) {
 	}
 }
 
+func TestEvaluateHeadroomDetected(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:              healthyEnv(),
+		CopilotHost:      &copilot.Host{BinPath: "/b/copilot"},
+		State:            &state.State{Version: "1.2.1"},
+		HeadroomDetected: true,
+	})
+	c := find(t, r, "Headroom")
+	if c.Status != Pass {
+		t.Errorf("Headroom: want Pass when detected, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "detected") {
+		t.Errorf("Headroom detail should note detection, got %q", c.Detail)
+	}
+}
+
+func TestEvaluateHeadroomAbsentIsPass(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:         healthyEnv(),
+		CopilotHost: &copilot.Host{BinPath: "/b/copilot"},
+		State:       &state.State{Version: "1.2.1"},
+	})
+	c := find(t, r, "Headroom")
+	if c.Status != Pass {
+		t.Errorf("Headroom: absence is optional, want Pass, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "optional") {
+		t.Errorf("Headroom detail should mark it optional when absent, got %q", c.Detail)
+	}
+}
+
 func TestEvaluateEngramUnmanagedIsPass(t *testing.T) {
 	r := Evaluate(Inputs{
 		Env:         healthyEnv(),

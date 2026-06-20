@@ -92,6 +92,11 @@ type Inputs struct {
 	AgentDrift  []string       // from drift.StaleAgents(...)
 	EngramStale bool           // from drift.StaleEngram(...): managed entry drifted or missing
 	Now         time.Time      // from time.Now(); enables relative "checked X ago" reporting (zero = absolute only)
+
+	// HeadroomDetected is whether the headroom context-compression CLI is on PATH
+	// (from headroom.Detected()). Informational: capiko can wire it, but never
+	// installs it.
+	HeadroomDetected bool
 }
 
 // requiredDeps are the prerequisites capiko cannot work without; each gets its
@@ -165,7 +170,21 @@ func Evaluate(in Inputs) Report {
 	// Engram backend (optional). Only meaningful when the user has it managed.
 	r.Checks = append(r.Checks, engramCheck(in))
 
+	// Headroom (optional). Informational presence check — capiko can wire its MCP
+	// compression, but never installs it. Always Pass; absence is not a problem.
+	r.Checks = append(r.Checks, headroomCheck(in))
+
 	return r
+}
+
+// headroomCheck reports whether the headroom context-compression CLI is available
+// to wire. It is always informational (Pass): headroom is optional and capiko
+// never installs it.
+func headroomCheck(in Inputs) Check {
+	if in.HeadroomDetected {
+		return Check{Name: "Headroom", Status: Pass, Detail: "detected on PATH (context compression available to wire)"}
+	}
+	return Check{Name: "Headroom", Status: Pass, Detail: "not detected (optional)"}
 }
 
 func (r *Report) add(name string, status Status, detail, remedy string) {
