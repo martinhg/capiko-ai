@@ -92,6 +92,13 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying engram: %w", err)
 				}
 			}
+			// Re-apply the output-efficiency block so it tracks the catalog, only
+			// once the user has enabled it — mirroring the persona/SDD opt-in.
+			if st.OutputEfficiency {
+				if err := applyOutputEfficiency(host, store, bkp, true); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying output efficiency: %w", err)
+				}
+			}
 		}
 	}
 	return len(recorded) + len(agentRecorded), nil
