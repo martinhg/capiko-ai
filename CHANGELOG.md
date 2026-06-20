@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/martinhg/capiko-ai/compare/v1.8.0...v1.9.0) (2026-06-20)
+
+
+### Features
+
+* **efficiency:** add opt-in output-efficiency instruction block ([#111](https://github.com/martinhg/capiko-ai/issues/111)) ([22e216a](https://github.com/martinhg/capiko-ai/commit/22e216a0891fd6daf91a25a52ca43790dd368e7c))
+
 ## [1.8.0](https://github.com/martinhg/capiko-ai/compare/v1.7.0...v1.8.0) (2026-06-20)
 
 
