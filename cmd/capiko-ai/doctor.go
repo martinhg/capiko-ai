@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/martinhg/capiko-ai/internal/catalog"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -15,7 +16,7 @@ import (
 // gatherDoctorInputs collects the live environment for the doctor report. It is a
 // package var so tests can stub it without touching the real PATH, home, or state.
 var gatherDoctorInputs = func() doctor.Inputs {
-	in := doctor.Inputs{Env: sysinfo.Detect()}
+	in := doctor.Inputs{Env: sysinfo.Detect(), Now: time.Now()}
 
 	host, _ := copilot.Detect()
 	in.CopilotHost = host
