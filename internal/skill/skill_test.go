@@ -40,7 +40,7 @@ func TestLoadCatalog(t *testing.T) {
 			Data: []byte("---\nname: capiko-hello\ndescription: \"Hi. Trigger: verify.\"\n---\n\nbody"),
 		},
 		"capiko-aaa/SKILL.md": &fstest.MapFile{
-			Data: []byte("---\ndescription: \"First alphabetically.\"\n---\nbody"),
+			Data: []byte("---\ndescription: \"First alphabetically. Trigger: always.\"\n---\nbody"),
 		},
 		// A directory without SKILL.md must be skipped, not fail.
 		"not-a-skill/README.md": &fstest.MapFile{Data: []byte("nope")},
@@ -160,10 +160,10 @@ func TestCanonicalContentReflectsExtraFiles(t *testing.T) {
 
 func TestLoadCatalogBundlesExtraFiles(t *testing.T) {
 	fsys := fstest.MapFS{
-		"sdd-apply/SKILL.md":            &fstest.MapFile{Data: []byte("---\ndescription: \"apply\"\n---\nbody")},
+		"sdd-apply/SKILL.md":            &fstest.MapFile{Data: []byte("---\ndescription: \"apply. Trigger: applying.\"\n---\nbody")},
 		"sdd-apply/references/notes.md": &fstest.MapFile{Data: []byte("notes")},
 		"sdd-apply/contract.md":         &fstest.MapFile{Data: []byte("contract")},
-		"plain/SKILL.md":                &fstest.MapFile{Data: []byte("---\ndescription: \"plain\"\n---\nx")},
+		"plain/SKILL.md":                &fstest.MapFile{Data: []byte("---\ndescription: \"plain. Trigger: plain.\"\n---\nx")},
 	}
 
 	got, err := LoadCatalog(fsys)

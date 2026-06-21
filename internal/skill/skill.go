@@ -115,6 +115,9 @@ func LoadCatalog(fsys fs.FS) ([]Skill, error) {
 	if err := ValidateDependencies(skills); err != nil {
 		return nil, err
 	}
+	if err := ValidateTriggers(skills); err != nil {
+		return nil, err
+	}
 	return skills, nil
 }
 
