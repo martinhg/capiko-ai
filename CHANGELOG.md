@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/martinhg/capiko-ai/compare/v1.14.0...v1.15.0) (2026-06-21)
+
+
+### Features
+
+* **tui:** configure Gentleman Guardian Angel (gga) code review ([#125](https://github.com/martinhg/capiko-ai/issues/125)) ([4cba132](https://github.com/martinhg/capiko-ai/commit/4cba132fde62ef211d665658183bc136eeade927))
+
 ## [1.14.0](https://github.com/martinhg/capiko-ai/compare/v1.13.0...v1.14.0) (2026-06-21)
 
 
