@@ -14,16 +14,17 @@ import (
 // Each entry's checkbox is the DESIRED installed state, seeded from disk;
 // applying installs what was marked and removes what was unmarked.
 type selector struct {
-	svc       services
-	title     string
-	emptyMsg  string
-	items     []skill.Skill
-	installed map[string]bool
-	desired   map[int]bool
-	cursor    int
-	state     selState
-	result    reconcileResult
-	err       error
+	svc         services
+	title       string
+	emptyMsg    string
+	items       []skill.Skill
+	installed   map[string]bool
+	desired     map[int]bool
+	cursor      int
+	state       selState
+	result      reconcileResult
+	err         error
+	resolveDeps bool // install flow: pull in transitive dependencies of marked skills
 }
 
 type selState int
@@ -56,11 +57,12 @@ func newInstall(svc services, catalog []skill.Skill, installed map[string]bool) 
 		desired[i] = installed[s.Name]
 	}
 	return &selector{
-		svc:       svc,
-		title:     "Start installation",
-		items:     catalog,
-		installed: installed,
-		desired:   desired,
+		svc:         svc,
+		title:       "Start installation",
+		items:       catalog,
+		installed:   installed,
+		desired:     desired,
+		resolveDeps: true,
 	}
 }
 
@@ -132,13 +134,42 @@ func (s *selector) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 	return s, nil
 }
 
+// requiredNames is the single source of truth for what the current selection
+// should result in being installed: every marked skill plus, for the install
+// flow, its transitive dependencies. If resolution fails it falls back to the
+// raw marked set so a graph error never blocks the user mid-flow (the catalog is
+// already validated at load time, and doctor reports broken chains).
+func (s *selector) requiredNames() map[string]bool {
+	marked := make(map[string]bool)
+	var names []string
+	for i, sk := range s.items {
+		if s.desired[i] {
+			marked[sk.Name] = true
+			names = append(names, sk.Name)
+		}
+	}
+	if !s.resolveDeps {
+		return marked
+	}
+	resolved, err := skill.ResolveDependencies(s.items, names)
+	if err != nil {
+		return marked
+	}
+	want := make(map[string]bool, len(resolved))
+	for _, n := range resolved {
+		want[n] = true
+	}
+	return want
+}
+
 // plan returns the skills the current selection would install and remove.
 func (s *selector) plan() (install, remove []string) {
-	for i, sk := range s.items {
-		switch want, have := s.desired[i], s.installed[sk.Name]; {
-		case want && !have:
+	want := s.requiredNames()
+	for _, sk := range s.items {
+		switch w, have := want[sk.Name], s.installed[sk.Name]; {
+		case w && !have:
 			install = append(install, sk.Name)
-		case !want && have:
+		case !w && have:
 			remove = append(remove, sk.Name)
 		}
 	}
@@ -159,8 +190,9 @@ func (s *selector) toggleAll() {
 }
 
 func (s *selector) hasChanges() bool {
-	for i, sk := range s.items {
-		if s.desired[i] != s.installed[sk.Name] {
+	want := s.requiredNames()
+	for _, sk := range s.items {
+		if want[sk.Name] != s.installed[sk.Name] {
 			return true
 		}
 	}
@@ -175,13 +207,14 @@ func (s *selector) reconcileCmd() tea.Cmd {
 	}
 	var ops []op
 	var affected []string
-	for i, sk := range s.items {
-		want, have := s.desired[i], s.installed[sk.Name]
+	want := s.requiredNames()
+	for _, sk := range s.items {
+		w, have := want[sk.Name], s.installed[sk.Name]
 		switch {
-		case want && !have:
+		case w && !have:
 			ops = append(ops, op{sk, true})
 			affected = append(affected, sk.Name)
-		case !want && have:
+		case !w && have:
 			ops = append(ops, op{sk, false})
 			affected = append(affected, sk.Name)
 		}
