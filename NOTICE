@@ -1,0 +1,19 @@
+capiko-ai
+Copyright (c) Martin Herrera
+
+This product integrates with, but does not bundle, modify, or redistribute, the
+following third-party software:
+
+----------------------------------------------------------------------
+Headroom — https://github.com/chopratejas/headroom
+Licensed under the Apache License, Version 2.0.
+----------------------------------------------------------------------
+
+capiko-ai optionally configures Headroom's MCP server into the GitHub Copilot CLI
+environment it manages (writing an entry into ~/.copilot/mcp-config.json that runs
+`headroom mcp serve`). capiko-ai does not include, link against, modify, or
+redistribute any Headroom source code or binaries — the user installs Headroom
+themselves. This NOTICE is provided as attribution for that integration.
+
+A copy of the Apache License, Version 2.0 is available at
+https://www.apache.org/licenses/LICENSE-2.0

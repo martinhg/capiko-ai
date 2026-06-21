@@ -102,6 +102,9 @@ type Inputs struct {
 	// (from headroom.Detected()). Informational: capiko can wire it, but never
 	// installs it.
 	HeadroomDetected bool
+	// HeadroomStale is whether the managed headroom MCP entry has drifted from the
+	// recorded configuration (from drift.StaleHeadroom).
+	HeadroomStale bool
 }
 
 // requiredDeps are the prerequisites capiko cannot work without; each gets its
@@ -202,6 +205,13 @@ func headroomCheck(in Inputs) Check {
 		}
 	}
 	if managed {
+		if in.HeadroomStale {
+			return Check{
+				Name: "Headroom", Status: Warn,
+				Detail: "the headroom MCP entry has drifted from the managed configuration",
+				Remedy: "run Sync in capiko-ai to re-apply the headroom wiring",
+			}
+		}
 		return Check{Name: "Headroom", Status: Pass, Detail: "configured (context compression wired)"}
 	}
 	if in.HeadroomDetected {
