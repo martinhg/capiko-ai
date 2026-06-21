@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/martinhg/capiko-ai/compare/v1.13.0...v1.14.0) (2026-06-21)
+
+
+### Features
+
+* **tui:** add SDD Status dashboard screen ([#123](https://github.com/martinhg/capiko-ai/issues/123)) ([c258319](https://github.com/martinhg/capiko-ai/commit/c258319401512caa4ba70a7a59a26caf4120e01b))
+
 ## [1.13.0](https://github.com/martinhg/capiko-ai/compare/v1.12.0...v1.13.0) (2026-06-21)
 
 
