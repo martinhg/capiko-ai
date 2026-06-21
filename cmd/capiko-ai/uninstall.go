@@ -55,6 +55,8 @@ func uninstallCommand(name string, args []string, out io.Writer) (handled bool, 
 	if name != "uninstall" {
 		return false, 0, nil
 	}
+	args, verbose := parseVerbose(args)
+	log := newLogger("uninstall", verbose)
 	asJSON, _, err := parseUninstallArgs(args)
 	if err != nil {
 		return true, 1, err
@@ -75,12 +77,15 @@ func uninstallCommand(name string, args []string, out io.Writer) (handled bool, 
 		return true, in.hostExitCode, in.hostErr
 	}
 
+	doneUninstall := log.Step("uninstall-all")
 	result, err := tui.UninstallAll(in.host, in.store, in.bkp)
 	if err != nil {
+		doneUninstall("error")
 		r := headless.FromReconcileResult("uninstall", tui.ReconcileResult{}, err)
 		renderUninstall(out, r, asJSON)
 		return true, 1, nil
 	}
+	doneUninstall("ok")
 
 	r := headless.FromReconcileResult("uninstall", result, nil)
 	renderUninstall(out, r, asJSON)

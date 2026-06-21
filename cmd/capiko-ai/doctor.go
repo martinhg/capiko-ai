@@ -65,13 +65,20 @@ func doctorCommand(name string, args []string, out io.Writer) (handled, healthy 
 	if name != "doctor" {
 		return false, true, nil
 	}
+	args, verbose := parseVerbose(args)
+	log := newLogger("doctor", verbose)
 	asJSON, repair, err := parseDoctorArgs(args)
 	if err != nil {
 		return true, false, err
 	}
 
+	doneGather := log.Step("gather-inputs")
 	in := gatherDoctorInputs()
+	doneGather("ok")
 	r := doctor.Evaluate(in)
+	for _, c := range r.Checks {
+		log.Event(c.Name, c.Status.String())
+	}
 
 	// In JSON repair mode the repair outcome is the sole emitted object, so stdout
 	// stays a single parseable document; suppress the report render in that case.

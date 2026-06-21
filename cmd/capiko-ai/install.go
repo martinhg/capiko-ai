@@ -72,15 +72,20 @@ func installCommand(name string, args []string, out io.Writer) (handled bool, ex
 	if name != "install" {
 		return false, 0, nil
 	}
+	args, verbose := parseVerbose(args)
+	log := newLogger("install", verbose)
 	asJSON, _, err := parseInstallArgs(args)
 	if err != nil {
 		return true, 1, err
 	}
 
+	doneGather := log.Step("gather-inputs")
 	in, err := gatherInstallInputs()
 	if err != nil {
+		doneGather("error")
 		return true, 1, err
 	}
+	doneGather("ok")
 
 	if in.hostExitCode != 0 {
 		msg := "GitHub Copilot CLI not found"
@@ -92,12 +97,15 @@ func installCommand(name string, args []string, out io.Writer) (handled bool, ex
 		return true, in.hostExitCode, in.hostErr
 	}
 
+	doneInstall := log.Step("install-all")
 	result, err := tui.InstallAll(in.host, in.catalog, in.agents, in.store, in.bkp)
 	if err != nil {
+		doneInstall("error")
 		r := headless.FromReconcileResult("install", tui.ReconcileResult{}, err)
 		renderInstall(out, r, asJSON)
 		return true, 1, nil
 	}
+	doneInstall("ok")
 
 	r := headless.FromReconcileResult("install", result, nil)
 	renderInstall(out, r, asJSON)

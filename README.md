@@ -164,10 +164,14 @@ machine-readable output.
 
 | Command | What it does | Flags |
 |---|---|---|
-| `capiko-ai install` | Install every catalog skill + agent not already present (additive — never touches what's already there). | `--all`, `--json` |
-| `capiko-ai sync` | Overwrite all installed skills + agents to match the catalog; re-applies the persona, SDD, and engram blocks. Warns when a capiko-managed engram binary is behind the recommended version. | `--auto-repair`, `--json` |
-| `capiko-ai uninstall` | Remove every capiko-managed skill + agent and clear them from state. Leaves persona/SDD/engram blocks untouched. | `--all`, `--json` |
-| `capiko-ai doctor` | Ecosystem health check (OS, prereqs, Copilot init, state, drift, engram). Non-zero exit on failure. `--repair` re-applies the managed catalog when drift is found. | `--json`, `--repair` |
+| `capiko-ai install` | Install every catalog skill + agent not already present (additive — never touches what's already there). | `--all`, `--json`, `--verbose` |
+| `capiko-ai sync` | Overwrite all installed skills + agents to match the catalog; re-applies the persona, SDD, and engram blocks. Warns when a capiko-managed engram binary is behind the recommended version. | `--auto-repair`, `--json`, `--verbose` |
+| `capiko-ai uninstall` | Remove every capiko-managed skill + agent and clear them from state. Leaves persona/SDD/engram blocks untouched. | `--all`, `--json`, `--verbose` |
+| `capiko-ai doctor` | Ecosystem health check (OS, prereqs, Copilot init, state, drift, engram). Non-zero exit on failure. `--repair` re-applies the managed catalog when drift is found. | `--json`, `--repair`, `--verbose` |
+
+> `--verbose` streams structured JSON-lines diagnostics (timestamp, event, result,
+> duration) to **stderr**, so stdout stays clean for scripting. Available on every
+> action command above.
 | `capiko-ai sdd-status` · `sdd-continue` | Native SDD engine: print or advance the deterministic workflow state. | |
 | `capiko-ai skill-registry` | Print the skill index so an orchestrator can resolve exact `SKILL.md` paths. | |
 | `capiko-ai version` | Print the installed version and the targeted Copilot CLI version. | `-v`, `--version` |
