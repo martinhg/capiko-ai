@@ -108,7 +108,12 @@ func (s *selector) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		return s, back
 	}
 	if s.state == selDone || s.state == selFailed {
-		return s, back // any key returns to the menu
+		// After a successful install, offer to configure AI code review for the
+		// project as an optional next step (install flow only — resolveDeps marks it).
+		if s.state == selDone && s.resolveDeps && msg.String() == "c" {
+			return newCodeReview(s.svc), nil
+		}
+		return s, back // any other key returns to the menu
 	}
 	if s.state != selPicking || len(s.items) == 0 {
 		return s, nil
@@ -270,7 +275,12 @@ func (s *selector) View() string {
 		for _, n := range s.result.removed {
 			b.WriteString(warnSty.Render("  - ") + n + "\n")
 		}
-		b.WriteString("\n" + dimSty.Render("any key to go back") + "\n")
+		if s.resolveDeps {
+			// Install flow: offer code review as an optional next step.
+			b.WriteString("\n" + dimSty.Render("c to configure AI code review · any other key to go back") + "\n")
+		} else {
+			b.WriteString("\n" + dimSty.Render("any key to go back") + "\n")
+		}
 		return b.String()
 	case selFailed:
 		b.WriteString(errSty.Render("Error: "+s.err.Error()) + "\n\n")
