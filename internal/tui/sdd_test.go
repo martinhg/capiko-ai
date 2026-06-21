@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/sdd"
@@ -55,6 +57,59 @@ func TestSDDCustomEntry(t *testing.T) {
 	}
 	if s.models["orchestrator"] != "my-model" {
 		t.Errorf("custom model = %q, want my-model", s.models["orchestrator"])
+	}
+}
+
+func TestSDDCustomEntryBackspace(t *testing.T) {
+	s, _, _ := newSDDT(t, false)
+	s.Update(key("c")) // edit orchestrator
+	for _, r := range "abx" {
+		s.Update(key(string(r)))
+	}
+	s.Update(tea.KeyMsg{Type: tea.KeyBackspace}) // drop the x
+	s.Update(key("enter"))
+	if s.models["orchestrator"] != "ab" {
+		t.Errorf("model = %q, want ab after backspace", s.models["orchestrator"])
+	}
+}
+
+func TestSDDCustomEntryEscCancels(t *testing.T) {
+	s, _, _ := newSDDT(t, false)
+	before := s.models["orchestrator"]
+	s.Update(key("c"))
+	for _, r := range "discarded" {
+		s.Update(key(string(r)))
+	}
+	s.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if s.editing {
+		t.Error("esc should stop editing")
+	}
+	if s.models["orchestrator"] != before {
+		t.Errorf("esc should not commit; model = %q, want %q", s.models["orchestrator"], before)
+	}
+}
+
+func TestSDDCustomEntryEmptyFallsBackToDefault(t *testing.T) {
+	s, _, _ := newSDDT(t, false)
+	s.Update(key("c"))
+	s.Update(key("enter")) // confirm with an empty buffer
+	if s.models["orchestrator"] != sdd.DefaultModel {
+		t.Errorf("empty custom entry should default to %q, got %q", sdd.DefaultModel, s.models["orchestrator"])
+	}
+}
+
+func TestSDDApplyFailedGoesBack(t *testing.T) {
+	s, _, _ := newSDDT(t, false)
+	s.Update(sddAppliedMsg{err: errTest})
+	if s.state != sddFailed {
+		t.Fatalf("state = %d, want failed", s.state)
+	}
+	_, cmd := s.Update(key("enter"))
+	if cmd == nil {
+		t.Fatal("failed state should go back on any key")
+	}
+	if _, ok := cmd().(backMsg); !ok {
+		t.Error("failed state should emit backMsg")
 	}
 }
 

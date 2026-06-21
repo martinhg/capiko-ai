@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -137,3 +138,63 @@ var errTest = testError("boom")
 type testError string
 
 func (e testError) Error() string { return string(e) }
+
+func TestUpgradeViewPerState(t *testing.T) {
+	tests := []struct {
+		name   string
+		screen *upgradeScreen
+		want   []string
+	}{
+		{
+			name:   "confirm shows version jump and prompt",
+			screen: &upgradeScreen{current: "1.0.0", latest: "1.1.0", state: upgradeConfirm},
+			want:   []string{"Upgrade capiko-ai", "1.0.0 → 1.1.0", "y to proceed"},
+		},
+		{
+			name:   "up to date",
+			screen: &upgradeScreen{current: "1.0.0", state: upgradeUpToDate},
+			want:   []string{"latest version (1.0.0)", "any key to go back"},
+		},
+		{
+			name:   "applying shows progress",
+			screen: &upgradeScreen{current: "1.0.0", latest: "1.1.0", state: upgradeApplying},
+			want:   []string{"Updating 1.0.0 → 1.1.0"},
+		},
+		{
+			name:   "done signals restart",
+			screen: &upgradeScreen{latest: "1.1.0", state: upgradeDone},
+			want:   []string{"Updated to 1.1.0", "restarting"},
+		},
+		{
+			name:   "synced reports count",
+			screen: &upgradeScreen{state: upgradeSynced, count: 3},
+			want:   []string{"Synced 3 skill(s)", "any key to go back"},
+		},
+		{
+			name:   "failed shows the error",
+			screen: &upgradeScreen{state: upgradeFailed, err: errTest},
+			want:   []string{"Error: boom", "any key to go back"},
+		},
+		{
+			name:   "sync confirm when already on latest offers in-place sync",
+			screen: &upgradeScreen{current: "1.0.0", withSync: true, state: upgradeConfirm},
+			want:   []string{"Upgrade + sync", "Sync skills to this version", "y to proceed"},
+		},
+		{
+			name:   "sync confirm with a newer version offers update and sync",
+			screen: &upgradeScreen{current: "1.0.0", latest: "1.1.0", withSync: true, state: upgradeConfirm},
+			want:   []string{"Upgrade + sync", "1.0.0 → 1.1.0 and sync skills"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := tt.screen.View()
+			for _, want := range tt.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("view missing %q, got:\n%s", want, out)
+				}
+			}
+		})
+	}
+}

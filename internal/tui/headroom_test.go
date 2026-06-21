@@ -182,6 +182,64 @@ func TestHeadroomScreenTogglesAndApplies(t *testing.T) {
 	}
 }
 
+func TestHeadroomCursorClamps(t *testing.T) {
+	withStubHeadroomDetected(t, true)
+	s := newHeadroom(services{host: &copilot.Host{MCPConfigPath: filepath.Join(t.TempDir(), "m.json")}}).(*headroomScreen)
+
+	s.Update(key("up")) // already at top
+	if s.cursor != 0 {
+		t.Errorf("cursor = %d at top, want clamped at 0", s.cursor)
+	}
+
+	for i := 0; i < 5; i++ {
+		s.Update(key("down"))
+	}
+	if s.cursor != headroomRows+1 {
+		t.Errorf("cursor = %d past the end, want clamped at %d", s.cursor, headroomRows+1)
+	}
+}
+
+func TestHeadroomBackRowGoesBack(t *testing.T) {
+	withStubHeadroomDetected(t, true)
+	s := newHeadroom(services{host: &copilot.Host{MCPConfigPath: filepath.Join(t.TempDir(), "m.json")}}).(*headroomScreen)
+	s.cursor = headroomRows + 1 // Back row
+
+	_, cmd := s.Update(key("enter"))
+	if cmd == nil {
+		t.Fatal("enter on Back should emit a command")
+	}
+	if _, ok := cmd().(backMsg); !ok {
+		t.Error("enter on the Back row should go back to the menu")
+	}
+}
+
+func TestHeadroomAppliedTransitions(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  headroomAppliedMsg
+		want headroomScreenState
+	}{
+		{"success goes to done", headroomAppliedMsg{}, headroomDone},
+		{"error goes to failed", headroomAppliedMsg{err: errTest}, headroomFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newHeadroom(services{host: &copilot.Host{MCPConfigPath: filepath.Join(t.TempDir(), "m.json")}}).(*headroomScreen)
+			s.Update(tt.msg)
+			if s.state != tt.want {
+				t.Fatalf("state = %d, want %d", s.state, tt.want)
+			}
+			_, cmd := s.Update(key("enter")) // any key from a terminal state
+			if cmd == nil {
+				t.Fatal("a terminal state should go back on any key")
+			}
+			if _, ok := cmd().(backMsg); !ok {
+				t.Error("terminal state should emit backMsg on any key")
+			}
+		})
+	}
+}
+
 func TestHeadroomScreenShowsInstallHintWhenAbsent(t *testing.T) {
 	withStubHeadroomDetected(t, false)
 	s := newHeadroom(services{host: &copilot.Host{MCPConfigPath: filepath.Join(t.TempDir(), "m.json")}})

@@ -169,3 +169,79 @@ func TestSelectorQuitGoesBack(t *testing.T) {
 		t.Error("q should emit backMsg")
 	}
 }
+
+func TestSelectorCursorMovesAndClamps(t *testing.T) {
+	s := installScreen(t, t.TempDir()) // 3 items
+	last := len(s.items) - 1
+
+	for _, k := range []string{"down", "down", "down", "j"} {
+		s.Update(key(k))
+	}
+	if s.cursor != last {
+		t.Errorf("cursor = %d after pushing past the end, want clamped at %d", s.cursor, last)
+	}
+
+	for _, k := range []string{"up", "up", "up", "k"} {
+		s.Update(key(k))
+	}
+	if s.cursor != 0 {
+		t.Errorf("cursor = %d after pushing past the start, want clamped at 0", s.cursor)
+	}
+}
+
+func TestSelectorSpaceTogglesItemAtCursor(t *testing.T) {
+	s := installScreen(t, t.TempDir()) // nothing installed → all unmarked
+	s.Update(key("down"))              // cursor → 1
+	s.Update(key("space"))
+
+	if !s.desired[1] {
+		t.Error("space should mark the item under the cursor")
+	}
+	if s.desired[0] || s.desired[2] {
+		t.Error("space should not touch other items")
+	}
+}
+
+func TestSelectorToggleAllMarksThenClears(t *testing.T) {
+	s := installScreen(t, t.TempDir()) // nothing installed → all unmarked
+
+	s.Update(key("a"))
+	for i := range s.items {
+		if !s.desired[i] {
+			t.Fatalf("first 'a' should mark every item; item %d unmarked", i)
+		}
+	}
+
+	s.Update(key("a"))
+	for i := range s.items {
+		if s.desired[i] {
+			t.Fatalf("second 'a' should clear every item; item %d still marked", i)
+		}
+	}
+}
+
+func TestSelectorEnterWithoutChangesStays(t *testing.T) {
+	s := installScreen(t, t.TempDir()) // seeded == disk, no changes
+	next, cmd := s.Update(key("enter"))
+
+	if _, ok := next.(*selector); !ok {
+		t.Fatalf("enter without changes should stay on selector, got %T", next)
+	}
+	if cmd != nil {
+		t.Error("enter without changes should not emit a command")
+	}
+}
+
+func TestSelectorTerminalStateAnyKeyGoesBack(t *testing.T) {
+	for _, st := range []selState{selDone, selFailed} {
+		s := installScreen(t, t.TempDir())
+		s.state = st
+		_, cmd := s.Update(key("enter")) // any non-quit key
+		if cmd == nil {
+			t.Fatalf("state %d: expected a command from any key", st)
+		}
+		if _, ok := cmd().(backMsg); !ok {
+			t.Errorf("state %d: any key should go back to the menu", st)
+		}
+	}
+}
