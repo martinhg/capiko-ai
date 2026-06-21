@@ -69,7 +69,7 @@ auto-discovers — so what capiko installs is reproducible, auditable, and yours
 | **Copilot agents** | `.agent.md` SDD-phase agents — the real delegation targets the workflow routes to. | `~/.copilot/agents/` |
 | **Scoped instructions** | `*.instructions.md` with `applyTo` globs, applied per matching file. | `~/.copilot/instructions/` |
 | **Engram memory** | Wires the [engram](https://github.com/Gentleman-Programming/engram) MCP server into Copilot CLI **and** VS Code, with local + cloud (`hybrid`) cross-session memory. | `~/.copilot/mcp-config.json`; VS Code `mcp.json` |
-| **Headroom compression** *(opt-in)* | Wires the [headroom](https://github.com/chopratejas/headroom) (Apache-2.0) MCP server into Copilot for context compression — fewer tokens, same answers. capiko configures it; it never installs the tool. | `~/.copilot/mcp-config.json` |
+| **Headroom compression** *(opt-in)* | Wires the [headroom](https://github.com/chopratejas/headroom) (Apache-2.0) MCP server into Copilot for context compression — fewer tokens, same answers — **and** instructs the agent to use it. capiko configures it; it never installs the tool. | `~/.copilot/mcp-config.json`; `copilot-instructions.md` |
 | **Safety net** | Snapshot-before-mutate backups, persistent state with per-skill checksums, drift detection, and self-update. | `~/.capiko/` |
 
 And capiko ships **its own native SDD engine** in Go — `capiko-ai sdd-status` /

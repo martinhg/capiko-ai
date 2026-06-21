@@ -2,8 +2,33 @@ package headroom
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
+
+func TestGuidanceNamesTheToolsAndCalibrates(t *testing.T) {
+	g := Guidance()
+	for _, want := range []string{"headroom_compress", "headroom_retrieve", "headroom_stats"} {
+		if !strings.Contains(g, want) {
+			t.Errorf("guidance must name the %s tool:\n%s", want, g)
+		}
+	}
+	// Calibrated: prefer compression over truncation, but skip it for short content.
+	if !strings.Contains(strings.ToLower(g), "truncat") || !strings.Contains(strings.ToLower(g), "short") {
+		t.Errorf("guidance should be calibrated (compress vs truncate, skip short):\n%s", g)
+	}
+}
+
+func TestGuidanceMarkersAreNamespaced(t *testing.T) {
+	if GuidanceMarkerStart == GuidanceMarkerEnd {
+		t.Fatal("guidance markers must differ")
+	}
+	for _, m := range []string{GuidanceMarkerStart, GuidanceMarkerEnd} {
+		if !strings.Contains(m, "capiko:headroom") {
+			t.Errorf("marker %q not namespaced to capiko:headroom", m)
+		}
+	}
+}
 
 func TestCopilotCLIEntryShape(t *testing.T) {
 	e := CopilotCLIEntry()

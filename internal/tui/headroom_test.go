@@ -9,6 +9,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headroom"
+	"github.com/martinhg/capiko-ai/internal/persona"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -76,6 +77,70 @@ func TestApplyHeadroomPreservesOtherServers(t *testing.T) {
 	content := string(data)
 	if !strings.Contains(content, `"engram"`) || !strings.Contains(content, `"headroom"`) {
 		t.Errorf("both servers must coexist:\n%s", content)
+	}
+}
+
+func TestApplyHeadroomWritesAgentGuidance(t *testing.T) {
+	cfg := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfg, MCPConfigPath: filepath.Join(cfg, "mcp-config.json")}
+
+	if err := applyHeadroom(host, state.NewStore(t.TempDir()), nil, true); err != nil {
+		t.Fatalf("applyHeadroom: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cfg, "copilot-instructions.md"))
+	if err != nil {
+		t.Fatalf("instructions not written: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, headroom.GuidanceMarkerStart) {
+		t.Error("headroom guidance marker not injected")
+	}
+	if !strings.Contains(content, "headroom_compress") {
+		t.Errorf("guidance should name the compression tools:\n%s", content)
+	}
+}
+
+func TestDisableHeadroomRemovesAgentGuidance(t *testing.T) {
+	cfg := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfg, MCPConfigPath: filepath.Join(cfg, "mcp-config.json")}
+	store := state.NewStore(t.TempDir())
+
+	if err := applyHeadroom(host, store, nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyHeadroom(host, store, nil, false); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(cfg, "copilot-instructions.md"))
+	if strings.Contains(string(data), headroom.GuidanceMarkerStart) {
+		t.Errorf("guidance should be removed when headroom is disabled:\n%s", data)
+	}
+}
+
+func TestApplyHeadroomGuidanceCoexistsWithPersona(t *testing.T) {
+	cfg := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfg, MCPConfigPath: filepath.Join(cfg, "mcp-config.json"), SkillsDir: filepath.Join(cfg, "skills")}
+	store := state.NewStore(t.TempDir())
+	p, ok := persona.ByID("capiko")
+	if !ok {
+		t.Fatal("persona capiko not found")
+	}
+	if err := applyPersona(host, store, nil, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyHeadroom(host, store, nil, true); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(cfg, "copilot-instructions.md"))
+	content := string(data)
+	if !strings.Contains(content, "capiko:persona:start") {
+		t.Error("persona block clobbered by headroom guidance")
+	}
+	if !strings.Contains(content, headroom.GuidanceMarkerStart) {
+		t.Error("headroom guidance block missing")
 	}
 }
 
