@@ -175,6 +175,27 @@ func TestSetHeadroom(t *testing.T) {
 	}
 }
 
+func TestSetCodeReview(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetCodeReview(&CodeReviewRecord{Enabled: true, Provider: "claude", StrictMode: true}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.CodeReview == nil || !st.CodeReview.Enabled || st.CodeReview.Provider != "claude" {
+		t.Errorf("CodeReview not persisted: %+v", st.CodeReview)
+	}
+	if err := s.SetCodeReview(&CodeReviewRecord{Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.CodeReview == nil || st.CodeReview.Enabled {
+		t.Errorf("CodeReview should be recorded disabled, got %+v", st.CodeReview)
+	}
+}
+
 func TestSetOutputEfficiency(t *testing.T) {
 	s := NewStore(t.TempDir())
 	if err := s.SetOutputEfficiency(true); err != nil {
