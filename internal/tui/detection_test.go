@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -91,6 +94,78 @@ func TestDetectionDepsInstalledClearsInstalling(t *testing.T) {
 	}
 	if ds.status != "installed pnpm" {
 		t.Errorf("status = %q, want installed pnpm", ds.status)
+	}
+}
+
+// TestInstallCmdReportsResults drives installCmd's command directly (no async
+// teatest needed): with the install seam stubbed, one dep succeeds and one fails,
+// so the resulting summary must report both outcomes joined together.
+func TestInstallCmdReportsResults(t *testing.T) {
+	prev := installDep
+	installDep = func(d sysinfo.Dependency) error {
+		if d.Name == "pnpm" {
+			return nil
+		}
+		return errors.New("boom")
+	}
+	t.Cleanup(func() { installDep = prev })
+
+	s := &detectionScreen{report: sysinfo.Report{Dependencies: []sysinfo.Dependency{
+		{Name: "pnpm", Found: false, Auto: true, Install: "brew install pnpm"},
+		{Name: "fd", Found: false, Auto: true, Install: "brew install fd"},
+	}}}
+
+	msg, ok := s.installCmd()().(depsInstalledMsg)
+	if !ok {
+		t.Fatalf("installCmd did not return depsInstalledMsg")
+	}
+	if !strings.Contains(msg.summary, "installed pnpm") {
+		t.Errorf("summary missing success: %q", msg.summary)
+	}
+	if !strings.Contains(msg.summary, "failed fd") {
+		t.Errorf("summary missing failure: %q", msg.summary)
+	}
+}
+
+// TestInstallCmdAllSucceed covers the success-only branch: no "failed" segment
+// appears when every dependency installs cleanly.
+func TestInstallCmdAllSucceed(t *testing.T) {
+	prev := installDep
+	installDep = func(sysinfo.Dependency) error { return nil }
+	t.Cleanup(func() { installDep = prev })
+
+	s := &detectionScreen{report: sysinfo.Report{Dependencies: []sysinfo.Dependency{
+		{Name: "pnpm", Found: false, Auto: true, Install: "brew install pnpm"},
+	}}}
+
+	msg := s.installCmd()().(depsInstalledMsg)
+	if msg.summary != "installed pnpm" {
+		t.Errorf("summary = %q, want %q", msg.summary, "installed pnpm")
+	}
+}
+
+// TestLoadEngramRecord covers all three branches: nil store, an unreadable store
+// (corrupt state.json), and a store with managed engram config.
+func TestLoadEngramRecord(t *testing.T) {
+	if loadEngramRecord(nil) != nil {
+		t.Error("nil store should yield nil record")
+	}
+
+	badDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(badDir, "state.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if loadEngramRecord(state.NewStore(badDir)) != nil {
+		t.Error("unreadable state should yield nil record")
+	}
+
+	store := state.NewStore(t.TempDir())
+	if err := store.SetEngram(&state.EngramRecord{Enabled: true, ArtifactMode: "hybrid"}); err != nil {
+		t.Fatal(err)
+	}
+	rec := loadEngramRecord(store)
+	if rec == nil || !rec.Enabled || rec.ArtifactMode != "hybrid" {
+		t.Errorf("loadEngramRecord = %+v, want managed enabled record", rec)
 	}
 }
 
