@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/martinhg/capiko-ai/compare/v1.12.0...v1.13.0) (2026-06-21)
+
+
+### Features
+
+* **skill:** dependency graph with validation, auto-install, and doctor reporting ([#120](https://github.com/martinhg/capiko-ai/issues/120)) ([d6da05b](https://github.com/martinhg/capiko-ai/commit/d6da05be51e9d7c4b3888981502c04af201cc053))
+
 ## [1.12.0](https://github.com/martinhg/capiko-ai/compare/v1.11.0...v1.12.0) (2026-06-21)
 
 
