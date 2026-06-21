@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +12,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headroom"
+	"github.com/martinhg/capiko-ai/internal/instructions"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -44,8 +46,43 @@ func applyHeadroom(host *copilot.Host, store *state.Store, bkp *backup.Store, en
 		}
 	}
 
+	// Pair the wiring with agent guidance, so Copilot actually uses the tools.
+	if err := applyHeadroomGuidance(host, bkp, true); err != nil {
+		return err
+	}
+
 	if store != nil {
 		return store.SetHeadroom(&state.HeadroomRecord{Enabled: true, Checksum: want})
+	}
+	return nil
+}
+
+// applyHeadroomGuidance injects (enabled) or removes (disabled) the headroom usage
+// block in Copilot's instructions file, backing up only when the file changes.
+// Without the block the wired MCP server is never used; with it, Copilot routes
+// bulky content through headroom. Mirrors applyTriggerRules.
+func applyHeadroomGuidance(host *copilot.Host, bkp *backup.Store, enabled bool) error {
+	if host.ConfigDir == "" {
+		return nil // no instructions file to write without a config dir
+	}
+	var block string
+	if enabled {
+		block = headroom.Guidance()
+	}
+	path := filepath.Join(host.ConfigDir, "copilot-instructions.md")
+	content, changed, err := instructions.Render(path, headroom.GuidanceMarkerStart, headroom.GuidanceMarkerEnd, block)
+	if err != nil {
+		return err
+	}
+	if changed {
+		if bkp != nil {
+			if _, err := bkp.CreateFiles("headroom", Version, []string{path}); err != nil {
+				return fmt.Errorf("backup failed, aborting: %w", err)
+			}
+		}
+		if err := instructions.Write(path, content); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -58,6 +95,10 @@ func disableHeadroom(host *copilot.Host, store *state.Store, bkp *backup.Store) 
 		return err
 	}
 	if err := engram.RemoveMCPEntry(host.MCPConfigPath, "mcpServers", headroom.ServerName); err != nil {
+		return err
+	}
+	// Remove the paired agent guidance too, so disabling fully unwires headroom.
+	if err := applyHeadroomGuidance(host, bkp, false); err != nil {
 		return err
 	}
 	if store != nil {
