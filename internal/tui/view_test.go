@@ -12,6 +12,7 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
 
@@ -147,6 +148,24 @@ func TestViewGolden(t *testing.T) {
 			agentNames:   []string{"capiko-sdd-explore", "capiko-sdd-apply"},
 		}}.View()},
 		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},
+		{"sdd_status_list", App{state: appScreen, active: &sddStatusScreen{entries: []sddChange{
+			sddChangeFixture("add-auth", "apply", sddstatus.Dependencies{
+				Proposal: sddstatus.DependencyAllDone, Specs: sddstatus.DependencyAllDone,
+				Design: sddstatus.DependencyAllDone, Tasks: sddstatus.DependencyAllDone,
+				Apply: sddstatus.DependencyReady,
+			}, 2, 5),
+			sddChangeFixture("rework-tui", "spec", sddstatus.Dependencies{
+				Proposal: sddstatus.DependencyAllDone, Specs: sddstatus.DependencyReady,
+				Design: sddstatus.DependencyReady,
+			}, 0, 0),
+		}}}.View()},
+		{"sdd_status_detail", App{state: appScreen, active: &sddStatusScreen{detail: true, entries: []sddChange{
+			sddChangeFixture("add-auth", "apply", sddstatus.Dependencies{
+				Proposal: sddstatus.DependencyAllDone, Specs: sddstatus.DependencyAllDone,
+				Design: sddstatus.DependencyAllDone, Tasks: sddstatus.DependencyAllDone,
+				Apply: sddstatus.DependencyReady,
+			}, 2, 5),
+		}}}.View()},
 		{"update_prompt", App{state: appUpdatePrompt, latest: "9.9.9", cursor: promptDefaultCursor}.View()},
 		{"soon", App{state: appScreen, active: newSoon("Upgrade tools")}.View()},
 	}

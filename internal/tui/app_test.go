@@ -94,9 +94,19 @@ func TestEnterOpensSDD(t *testing.T) {
 	}
 }
 
+func TestEnterOpensSDDStatus(t *testing.T) {
+	a := readyApp(t, t.TempDir())
+	a.cursor = 5 // SDD Status
+
+	next, _ := a.Update(key("enter"))
+	if _, ok := next.(App).active.(*sddStatusScreen); !ok {
+		t.Errorf("active = %T, want *sddStatusScreen", next.(App).active)
+	}
+}
+
 func TestEnterOpensHeadroom(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 6 // Configure headroom
+	a.cursor = 7 // Configure headroom
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*headroomScreen); !ok {
@@ -106,7 +116,7 @@ func TestEnterOpensHeadroom(t *testing.T) {
 
 func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 7 // Upgrade tools
+	a.cursor = 8 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -121,7 +131,7 @@ func TestEnterOpensUpgrade(t *testing.T) {
 
 func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 8 // Upgrade + sync
+	a.cursor = 9 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -147,7 +157,7 @@ func TestEnterOpensBackups(t *testing.T) {
 
 func TestEnterOpensInstructions(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 9 // Install instructions
+	a.cursor = 10 // Install instructions
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*instructionsScreen); !ok {
