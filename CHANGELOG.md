@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.0](https://github.com/martinhg/capiko-ai/compare/v1.17.0...v1.18.0) (2026-06-21)
+
+
+### Features
+
+* surface gga in detection and offer code-review after install ([#131](https://github.com/martinhg/capiko-ai/issues/131)) ([5d9544d](https://github.com/martinhg/capiko-ai/commit/5d9544d32f705fe5b7f8899c7b3a1c80301c8ce6))
+
 ## [1.17.0](https://github.com/martinhg/capiko-ai/compare/v1.16.0...v1.17.0) (2026-06-21)
 
 
