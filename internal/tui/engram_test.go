@@ -239,6 +239,50 @@ func TestEngramScreenEditServer(t *testing.T) {
 	}
 }
 
+func TestEngramScreenEditBackspaceAndSpace(t *testing.T) {
+	s := newEngram(services{}).(*engramScreen)
+	s.cursor = 2
+	s.Update(key("c")) // start editing the server
+
+	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("abc")})
+	s.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")})
+	s.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if s.editBuf != "abc" {
+		t.Errorf("editBuf = %q, want %q (space added then backspaced)", s.editBuf, "abc")
+	}
+}
+
+func TestEngramScreenEditEscCancels(t *testing.T) {
+	s := newEngram(services{}).(*engramScreen)
+	s.cursor = 2
+	s.server = "original"
+	s.Update(key("c"))
+	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("typed-but-discarded")})
+	s.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if s.editing {
+		t.Error("esc should stop editing")
+	}
+	if s.server != "original" {
+		t.Errorf("esc should not commit the buffer; server = %q", s.server)
+	}
+}
+
+func TestEngramScreenApplyFailed(t *testing.T) {
+	s := newEngram(services{}).(*engramScreen)
+	s.Update(engramAppliedMsg{err: errTest})
+	if s.state != engramFailed {
+		t.Fatalf("state = %d, want failed", s.state)
+	}
+	_, cmd := s.Update(key("enter")) // any key from a terminal state
+	if cmd == nil {
+		t.Fatal("failed state should go back on any key")
+	}
+	if _, ok := cmd().(backMsg); !ok {
+		t.Error("failed state should emit backMsg")
+	}
+}
+
 func TestEngramScreenApplyTransitionsAndDone(t *testing.T) {
 	s := newEngram(services{}).(*engramScreen)
 	s.cursor = engramRows // Apply

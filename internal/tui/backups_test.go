@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
@@ -51,6 +52,29 @@ func TestBackupsQuitGoesBack(t *testing.T) {
 				t.Errorf("%s should emit backMsg", k)
 			}
 		})
+	}
+}
+
+func TestBackupsViewEmpty(t *testing.T) {
+	s := newBackupsScreenT(t, newStore(t), &copilot.Host{SkillsDir: t.TempDir()})
+	out := s.View()
+	if !strings.Contains(out, "No backups yet.") {
+		t.Errorf("empty view should say so, got:\n%s", out)
+	}
+}
+
+func TestBackupsViewRendersItemsErrorAndStatus(t *testing.T) {
+	store := newStore(t)
+	seedBackups(t, store, t.TempDir(), 2)
+	s := newBackupsScreenT(t, store, &copilot.Host{SkillsDir: t.TempDir()})
+	s.err = errTest
+	s.status = "Deleted abc123"
+
+	out := s.View()
+	for _, want := range []string{"Manage backups", "Error: boom", "Deleted abc123", "sync", "r restore · d delete"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("view missing %q, got:\n%s", want, out)
+		}
 	}
 }
 
