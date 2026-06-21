@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/martinhg/capiko-ai/compare/v1.11.0...v1.12.0) (2026-06-21)
+
+
+### Features
+
+* **headroom:** verify MCP command, add drift detection, ship NOTICE ([#117](https://github.com/martinhg/capiko-ai/issues/117)) ([4936477](https://github.com/martinhg/capiko-ai/commit/49364778bacf73917ff88433badc6a3481df8f7e))
+
 ## [1.11.0](https://github.com/martinhg/capiko-ai/compare/v1.10.0...v1.11.0) (2026-06-21)
 
 
