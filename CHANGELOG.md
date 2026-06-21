@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/martinhg/capiko-ai/compare/v1.9.0...v1.10.0) (2026-06-21)
+
+
+### Features
+
+* **headroom:** wire headroom context-compression via MCP, with a Configure screen ([#113](https://github.com/martinhg/capiko-ai/issues/113)) ([c9dcf3d](https://github.com/martinhg/capiko-ai/commit/c9dcf3d1f1f61089bd25f985d274d1e2233f1e6e))
+
 ## [1.9.0](https://github.com/martinhg/capiko-ai/compare/v1.8.0...v1.9.0) (2026-06-20)
 
 
