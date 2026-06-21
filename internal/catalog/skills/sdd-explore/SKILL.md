@@ -1,5 +1,6 @@
 ---
 name: sdd-explore
+depends_on: [sdd-shared]
 description: "Investigate an idea before committing to a change. Trigger: orchestrator delegates the explore phase of an SDD change."
 license: Apache-2.0
 metadata:

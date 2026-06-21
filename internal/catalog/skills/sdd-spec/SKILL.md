@@ -1,5 +1,6 @@
 ---
 name: sdd-spec
+depends_on: [sdd-shared]
 description: "Write the spec delta (requirements and scenarios) for a change. Trigger: orchestrator delegates the spec phase of an SDD change."
 license: Apache-2.0
 metadata:

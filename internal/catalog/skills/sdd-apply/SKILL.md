@@ -1,5 +1,6 @@
 ---
 name: sdd-apply
+depends_on: [sdd-shared]
 description: "Implement the tasks, following the spec and design. Trigger: orchestrator delegates the apply phase of an SDD change."
 license: Apache-2.0
 metadata:
