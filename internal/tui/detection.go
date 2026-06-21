@@ -50,6 +50,11 @@ func loadEngramRecord(store *state.Store) *state.EngramRecord {
 	return st.Engram
 }
 
+// installDep installs a single dependency. It is a test seam over sysinfo.Install
+// so the install flow can be driven deterministically without shelling out to a
+// real package manager, mirroring headroomDetected and the engram seams.
+var installDep = sysinfo.Install
+
 type depsInstalledMsg struct{ summary string }
 
 // installable returns the missing dependencies capiko can install via one-click.
@@ -113,7 +118,7 @@ func (s *detectionScreen) installCmd() tea.Cmd {
 	return func() tea.Msg {
 		var ok, failed []string
 		for _, d := range deps {
-			if err := sysinfo.Install(d); err != nil {
+			if err := installDep(d); err != nil {
 				failed = append(failed, d.Name)
 			} else {
 				ok = append(ok, d.Name)
