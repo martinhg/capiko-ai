@@ -92,6 +92,8 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 	if name != "sync" {
 		return false, 0, nil
 	}
+	args, verbose := parseVerbose(args)
+	log := newLogger("sync", verbose)
 	asJSON, autoRepair, err := parseSyncArgs(args)
 	if err != nil {
 		return true, 1, err
@@ -135,6 +137,7 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 				// No drift confirmed — render the empty sync result (triggers the
 				// "No drift detected" message in RenderText) and exit cleanly
 				// without calling RunSync.
+				log.Event("auto-repair-skipped", "no-drift")
 				r := headless.FromReconcileResult("sync", tui.ReconcileResult{}, nil)
 				renderSync(out, r, asJSON)
 				return true, 0, nil
@@ -143,12 +146,16 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 		// Drift detected, or state indeterminable — fall through to RunSync below.
 	}
 
+	doneSync := log.Step("run-sync")
 	n, err := runSync(in.host, in.catalog, in.agents, in.store, in.bkp)
 	if err != nil {
+		doneSync("error")
 		r := headless.FromReconcileResult("sync", tui.ReconcileResult{}, err)
 		renderSync(out, r, asJSON)
 		return true, 1, nil
 	}
+	doneSync("ok")
+	log.Detailf("synced", "%d item(s)", n)
 
 	// RunSync returns a count, not names. Build the name lists from the catalog
 	// (sync writes every catalog item, so all names are "installed").
