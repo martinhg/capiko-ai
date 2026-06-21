@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
+	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -133,6 +134,86 @@ func TestRunSyncSkipsInstructionsWhenUnmanaged(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(cfgDir, "instructions", "go.instructions.md")); err == nil {
 		t.Error("sync wrote scoped instructions for an unmanaged user")
+	}
+}
+
+// TestRunSyncReappliesSDD asserts that once SDD is managed (strict TDD recorded),
+// sync re-applies the SDD instruction block so it tracks the catalog/version.
+func TestRunSyncReappliesSDD(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+	if err := store.SetStrictTDD(true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cfgDir, "copilot-instructions.md"))
+	if err != nil {
+		t.Fatalf("instructions not written by sync: %v", err)
+	}
+	if !strings.Contains(string(data), "capiko:sdd:start") {
+		t.Errorf("sync did not re-apply the SDD block: %q", data)
+	}
+}
+
+// TestRunSyncSnapshotsBeforeWriting asserts that a non-nil backup store gets a
+// snapshot created before the catalog is overwritten.
+func TestRunSyncSnapshotsBeforeWriting(t *testing.T) {
+	host := &copilot.Host{SkillsDir: t.TempDir()}
+	bkp := backup.NewStore(t.TempDir())
+
+	if _, err := RunSync(host, testCatalog(), nil, nil, bkp); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	manifests, err := bkp.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifests) == 0 {
+		t.Error("RunSync with a backup store should create a snapshot")
+	}
+}
+
+// TestRunSyncAbortsOnInstallError asserts RunSync surfaces the error and writes
+// nothing when a skill cannot be installed (SkillsDir is an unusable path).
+func TestRunSyncAbortsOnInstallError(t *testing.T) {
+	// A regular file where a directory is expected makes MkdirAll fail.
+	file := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	host := &copilot.Host{SkillsDir: file}
+
+	n, err := RunSync(host, testCatalog(), nil, nil, nil)
+	if err == nil {
+		t.Fatal("RunSync should fail when skills cannot be written")
+	}
+	if n != 0 {
+		t.Errorf("count = %d, want 0 on abort", n)
+	}
+}
+
+// TestRunSyncAbortsOnBackupError asserts RunSync aborts before writing when the
+// pre-sync snapshot cannot be created, so a failed backup never leaves a partial sync.
+func TestRunSyncAbortsOnBackupError(t *testing.T) {
+	// The backup store's root is a regular file, so Create cannot make its dir.
+	badRoot := filepath.Join(t.TempDir(), "backups-as-file")
+	if err := os.WriteFile(badRoot, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	host := &copilot.Host{SkillsDir: t.TempDir()}
+
+	n, err := RunSync(host, testCatalog(), nil, nil, backup.NewStore(badRoot))
+	if err == nil {
+		t.Fatal("RunSync should fail when the backup cannot be created")
+	}
+	if n != 0 {
+		t.Errorf("count = %d, want 0 on abort", n)
 	}
 }
 
