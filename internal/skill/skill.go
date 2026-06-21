@@ -29,10 +29,11 @@ type File struct {
 // carries any additional bundled files (reference docs, shared contracts) so a
 // skill can ship as a multi-file directory, not just a lone SKILL.md.
 type Skill struct {
-	Name        string // directory name under ~/.copilot/skills
-	Description string // parsed from the frontmatter, shown in the configurator
-	Content     string // full SKILL.md text
-	Extra       []File // additional bundled files, relative to the skill dir
+	Name        string   // directory name under ~/.copilot/skills
+	Description string   // parsed from the frontmatter, shown in the configurator
+	Content     string   // full SKILL.md text
+	Extra       []File   // additional bundled files, relative to the skill dir
+	DependsOn   []string // names of skills this one requires (frontmatter depends_on)
 }
 
 // Install writes the skill bundle under <skillsDir>/<name>: SKILL.md plus every
@@ -111,6 +112,9 @@ func LoadCatalog(fsys fs.FS) ([]Skill, error) {
 		skills = append(skills, s)
 	}
 	sort.Slice(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })
+	if err := ValidateDependencies(skills); err != nil {
+		return nil, err
+	}
 	return skills, nil
 }
 
@@ -152,11 +156,12 @@ func Parse(name, content string) (Skill, error) {
 	if err != nil {
 		return Skill{}, err
 	}
-	return Skill{Name: name, Description: m.Description, Content: content}, nil
+	return Skill{Name: name, Description: m.Description, Content: content, DependsOn: m.DependsOn}, nil
 }
 
 type meta struct {
-	Description string `yaml:"description"`
+	Description string   `yaml:"description"`
+	DependsOn   []string `yaml:"depends_on"`
 }
 
 // frontmatter extracts and parses the leading YAML block delimited by --- lines.
