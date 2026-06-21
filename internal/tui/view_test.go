@@ -127,6 +127,7 @@ func TestViewGolden(t *testing.T) {
 		{"review", App{state: appScreen, active: reviewView}.View()},
 		{"sdd", App{state: appScreen, active: sddView}.View()},
 		{"engram", App{state: appScreen, active: engramView}.View()},
+		{"headroom", App{state: appScreen, active: &headroomScreen{svc: svc, detected: false}}.View()},
 		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
 		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog(), nil)}.View()},

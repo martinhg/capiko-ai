@@ -92,6 +92,13 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying engram: %w", err)
 				}
 			}
+			// Re-apply the headroom MCP wiring, only once the user has enabled it —
+			// mirroring the engram opt-in. Idempotent: rewrites only on checksum change.
+			if st.Headroom != nil && st.Headroom.Enabled {
+				if err := applyHeadroom(host, store, bkp, true); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying headroom: %w", err)
+				}
+			}
 		}
 	}
 	return len(recorded) + len(agentRecorded), nil

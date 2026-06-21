@@ -170,17 +170,29 @@ func Evaluate(in Inputs) Report {
 	// Engram backend (optional). Only meaningful when the user has it managed.
 	r.Checks = append(r.Checks, engramCheck(in))
 
-	// Headroom (optional). Informational presence check — capiko can wire its MCP
-	// compression, but never installs it. Always Pass; absence is not a problem.
+	// Headroom (optional). Presence/wiring check — capiko can wire its MCP
+	// compression but never installs it. Warns only when wired yet the CLI is gone.
 	r.Checks = append(r.Checks, headroomCheck(in))
 
 	return r
 }
 
-// headroomCheck reports whether the headroom context-compression CLI is available
-// to wire. It is always informational (Pass): headroom is optional and capiko
-// never installs it.
+// headroomCheck reports the state of the optional headroom context-compression
+// integration. When capiko has wired headroom but its CLI is missing from PATH the
+// wiring is dead, so that is a Warn (capiko configures headroom, it never installs
+// it). Otherwise it is informational: detected/available or absent/optional.
 func headroomCheck(in Inputs) Check {
+	managed := in.State != nil && in.State.Headroom != nil && in.State.Headroom.Enabled
+	if managed && !in.HeadroomDetected {
+		return Check{
+			Name: "Headroom", Status: Warn,
+			Detail: "wired into Copilot but the headroom CLI is not on PATH",
+			Remedy: `install headroom: pip install "headroom-ai[all]" (or npm i -g headroom-ai)`,
+		}
+	}
+	if managed {
+		return Check{Name: "Headroom", Status: Pass, Detail: "configured (context compression wired)"}
+	}
 	if in.HeadroomDetected {
 		return Check{Name: "Headroom", Status: Pass, Detail: "detected on PATH (context compression available to wire)"}
 	}

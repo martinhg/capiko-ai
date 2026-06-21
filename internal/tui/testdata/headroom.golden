@@ -1,0 +1,17 @@
+capiko-ai  ·  Copilot configurator
+
+Configure headroom
+
+Context compression for Copilot — fewer tokens, same answers. capiko wires
+in headroom's MCP server; it never installs the tool for you.
+
+▸ Enabled         off
+
+  Apply
+  Back
+
+headroom is not on PATH.
+Install it:  pip install "headroom-ai[all]"
+             (or npm i -g headroom-ai · uv tool install "headroom-ai[all]")
+
+↑/↓ move · ←/→/space toggle · enter select · esc back
