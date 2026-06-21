@@ -185,6 +185,14 @@ func EntryChecksum(entry any) string {
 // returns its canonical checksum. ok is false when the file, the mcpServers key,
 // or the engram entry is absent or unreadable.
 func CLIEntryChecksum(mcpConfigPath string) (checksum string, ok bool) {
+	return MCPEntryChecksum(mcpConfigPath, "engram")
+}
+
+// MCPEntryChecksum reads the named server entry under "mcpServers" from a Copilot
+// CLI mcp-config.json and returns its canonical checksum. ok is false when the
+// file, the mcpServers key, or the named entry is absent or unreadable. It is the
+// generic primitive other managed MCP servers (engram, headroom) compare against.
+func MCPEntryChecksum(mcpConfigPath, name string) (checksum string, ok bool) {
 	data, err := os.ReadFile(mcpConfigPath)
 	if err != nil {
 		return "", false
@@ -201,7 +209,7 @@ func CLIEntryChecksum(mcpConfigPath string) (checksum string, ok bool) {
 	if json.Unmarshal(raw, &servers) != nil {
 		return "", false
 	}
-	entryRaw, ok := servers["engram"]
+	entryRaw, ok := servers[name]
 	if !ok {
 		return "", false
 	}

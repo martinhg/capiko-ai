@@ -154,6 +154,27 @@ func TestSetInstructionsInstalled(t *testing.T) {
 	}
 }
 
+func TestSetHeadroom(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetHeadroom(&HeadroomRecord{Enabled: true, Checksum: "abc"}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Headroom == nil || !st.Headroom.Enabled || st.Headroom.Checksum != "abc" {
+		t.Errorf("Headroom not persisted: %+v", st.Headroom)
+	}
+	if err := s.SetHeadroom(&HeadroomRecord{Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.Headroom == nil || st.Headroom.Enabled {
+		t.Errorf("Headroom should be recorded disabled, got %+v", st.Headroom)
+	}
+}
+
 func TestSetOutputEfficiency(t *testing.T) {
 	s := NewStore(t.TempDir())
 	if err := s.SetOutputEfficiency(true); err != nil {

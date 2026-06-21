@@ -148,6 +148,69 @@ func TestEvaluateEngramManagedButBinaryMissing(t *testing.T) {
 	}
 }
 
+func TestEvaluateHeadroomDetected(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:              healthyEnv(),
+		CopilotHost:      &copilot.Host{BinPath: "/b/copilot"},
+		State:            &state.State{Version: "1.2.1"},
+		HeadroomDetected: true,
+	})
+	c := find(t, r, "Headroom")
+	if c.Status != Pass {
+		t.Errorf("Headroom: want Pass when detected, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "detected") {
+		t.Errorf("Headroom detail should note detection, got %q", c.Detail)
+	}
+}
+
+func TestEvaluateHeadroomAbsentIsPass(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:         healthyEnv(),
+		CopilotHost: &copilot.Host{BinPath: "/b/copilot"},
+		State:       &state.State{Version: "1.2.1"},
+	})
+	c := find(t, r, "Headroom")
+	if c.Status != Pass {
+		t.Errorf("Headroom: absence is optional, want Pass, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "optional") {
+		t.Errorf("Headroom detail should mark it optional when absent, got %q", c.Detail)
+	}
+}
+
+func TestEvaluateHeadroomManagedButMissingWarns(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:              healthyEnv(),
+		CopilotHost:      &copilot.Host{BinPath: "/b/copilot"},
+		State:            &state.State{Version: "1.2.1", Headroom: &state.HeadroomRecord{Enabled: true}},
+		HeadroomDetected: false, // wired but the binary vanished
+	})
+	c := find(t, r, "Headroom")
+	if c.Status != Warn {
+		t.Errorf("Headroom: want Warn when wired but CLI missing, got %v", c.Status)
+	}
+	if c.Remedy == "" {
+		t.Error("a dead headroom wiring should suggest installing headroom")
+	}
+	if !r.Healthy() {
+		t.Error("a missing optional headroom CLI is a warning, not a failure")
+	}
+}
+
+func TestEvaluateHeadroomManagedAndPresentIsPass(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:              healthyEnv(),
+		CopilotHost:      &copilot.Host{BinPath: "/b/copilot"},
+		State:            &state.State{Version: "1.2.1", Headroom: &state.HeadroomRecord{Enabled: true}},
+		HeadroomDetected: true,
+	})
+	c := find(t, r, "Headroom")
+	if c.Status != Pass || !strings.Contains(c.Detail, "configured") {
+		t.Errorf("Headroom: want Pass 'configured' when wired and present, got %v %q", c.Status, c.Detail)
+	}
+}
+
 // engramEnv is a healthy environment with the engram binary present at version.
 func engramEnv(version string) sysinfo.Report {
 	env := healthyEnv()

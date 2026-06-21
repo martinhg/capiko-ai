@@ -97,6 +97,11 @@ type Inputs struct {
 	// RecommendedEngram is the engram version capiko configures against (from
 	// versions.Engram). It drives the "Engram version" advisory; "" disables it.
 	RecommendedEngram string
+
+	// HeadroomDetected is whether the headroom context-compression CLI is on PATH
+	// (from headroom.Detected()). Informational: capiko can wire it, but never
+	// installs it.
+	HeadroomDetected bool
 }
 
 // requiredDeps are the prerequisites capiko cannot work without; each gets its
@@ -176,7 +181,33 @@ func Evaluate(in Inputs) Report {
 		r.Checks = append(r.Checks, c)
 	}
 
+	// Headroom (optional). Presence/wiring check — capiko can wire its MCP
+	// compression but never installs it. Warns only when wired yet the CLI is gone.
+	r.Checks = append(r.Checks, headroomCheck(in))
+
 	return r
+}
+
+// headroomCheck reports the state of the optional headroom context-compression
+// integration. When capiko has wired headroom but its CLI is missing from PATH the
+// wiring is dead, so that is a Warn (capiko configures headroom, it never installs
+// it). Otherwise it is informational: detected/available or absent/optional.
+func headroomCheck(in Inputs) Check {
+	managed := in.State != nil && in.State.Headroom != nil && in.State.Headroom.Enabled
+	if managed && !in.HeadroomDetected {
+		return Check{
+			Name: "Headroom", Status: Warn,
+			Detail: "wired into Copilot but the headroom CLI is not on PATH",
+			Remedy: `install headroom: pip install "headroom-ai[all]" (or npm i -g headroom-ai)`,
+		}
+	}
+	if managed {
+		return Check{Name: "Headroom", Status: Pass, Detail: "configured (context compression wired)"}
+	}
+	if in.HeadroomDetected {
+		return Check{Name: "Headroom", Status: Pass, Detail: "detected on PATH (context compression available to wire)"}
+	}
+	return Check{Name: "Headroom", Status: Pass, Detail: "not detected (optional)"}
 }
 
 func (r *Report) add(name string, status Status, detail, remedy string) {

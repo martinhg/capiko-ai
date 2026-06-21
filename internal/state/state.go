@@ -33,6 +33,9 @@ type State struct {
 	// TriggerRules is true once the user enables declarative trigger rules;
 	// sync re-applies them only when managed, mirroring persona/SDD.
 	TriggerRules bool `json:"trigger_rules,omitempty"`
+	// Headroom records the managed headroom (context-compression) MCP wiring;
+	// nil = unmanaged. Sync re-applies it only when enabled, mirroring engram.
+	Headroom *HeadroomRecord `json:"headroom,omitempty"`
 	// OutputEfficiency is true once the user enables the output-efficiency
 	// instruction block; sync re-applies it only when managed, mirroring persona/SDD.
 	OutputEfficiency bool `json:"output_efficiency,omitempty"`
@@ -54,6 +57,14 @@ type EngramRecord struct {
 	Surfaces     []string `json:"surfaces,omitempty"`      // "cli", "vscode"
 	VSCodeScope  string   `json:"vscode_scope,omitempty"`  // "workspace" or "user" when the vscode surface is on
 	Checksum     string   `json:"checksum,omitempty"`      // of the rendered MCP entry, for drift
+}
+
+// HeadroomRecord is the managed headroom MCP wiring. capiko configures headroom
+// (writes its MCP entry); it never installs the binary. Enabled false records a
+// deliberately-disabled wiring so sync does not re-apply it.
+type HeadroomRecord struct {
+	Enabled  bool   `json:"enabled"`
+	Checksum string `json:"checksum,omitempty"` // of the rendered MCP entry, for drift
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -232,6 +243,18 @@ func (s *Store) SetEngram(rec *EngramRecord) error {
 		return err
 	}
 	st.Engram = rec
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetHeadroom records the managed headroom MCP wiring, so sync re-applies it only
+// when enabled. A nil record clears it (unmanaged).
+func (s *Store) SetHeadroom(rec *HeadroomRecord) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.Headroom = rec
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
