@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/martinhg/capiko-ai/compare/v1.10.0...v1.11.0) (2026-06-21)
+
+
+### Features
+
+* **headroom:** inject agent guidance to use the compression tools ([#115](https://github.com/martinhg/capiko-ai/issues/115)) ([a844b0c](https://github.com/martinhg/capiko-ai/commit/a844b0cd571457fcfb6de0210ba82160314a3938))
+
 ## [1.10.0](https://github.com/martinhg/capiko-ai/compare/v1.9.0...v1.10.0) (2026-06-21)
 
 
