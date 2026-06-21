@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.19.0](https://github.com/martinhg/capiko-ai/compare/v1.18.0...v1.19.0) (2026-06-21)
+
+
+### Features
+
+* **backup:** symmetric agent backup before destructive ops ([#133](https://github.com/martinhg/capiko-ai/issues/133)) ([2b511a7](https://github.com/martinhg/capiko-ai/commit/2b511a732bb6275040210879dcd8a98499d79a97))
+
 ## [1.18.0](https://github.com/martinhg/capiko-ai/compare/v1.17.0...v1.18.0) (2026-06-21)
 
 
