@@ -7,6 +7,7 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -41,6 +42,70 @@ func applyViaReview(t *testing.T, s *selector) reconciledMsg {
 		t.Fatalf("apply should reconcile, got %T", cmd())
 	}
 	return rm
+}
+
+// depCatalog returns a catalog where "dependent" requires "base", plus a
+// standalone skill, for exercising dependency auto-inclusion.
+func depCatalog() []skill.Skill {
+	return []skill.Skill{
+		{Name: "base", Content: "---\nname: base\n---\nx"},
+		{Name: "dependent", Content: "---\nname: dependent\n---\nx", DependsOn: []string{"base"}},
+		{Name: "standalone", Content: "---\nname: standalone\n---\nx"},
+	}
+}
+
+func TestInstallAutoIncludesDependencies(t *testing.T) {
+	dir := t.TempDir()
+	s, ok := newInstall(services{host: &copilot.Host{SkillsDir: dir}}, depCatalog(), map[string]bool{}).(*selector)
+	if !ok {
+		t.Fatal("newInstall did not return *selector")
+	}
+
+	// Mark only "dependent" (cursor 1, since the catalog is sorted: base,
+	// dependent, standalone).
+	s.Update(key("down"))
+	s.Update(key("space"))
+
+	install, _ := s.plan()
+	if !contains(install, "base") || !contains(install, "dependent") {
+		t.Fatalf("plan install = %v, want both dependent and its base dependency", install)
+	}
+
+	rm := applyViaReview(t, s)
+	if rm.err != nil {
+		t.Fatalf("reconcile failed: %+v", rm)
+	}
+	if !contains(rm.result.installed, "base") {
+		t.Errorf("installed = %v, want base auto-included", rm.result.installed)
+	}
+	for _, n := range []string{"base", "dependent"} {
+		if _, err := os.Stat(filepath.Join(dir, n, "SKILL.md")); err != nil {
+			t.Errorf("%s not written to disk: %v", n, err)
+		}
+	}
+}
+
+func TestInstallDependencyNotRemovedWhileDependentWanted(t *testing.T) {
+	dir := t.TempDir()
+	// Both already installed; user unmarks "base" but leaves "dependent" marked.
+	s := newInstall(services{host: &copilot.Host{SkillsDir: dir}}, depCatalog(),
+		map[string]bool{"base": true, "dependent": true}).(*selector)
+
+	s.Update(key("space")) // cursor 0 = base → unmark it
+
+	_, remove := s.plan()
+	if contains(remove, "base") {
+		t.Errorf("base should not be removed while dependent still requires it; remove = %v", remove)
+	}
+}
+
+func contains(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestInstallSeedsFromDisk(t *testing.T) {

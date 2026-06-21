@@ -1,5 +1,6 @@
 ---
 name: sdd-archive
+depends_on: [sdd-shared]
 description: "Close a verified change: merge its spec into the canonical specs and archive it. Trigger: orchestrator delegates the archive phase of an SDD change."
 license: Apache-2.0
 metadata:

@@ -1,5 +1,6 @@
 ---
 name: sdd-verify
+depends_on: [sdd-shared]
 description: "Validate the implementation against the spec, design, and tasks. Trigger: orchestrator delegates the verify phase of an SDD change."
 license: Apache-2.0
 metadata:

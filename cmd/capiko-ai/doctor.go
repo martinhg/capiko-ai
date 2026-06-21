@@ -42,6 +42,7 @@ var gatherDoctorInputs = func() doctor.Inputs {
 
 	if cat, err := catalog.Load(); err == nil {
 		in.SkillDrift = drift.Stale(cat, st)
+		in.Catalog = cat
 	}
 	if agents, err := catalog.LoadAgents(); err == nil {
 		in.AgentDrift = drift.StaleAgents(agents, st)

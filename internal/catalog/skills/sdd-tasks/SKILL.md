@@ -1,5 +1,6 @@
 ---
 name: sdd-tasks
+depends_on: [sdd-shared]
 description: "Break a change into an ordered implementation checklist. Trigger: orchestrator delegates the tasks phase of an SDD change."
 license: Apache-2.0
 metadata:

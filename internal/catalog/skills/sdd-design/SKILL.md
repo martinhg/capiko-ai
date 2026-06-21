@@ -1,5 +1,6 @@
 ---
 name: sdd-design
+depends_on: [sdd-shared]
 description: "Decide the technical approach and architecture. Trigger: orchestrator delegates the design phase of an SDD change."
 license: Apache-2.0
 metadata:

@@ -1,5 +1,6 @@
 ---
 name: sdd-propose
+depends_on: [sdd-shared]
 description: "Write a change proposal with intent, scope, and approach. Trigger: orchestrator delegates the propose phase of an SDD change."
 license: Apache-2.0
 metadata:

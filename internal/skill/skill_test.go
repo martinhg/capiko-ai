@@ -3,6 +3,7 @@ package skill
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -62,6 +63,28 @@ func TestLoadCatalog(t *testing.T) {
 	}
 	if got[1].Content == "" {
 		t.Error("content should be the full SKILL.md, got empty")
+	}
+}
+
+func TestLoadCatalogRejectsMissingDependency(t *testing.T) {
+	fsys := fstest.MapFS{
+		"sdd-apply/SKILL.md": &fstest.MapFile{
+			Data: []byte("---\ndescription: apply\ndepends_on: [sdd-shared]\n---\nbody"),
+		},
+		// sdd-shared intentionally absent.
+	}
+	if _, err := LoadCatalog(fsys); err == nil {
+		t.Error("expected LoadCatalog to reject a catalog with a missing dependency")
+	}
+}
+
+func TestLoadCatalogRejectsDependencyCycle(t *testing.T) {
+	fsys := fstest.MapFS{
+		"a/SKILL.md": &fstest.MapFile{Data: []byte("---\ndescription: a\ndepends_on: [b]\n---\nx")},
+		"b/SKILL.md": &fstest.MapFile{Data: []byte("---\ndescription: b\ndepends_on: [a]\n---\nx")},
+	}
+	if _, err := LoadCatalog(fsys); err == nil {
+		t.Error("expected LoadCatalog to reject a dependency cycle")
 	}
 }
 
@@ -161,6 +184,144 @@ func TestLoadCatalogBundlesExtraFiles(t *testing.T) {
 	}
 	if len(bundles["plain"].Extra) != 0 {
 		t.Errorf("single-file skill should have no Extra, got %+v", bundles["plain"].Extra)
+	}
+}
+
+func TestParseDependsOn(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{
+			name:    "inline list",
+			content: "---\ndescription: x\ndepends_on: [sdd-shared, capiko-conventions]\n---\nbody",
+			want:    []string{"sdd-shared", "capiko-conventions"},
+		},
+		{
+			name:    "block list",
+			content: "---\ndescription: x\ndepends_on:\n  - sdd-shared\n  - capiko-conventions\n---\nbody",
+			want:    []string{"sdd-shared", "capiko-conventions"},
+		},
+		{
+			name:    "absent means no dependencies",
+			content: "---\ndescription: x\n---\nbody",
+			want:    nil,
+		},
+		{
+			name:    "CRLF line endings",
+			content: "---\r\ndescription: x\r\ndepends_on: [sdd-shared]\r\n---\r\nbody",
+			want:    []string{"sdd-shared"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := Parse("dependent", tt.content)
+			if err != nil {
+				t.Fatalf("Parse error: %v", err)
+			}
+			if len(s.DependsOn) != len(tt.want) {
+				t.Fatalf("DependsOn = %v, want %v", s.DependsOn, tt.want)
+			}
+			for i := range tt.want {
+				if s.DependsOn[i] != tt.want[i] {
+					t.Errorf("DependsOn[%d] = %q, want %q", i, s.DependsOn[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestValidateDependenciesAcceptsValidGraph(t *testing.T) {
+	catalog := []Skill{
+		{Name: "sdd-apply", DependsOn: []string{"sdd-shared"}},
+		{Name: "sdd-verify", DependsOn: []string{"sdd-shared"}},
+		{Name: "sdd-shared"},
+	}
+	if err := ValidateDependencies(catalog); err != nil {
+		t.Errorf("valid graph rejected: %v", err)
+	}
+}
+
+func TestValidateDependenciesRejectsMissingDep(t *testing.T) {
+	catalog := []Skill{
+		{Name: "sdd-apply", DependsOn: []string{"sdd-shared"}},
+		// sdd-shared is absent
+	}
+	err := ValidateDependencies(catalog)
+	if err == nil {
+		t.Fatal("expected error for missing dependency")
+	}
+	if !strings.Contains(err.Error(), "sdd-shared") || !strings.Contains(err.Error(), "sdd-apply") {
+		t.Errorf("error should name both the dependent and the missing dep, got: %v", err)
+	}
+}
+
+func TestValidateDependenciesRejectsCycle(t *testing.T) {
+	catalog := []Skill{
+		{Name: "a", DependsOn: []string{"b"}},
+		{Name: "b", DependsOn: []string{"a"}},
+	}
+	if err := ValidateDependencies(catalog); err == nil {
+		t.Error("expected error for dependency cycle a→b→a")
+	}
+}
+
+func TestValidateDependenciesRejectsSelfDependency(t *testing.T) {
+	catalog := []Skill{{Name: "a", DependsOn: []string{"a"}}}
+	if err := ValidateDependencies(catalog); err == nil {
+		t.Error("expected error for self-dependency a→a")
+	}
+}
+
+func TestResolveDependenciesIncludesTransitiveClosure(t *testing.T) {
+	catalog := []Skill{
+		{Name: "a", DependsOn: []string{"b"}},
+		{Name: "b", DependsOn: []string{"c"}},
+		{Name: "c"},
+		{Name: "unrelated"},
+	}
+	got, err := ResolveDependencies(catalog, []string{"a"})
+	if err != nil {
+		t.Fatalf("ResolveDependencies error: %v", err)
+	}
+	want := map[string]bool{"a": true, "b": true, "c": true}
+	if len(got) != len(want) {
+		t.Fatalf("resolved = %v, want keys %v", got, want)
+	}
+	for _, n := range got {
+		if !want[n] {
+			t.Errorf("unexpected skill %q in closure", n)
+		}
+	}
+}
+
+func TestResolveDependenciesIsDeterministicAndDeduped(t *testing.T) {
+	catalog := []Skill{
+		{Name: "a", DependsOn: []string{"shared"}},
+		{Name: "b", DependsOn: []string{"shared"}},
+		{Name: "shared"},
+	}
+	got, err := ResolveDependencies(catalog, []string{"b", "a"})
+	if err != nil {
+		t.Fatalf("ResolveDependencies error: %v", err)
+	}
+	// Sorted, no duplicate "shared".
+	want := []string{"a", "b", "shared"}
+	if len(got) != len(want) {
+		t.Fatalf("resolved = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("resolved[%d] = %q, want %q (must be sorted, deduped)", i, got[i], want[i])
+		}
+	}
+}
+
+func TestResolveDependenciesRejectsUnknownSelection(t *testing.T) {
+	catalog := []Skill{{Name: "a"}}
+	if _, err := ResolveDependencies(catalog, []string{"ghost"}); err == nil {
+		t.Error("expected error when a selected skill is not in the catalog")
 	}
 }
 
