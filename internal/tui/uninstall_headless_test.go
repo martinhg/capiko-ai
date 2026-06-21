@@ -111,6 +111,42 @@ func TestUninstallAll_FullUninstall(t *testing.T) {
 	}
 }
 
+// UninstallAll snapshots agent files too, so restoring the backup reinstates
+// the agents it removed — backup/restore symmetry between skills and agents.
+func TestUninstallAll_BackupRestoresAgents(t *testing.T) {
+	host := uninstallHost(t)
+	store := state.NewStore(t.TempDir())
+	bkp := backup.NewStore(t.TempDir())
+	seedInstalled(t, host, store)
+
+	if _, err := UninstallAll(host, store, bkp); err != nil {
+		t.Fatalf("UninstallAll: %v", err)
+	}
+
+	mans, err := bkp.List()
+	if err != nil || len(mans) != 1 {
+		t.Fatalf("List = %+v, err %v, want exactly one backup", mans, err)
+	}
+	agents := testAgentCatalog()
+	if len(mans[0].Files) != len(agents) {
+		t.Fatalf("backup captured %d agent files, want %d", len(mans[0].Files), len(agents))
+	}
+
+	if err := bkp.Restore(host.SkillsDir, mans[0].ID); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	for _, a := range agents {
+		data, err := os.ReadFile(filepath.Join(host.AgentsDir, a.Name+".agent.md"))
+		if err != nil {
+			t.Errorf("agent %s must be restored from backup: %v", a.Name, err)
+			continue
+		}
+		if string(data) != a.Content {
+			t.Errorf("agent %s content = %q, want original after restore", a.Name, data)
+		}
+	}
+}
+
 func TestUninstallAll_NothingToRemove(t *testing.T) {
 	host := uninstallHost(t)
 	store := state.NewStore(t.TempDir())
