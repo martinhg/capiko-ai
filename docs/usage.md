@@ -33,6 +33,7 @@ persona) to change it.
 | Configure SDD | Edit the per-phase model table and strict-TDD toggle. |
 | SDD Status | Read-only dashboard of active OpenSpec changes: next phase, task progress, and a per-change phase graph (done / in progress / blocked) with blocked reasons. |
 | Configure engram | Enable cross-session memory: pick the artifact-store mode, set the cloud URL, and wire the engram MCP server into Copilot CLI and VS Code. |
+| Configure code review | Wire Gentleman Guardian Angel (gga) into the project: write `.gga`, inject a curated `AGENTS.md` rules block tied to the active persona, and install the pre-commit review hook. Pick the provider; gga must be installed. |
 | Install instructions | Write the curated scoped `*.instructions.md` into `~/.copilot/instructions/`. |
 | Upgrade tools | Self-update capiko to the latest release, then restart. |
 | Upgrade + sync | Upgrade, restart, and sync skills with the new catalog. |
