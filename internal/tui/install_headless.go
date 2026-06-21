@@ -11,10 +11,11 @@ import (
 )
 
 // InstallAll installs every catalog skill and agent that is not already
-// present on disk, records the result in state, and backs up affected skill
-// names first. It is additive-only: already-installed items are left
-// untouched, and nothing is ever removed. A nil store or backup degrades
-// gracefully (changes still apply, but are not recorded/snapshotted).
+// present on disk, records the result in state, and backs up the affected
+// skills and agent files first (in a single snapshot via CreateWithAgents).
+// It is additive-only: already-installed items are left untouched, and nothing
+// is ever removed. A nil store or backup degrades gracefully (changes still
+// apply, but are not recorded/snapshotted).
 //
 // Already-installed skills/agents are discovered from state when store is
 // non-nil; otherwise they are discovered straight from disk via
@@ -46,12 +47,16 @@ func InstallAll(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.
 		return ReconcileResult{}, nil
 	}
 
-	if bkp != nil && len(toInstall) > 0 {
-		names := make([]string, len(toInstall))
+	if bkp != nil && (len(toInstall) > 0 || len(agentsToInstall) > 0) {
+		skillNames := make([]string, len(toInstall))
 		for i, sk := range toInstall {
-			names[i] = sk.Name
+			skillNames[i] = sk.Name
 		}
-		if _, err := bkp.Create(host.SkillsDir, "install", Version, names); err != nil {
+		agentNames := make([]string, len(agentsToInstall))
+		for i, a := range agentsToInstall {
+			agentNames[i] = a.Name
+		}
+		if _, err := bkp.CreateWithAgents(host.SkillsDir, host.AgentsDir, "install", Version, skillNames, agentNames); err != nil {
 			return ReconcileResult{}, fmt.Errorf("backup failed, aborting: %w", err)
 		}
 	}

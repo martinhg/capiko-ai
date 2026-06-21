@@ -10,8 +10,9 @@ import (
 )
 
 // UninstallAll removes every capiko-managed skill and agent from the host, backs
-// up affected skill names first, and clears them from state. It is the inverse
-// of InstallAll: only items recorded in state are touched, in deterministic
+// up the affected skills and agent files first (in a single snapshot via
+// CreateWithAgents), and clears them from state. It is the inverse of
+// InstallAll: only items recorded in state are touched, in deterministic
 // (sorted) order.
 //
 // A nil store is REFUSED, not degraded. Uninstall is destructive, and without
@@ -21,11 +22,9 @@ import (
 // refusing avoids deleting unmanaged files. A nil backup still degrades
 // gracefully (removal proceeds without a snapshot).
 //
-// Backup scope: only skills are snapshotted (via backup.Store.Create, which is
-// built for the skill-directory layout). Agent files are NOT snapshotted — the
-// same limitation InstallAll has — but agents are catalog-derived and
-// recoverable via `capiko-ai install`. Symmetric agent backup is a known
-// follow-up.
+// Backup scope: both skills (directory layout) and agent files (flat
+// <name>.agent.md layout) are snapshotted in a single backup via
+// CreateWithAgents, so a restore reinstates whatever this op removed.
 //
 // Scope guard: UninstallAll only calls UninstallSkill, UninstallAgent,
 // store.Apply, and store.ApplyAgents. It never touches persona, SDDModels,
@@ -49,8 +48,8 @@ func UninstallAll(host *copilot.Host, store *state.Store, bkp *backup.Store) (Re
 		return ReconcileResult{}, nil
 	}
 
-	if bkp != nil && len(skillNames) > 0 {
-		if _, err := bkp.Create(host.SkillsDir, "uninstall", Version, skillNames); err != nil {
+	if bkp != nil && (len(skillNames) > 0 || len(agentNames) > 0) {
+		if _, err := bkp.CreateWithAgents(host.SkillsDir, host.AgentsDir, "uninstall", Version, skillNames, agentNames); err != nil {
 			return ReconcileResult{}, fmt.Errorf("backup failed, aborting: %w", err)
 		}
 	}
