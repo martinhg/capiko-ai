@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.16.0](https://github.com/martinhg/capiko-ai/compare/v1.15.0...v1.16.0) (2026-06-21)
+
+
+### Features
+
+* **skill:** enforce a Trigger clause in skill descriptions ([#127](https://github.com/martinhg/capiko-ai/issues/127)) ([81a66da](https://github.com/martinhg/capiko-ai/commit/81a66da0713dea813374b68dcea07bc863338c1d))
+
 ## [1.15.0](https://github.com/martinhg/capiko-ai/compare/v1.14.0...v1.15.0) (2026-06-21)
 
 
