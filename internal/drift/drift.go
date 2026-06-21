@@ -7,6 +7,7 @@ package drift
 import (
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/engram"
+	"github.com/martinhg/capiko-ai/internal/headroom"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -24,6 +25,21 @@ func StaleEngram(mcpConfigPath string, st *state.State) bool {
 		return true
 	}
 	return cur != st.Engram.Checksum
+}
+
+// StaleHeadroom reports whether the managed headroom MCP entry has fallen behind
+// what capiko would write: missing from disk, or diverged from the recorded
+// checksum (e.g. a manual edit). It returns false when headroom is unmanaged or
+// disabled. Mirrors StaleEngram.
+func StaleHeadroom(mcpConfigPath string, st *state.State) bool {
+	if st == nil || st.Headroom == nil || !st.Headroom.Enabled {
+		return false
+	}
+	cur, ok := engram.MCPEntryChecksum(mcpConfigPath, headroom.ServerName)
+	if !ok {
+		return true
+	}
+	return cur != st.Headroom.Checksum
 }
 
 // StaleAgents returns the names of catalog agents that are either missing from

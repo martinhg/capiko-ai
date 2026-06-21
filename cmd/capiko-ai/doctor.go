@@ -48,6 +48,7 @@ var gatherDoctorInputs = func() doctor.Inputs {
 	}
 	if host != nil {
 		in.EngramStale = drift.StaleEngram(host.MCPConfigPath, st)
+		in.HeadroomStale = drift.StaleHeadroom(host.MCPConfigPath, st)
 	}
 	return in
 }

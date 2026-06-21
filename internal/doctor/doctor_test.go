@@ -211,6 +211,26 @@ func TestEvaluateHeadroomManagedAndPresentIsPass(t *testing.T) {
 	}
 }
 
+func TestEvaluateHeadroomDriftedWarns(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:              healthyEnv(),
+		CopilotHost:      &copilot.Host{BinPath: "/b/copilot"},
+		State:            &state.State{Version: "1.2.1", Headroom: &state.HeadroomRecord{Enabled: true}},
+		HeadroomDetected: true,
+		HeadroomStale:    true, // entry edited/diverged on disk
+	})
+	c := find(t, r, "Headroom")
+	if c.Status != Warn {
+		t.Errorf("Headroom: want Warn when the MCP entry has drifted, got %v", c.Status)
+	}
+	if c.Remedy == "" {
+		t.Error("a drifted headroom entry should suggest running sync")
+	}
+	if !r.Healthy() {
+		t.Error("drift is a warning, not a failure")
+	}
+}
+
 // engramEnv is a healthy environment with the engram binary present at version.
 func engramEnv(version string) sysinfo.Report {
 	env := healthyEnv()

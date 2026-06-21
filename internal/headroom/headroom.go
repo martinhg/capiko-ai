@@ -42,9 +42,10 @@ Prefer compressing over truncating: truncation drops information, headroom keeps
 Skip it for short content, where the round-trip is not worth it.`
 
 // command is the headroom CLI binary. Its MCP server is launched over stdio with
-// `headroom mcp serve` — headroom's documented MCP invocation. This is not a
-// guaranteed-stable public contract, so it must be confirmed against the installed
-// tool (e.g. `headroom mcp install`) before capiko writes it into a user's config.
+// `headroom mcp serve` — confirmed against headroom v0.26.0: `headroom mcp install`
+// writes exactly {command: "headroom", args: ["mcp", "serve"]} (headroom's own
+// `type` is "stdio" for Claude Code; capiko uses Copilot CLI's "local", matching
+// how it wires engram).
 const command = "headroom"
 
 // lookPath is a test seam over exec.LookPath.
