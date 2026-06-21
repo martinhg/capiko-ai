@@ -29,8 +29,10 @@ Persona and the SDD orchestrator are **marker-bound blocks** in
 
 - `internal/state` owns `~/.capiko/state.json` (atomic writes; per-skill checksums).
 - Every mutation is **snapshot-before-mutate**: `internal/backup` copies the
-  affected skills/files to `~/.capiko/backups/<id>/` (with a manifest) first, so any
-  change is restorable from **Manage backups**.
+  affected skills, agent files, and standalone files to `~/.capiko/backups/<id>/`
+  (with a manifest) first, so any change is restorable from **Manage backups**.
+  `CreateWithAgents` keeps skills and agents in one backup id, so install/uninstall
+  restore symmetrically.
 
 ## Versioning and self-update
 
