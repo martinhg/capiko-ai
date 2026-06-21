@@ -6,9 +6,58 @@ import (
 	"time"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
+
+func depTestCatalog() []skill.Skill {
+	return []skill.Skill{
+		{Name: "sdd-shared"},
+		{Name: "sdd-apply", DependsOn: []string{"sdd-shared"}},
+	}
+}
+
+func TestEvaluateBrokenDependencyChainWarns(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:         healthyEnv(),
+		CopilotHost: &copilot.Host{ConfigDir: "/home/u/.copilot"},
+		Catalog:     depTestCatalog(),
+		// sdd-apply installed, but its dependency sdd-shared is NOT.
+		State: &state.State{Version: "1.2.1", Skills: map[string]state.SkillRecord{
+			"sdd-apply": {},
+		}},
+	})
+	c := find(t, r, "Skill dependencies")
+	if c.Status != Warn {
+		t.Errorf("broken chain: want Warn, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "sdd-apply") || !strings.Contains(c.Detail, "sdd-shared") {
+		t.Errorf("detail should name the dependent and the missing dep, got %q", c.Detail)
+	}
+}
+
+func TestEvaluateSatisfiedDependencyChainPasses(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:         healthyEnv(),
+		CopilotHost: &copilot.Host{ConfigDir: "/home/u/.copilot"},
+		Catalog:     depTestCatalog(),
+		State: &state.State{Version: "1.2.1", Skills: map[string]state.SkillRecord{
+			"sdd-apply":  {},
+			"sdd-shared": {},
+		}},
+	})
+	if c := find(t, r, "Skill dependencies"); c.Status != Pass {
+		t.Errorf("satisfied chain: want Pass, got %v (%s)", c.Status, c.Detail)
+	}
+}
+
+func TestEvaluateDependencyChainNotEvaluatedWithoutManagedInstall(t *testing.T) {
+	r := Evaluate(Inputs{Env: healthyEnv(), Catalog: depTestCatalog()})
+	if c := find(t, r, "Skill dependencies"); c.Status != Pass {
+		t.Errorf("no managed install: want Pass/n-a, got %v", c.Status)
+	}
+}
 
 // healthyEnv is a sysinfo.Report where every prerequisite capiko needs is
 // present, used as the baseline the failing cases mutate.

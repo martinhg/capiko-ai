@@ -12,6 +12,7 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/release"
+	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
@@ -105,6 +106,11 @@ type Inputs struct {
 	// HeadroomStale is whether the managed headroom MCP entry has drifted from the
 	// recorded configuration (from drift.StaleHeadroom).
 	HeadroomStale bool
+
+	// Catalog is the embedded skill catalog (from catalog.Load()). It carries the
+	// declared depends_on edges so Evaluate can flag installed skills whose
+	// dependencies are not also installed.
+	Catalog []skill.Skill
 }
 
 // requiredDeps are the prerequisites capiko cannot work without; each gets its
@@ -175,6 +181,14 @@ func Evaluate(in Inputs) Report {
 		r.add("Agent drift", Pass, "n/a (no managed install)", "")
 	}
 
+	// Skill dependency chains: an installed skill whose declared dependency is not
+	// also installed. Only meaningful against a managed baseline.
+	if managed {
+		r.Checks = append(r.Checks, dependencyCheck(in))
+	} else {
+		r.add("Skill dependencies", Pass, "n/a (no managed install)", "")
+	}
+
 	// Engram backend (optional). Only meaningful when the user has it managed.
 	r.Checks = append(r.Checks, engramCheck(in))
 
@@ -218,6 +232,40 @@ func headroomCheck(in Inputs) Check {
 		return Check{Name: "Headroom", Status: Pass, Detail: "detected on PATH (context compression available to wire)"}
 	}
 	return Check{Name: "Headroom", Status: Pass, Detail: "not detected (optional)"}
+}
+
+// dependencyCheck flags installed skills whose declared dependencies are not
+// themselves installed (a broken chain). "Installed" is read from the managed
+// state record; the depends_on edges come from the embedded catalog. A broken
+// chain is a Warn: the dependent skill is present but its prerequisite is not, so
+// it may not work as authored — re-running install repairs it (install now pulls
+// dependencies in automatically).
+func dependencyCheck(in Inputs) Check {
+	installed := map[string]bool{}
+	if in.State != nil {
+		for name := range in.State.Skills {
+			installed[name] = true
+		}
+	}
+	var broken []string
+	for _, sk := range in.Catalog {
+		if !installed[sk.Name] {
+			continue
+		}
+		for _, dep := range sk.DependsOn {
+			if !installed[dep] {
+				broken = append(broken, sk.Name+" needs "+dep)
+			}
+		}
+	}
+	if len(broken) == 0 {
+		return Check{Name: "Skill dependencies", Status: Pass, Detail: "all installed skills have their dependencies"}
+	}
+	return Check{
+		Name: "Skill dependencies", Status: Warn,
+		Detail: fmt.Sprintf("%d broken chain(s): %s", len(broken), strings.Join(broken, ", ")),
+		Remedy: "run Install in capiko-ai to pull in the missing dependencies",
+	}
 }
 
 func (r *Report) add(name string, status Status, detail, remedy string) {
