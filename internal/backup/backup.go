@@ -56,27 +56,11 @@ func DefaultStore() (*Store, error) {
 // its id. Skills that do not currently exist are recorded (Existed=false) so a
 // restore can remove them, returning to the pre-mutation state.
 func (s *Store) Create(skillsDir, reason, version string, skills []string) (string, error) {
-	// Nanosecond precision plus a collision guard guarantees a unique id even
-	// for backups created within the same instant.
-	base := time.Now().UTC().Format("20060102T150405.000000000")
-	id, dir := base, filepath.Join(s.dir, base)
-	for i := 1; isDir(dir); i++ {
-		id = fmt.Sprintf("%s-%d", base, i)
-		dir = filepath.Join(s.dir, id)
+	id, dir := s.newBackupDir()
+	entries, err := snapshotSkills(skillsDir, dir, skills)
+	if err != nil {
+		return "", err
 	}
-
-	var entries []Entry
-	for _, name := range skills {
-		src := filepath.Join(skillsDir, name)
-		existed := isDir(src)
-		if existed {
-			if err := copyDir(src, filepath.Join(dir, "skills", name)); err != nil {
-				return "", err
-			}
-		}
-		entries = append(entries, Entry{Skill: name, Existed: existed})
-	}
-
 	man := Manifest{
 		ID:        id,
 		CreatedAt: time.Now().UTC(),
@@ -90,28 +74,48 @@ func (s *Store) Create(skillsDir, reason, version string, skills []string) (stri
 	return id, nil
 }
 
+// CreateWithAgents snapshots skills (directory layout) and agent files (the flat
+// <name>.agent.md layout under agentsDir) into a single backup, so a destructive
+// op that mutates both can be undone atomically. Agents are recorded as
+// FileEntry alongside the skill Entries in one manifest; Restore reinstates
+// both. Used by InstallAll/UninstallAll, which touch skills and agents together.
+func (s *Store) CreateWithAgents(skillsDir, agentsDir, reason, version string, skills, agents []string) (string, error) {
+	id, dir := s.newBackupDir()
+	entries, err := snapshotSkills(skillsDir, dir, skills)
+	if err != nil {
+		return "", err
+	}
+	paths := make([]string, len(agents))
+	for i, name := range agents {
+		paths[i] = filepath.Join(agentsDir, name+".agent.md")
+	}
+	files, err := snapshotFiles(dir, paths)
+	if err != nil {
+		return "", err
+	}
+	man := Manifest{
+		ID:        id,
+		CreatedAt: time.Now().UTC(),
+		Version:   version,
+		Reason:    reason,
+		Entries:   entries,
+		Files:     files,
+	}
+	if err := writeManifest(dir, man); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 // CreateFiles snapshots the given absolute file paths into a new backup and
 // returns its id. Files that do not currently exist are recorded (Existed=false)
 // so a restore can remove them, returning to the pre-mutation state. Used for
 // standalone files outside the skills tree (e.g. copilot-instructions.md).
 func (s *Store) CreateFiles(reason, version string, paths []string) (string, error) {
-	base := time.Now().UTC().Format("20060102T150405.000000000")
-	id, dir := base, filepath.Join(s.dir, base)
-	for i := 1; isDir(dir); i++ {
-		id = fmt.Sprintf("%s-%d", base, i)
-		dir = filepath.Join(s.dir, id)
-	}
-
-	var files []FileEntry
-	for _, p := range paths {
-		existed := isFile(p)
-		label := filepath.Base(p)
-		if existed {
-			if err := copyFile(p, filepath.Join(dir, "files", label)); err != nil {
-				return "", err
-			}
-		}
-		files = append(files, FileEntry{Label: label, Path: p, Existed: existed})
+	id, dir := s.newBackupDir()
+	files, err := snapshotFiles(dir, paths)
+	if err != nil {
+		return "", err
 	}
 
 	man := Manifest{
@@ -194,6 +198,55 @@ func (s *Store) Delete(id string) error {
 }
 
 // --- helpers ---
+
+// newBackupDir returns a fresh unique backup id and its absolute directory.
+// Nanosecond precision plus a collision guard guarantees a unique id even for
+// backups created within the same instant.
+func (s *Store) newBackupDir() (id, dir string) {
+	base := time.Now().UTC().Format("20060102T150405.000000000")
+	id, dir = base, filepath.Join(s.dir, base)
+	for i := 1; isDir(dir); i++ {
+		id = fmt.Sprintf("%s-%d", base, i)
+		dir = filepath.Join(s.dir, id)
+	}
+	return id, dir
+}
+
+// snapshotSkills copies each named skill directory from skillsDir into dir/skills
+// and records an Entry per skill. Skills that do not currently exist are recorded
+// (Existed=false) so a restore can remove them, returning to the pre-mutation state.
+func snapshotSkills(skillsDir, dir string, skills []string) ([]Entry, error) {
+	var entries []Entry
+	for _, name := range skills {
+		src := filepath.Join(skillsDir, name)
+		existed := isDir(src)
+		if existed {
+			if err := copyDir(src, filepath.Join(dir, "skills", name)); err != nil {
+				return nil, err
+			}
+		}
+		entries = append(entries, Entry{Skill: name, Existed: existed})
+	}
+	return entries, nil
+}
+
+// snapshotFiles copies each path into dir/files and records a FileEntry per path.
+// Files that do not currently exist are recorded (Existed=false) so a restore can
+// remove them, returning to the pre-mutation state.
+func snapshotFiles(dir string, paths []string) ([]FileEntry, error) {
+	var files []FileEntry
+	for _, p := range paths {
+		existed := isFile(p)
+		label := filepath.Base(p)
+		if existed {
+			if err := copyFile(p, filepath.Join(dir, "files", label)); err != nil {
+				return nil, err
+			}
+		}
+		files = append(files, FileEntry{Label: label, Path: p, Existed: existed})
+	}
+	return files, nil
+}
 
 func writeManifest(dir string, man Manifest) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {

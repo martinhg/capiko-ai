@@ -116,6 +116,80 @@ func TestRestoreRemovesNewlyInstalledSkill(t *testing.T) {
 	}
 }
 
+func writeAgent(t *testing.T, agentsDir, name, content string) {
+	t.Helper()
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, name+".agent.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readAgent(t *testing.T, agentsDir, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(agentsDir, name+".agent.md"))
+	if err != nil {
+		t.Fatalf("read agent %s: %v", name, err)
+	}
+	return string(data)
+}
+
+// CreateWithAgents captures skills and agent files in a single backup; restoring
+// it reinstates an overwritten agent (the uninstall/overwrite case).
+func TestCreateWithAgents_RestoresOverwrittenAgent(t *testing.T) {
+	skillsDir, agentsDir := t.TempDir(), t.TempDir()
+	store := NewStore(t.TempDir())
+	writeSkill(t, skillsDir, "capiko-hello", "skill-v1")
+	writeAgent(t, agentsDir, "sdd-spec", "agent-v1")
+
+	id, err := store.CreateWithAgents(skillsDir, agentsDir, "uninstall", "1.0.0",
+		[]string{"capiko-hello"}, []string{"sdd-spec"})
+	if err != nil {
+		t.Fatalf("CreateWithAgents: %v", err)
+	}
+
+	mans, _ := store.List()
+	if len(mans) != 1 || len(mans[0].Entries) != 1 || len(mans[0].Files) != 1 {
+		t.Fatalf("manifest = %+v, want one backup with one skill and one agent", mans)
+	}
+
+	writeAgent(t, agentsDir, "sdd-spec", "agent-v2") // mutate
+	writeSkill(t, skillsDir, "capiko-hello", "skill-v2")
+
+	if err := store.Restore(skillsDir, id); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if got := readAgent(t, agentsDir, "sdd-spec"); got != "agent-v1" {
+		t.Errorf("agent = %q, want agent-v1 after restore", got)
+	}
+	if got := readSkill(t, skillsDir, "capiko-hello"); got != "skill-v1" {
+		t.Errorf("skill = %q, want skill-v1 after restore", got)
+	}
+}
+
+// Restoring a CreateWithAgents backup taken before the agent existed removes it
+// (the install case: install snapshots, then writes the new agent).
+func TestCreateWithAgents_RemovesNewlyInstalledAgent(t *testing.T) {
+	skillsDir, agentsDir := t.TempDir(), t.TempDir()
+	store := NewStore(t.TempDir())
+
+	id, err := store.CreateWithAgents(skillsDir, agentsDir, "install", "1.0.0",
+		nil, []string{"sdd-spec"})
+	if err != nil {
+		t.Fatalf("CreateWithAgents: %v", err)
+	}
+
+	writeAgent(t, agentsDir, "sdd-spec", "installed later") // the mutation installs it
+
+	if err := store.Restore(skillsDir, id); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "sdd-spec.agent.md")); !os.IsNotExist(err) {
+		t.Errorf("agent should be gone after restoring a pre-install snapshot: %v", err)
+	}
+}
+
 func TestListNewestFirstAndMissingDir(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "nope"))
 	if got, err := store.List(); err != nil || len(got) != 0 {
