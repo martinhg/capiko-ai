@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.0](https://github.com/martinhg/capiko-ai/compare/v1.16.0...v1.17.0) (2026-06-21)
+
+
+### Features
+
+* **cli:** structured --verbose logging for CLI subcommands ([#129](https://github.com/martinhg/capiko-ai/issues/129)) ([d2a948d](https://github.com/martinhg/capiko-ai/commit/d2a948d9abb44517c5c8866199497293c5f70a39))
+
 ## [1.16.0](https://github.com/martinhg/capiko-ai/compare/v1.15.0...v1.16.0) (2026-06-21)
 
 
