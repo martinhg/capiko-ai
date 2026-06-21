@@ -39,6 +39,10 @@ type State struct {
 	// OutputEfficiency is true once the user enables the output-efficiency
 	// instruction block; sync re-applies it only when managed, mirroring persona/SDD.
 	OutputEfficiency bool `json:"output_efficiency,omitempty"`
+	// CodeReview records the managed Gentleman Guardian Angel (gga) wiring: the
+	// .gga config, the curated AGENTS.md rules block, and the git hook. nil =
+	// unmanaged. Sync re-applies it only when enabled, mirroring engram/headroom.
+	CodeReview *CodeReviewRecord `json:"code_review,omitempty"`
 	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
 	// means "never checked" — the next launch will always call the API. The
 	// timestamp is advanced only on a successful check, so failures don't
@@ -65,6 +69,20 @@ type EngramRecord struct {
 type HeadroomRecord struct {
 	Enabled  bool   `json:"enabled"`
 	Checksum string `json:"checksum,omitempty"` // of the rendered MCP entry, for drift
+}
+
+// CodeReviewRecord is the managed Gentleman Guardian Angel (gga) configuration.
+// capiko configures gga (writes .gga, the AGENTS.md rules block, and the hook); it
+// never installs the binary. Enabled false records a deliberately-disabled wiring
+// so sync does not re-apply it.
+type CodeReviewRecord struct {
+	Enabled         bool   `json:"enabled"`
+	Provider        string `json:"provider,omitempty"`         // gga provider string, e.g. "claude"
+	RulesFile       string `json:"rules_file,omitempty"`       // file gga reads; capiko manages a block within it
+	FilePatterns    string `json:"file_patterns,omitempty"`    // comma-separated globs to review
+	ExcludePatterns string `json:"exclude_patterns,omitempty"` // comma-separated globs to skip
+	StrictMode      bool   `json:"strict_mode,omitempty"`      // fail the commit on an ambiguous AI response
+	Timeout         int    `json:"timeout,omitempty"`          // provider timeout in seconds
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -255,6 +273,17 @@ func (s *Store) SetHeadroom(rec *HeadroomRecord) error {
 		return err
 	}
 	st.Headroom = rec
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetCodeReview records the managed gga code-review configuration (nil = unmanaged).
+func (s *Store) SetCodeReview(rec *CodeReviewRecord) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.CodeReview = rec
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

@@ -1,0 +1,12 @@
+capiko-ai  ·  Copilot configurator
+
+Configure code review
+Wire Gentleman Guardian Angel (gga) into this project: AI review on every commit.
+
+▸ Enabled         off
+  Provider        claude
+  Strict mode     on
+  Apply         
+  Back          
+
+↑/↓ move · ←/→ provider · space toggle · enter select · esc back

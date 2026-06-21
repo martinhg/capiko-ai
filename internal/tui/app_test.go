@@ -114,9 +114,19 @@ func TestEnterOpensHeadroom(t *testing.T) {
 	}
 }
 
+func TestEnterOpensCodeReview(t *testing.T) {
+	a := readyApp(t, t.TempDir())
+	a.cursor = 8 // Configure code review
+
+	next, _ := a.Update(key("enter"))
+	if _, ok := next.(App).active.(*codeReviewScreen); !ok {
+		t.Errorf("active = %T, want *codeReviewScreen", next.(App).active)
+	}
+}
+
 func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 8 // Upgrade tools
+	a.cursor = 9 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -131,7 +141,7 @@ func TestEnterOpensUpgrade(t *testing.T) {
 
 func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 9 // Upgrade + sync
+	a.cursor = 10 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -157,7 +167,7 @@ func TestEnterOpensBackups(t *testing.T) {
 
 func TestEnterOpensInstructions(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 10 // Install instructions
+	a.cursor = 11 // Install instructions
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*instructionsScreen); !ok {

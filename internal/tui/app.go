@@ -71,6 +71,7 @@ var menuItems = []menuItem{
 	{"SDD Status", "sdd-status", true},
 	{"Configure engram", "engram", true},
 	{"Configure headroom", "headroom", true},
+	{"Configure code review", "code-review", true},
 	{"Upgrade tools", "upgrade", true},
 	{"Upgrade + sync", "upgrade-sync", true},
 	{"Install instructions", "instructions", true},
@@ -244,6 +245,8 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newEngram(a.svc)
 	case it.id == "headroom":
 		a.active = newHeadroom(a.svc)
+	case it.id == "code-review":
+		a.active = newCodeReview(a.svc)
 	case it.id == "upgrade-sync":
 		a.active = newUpgradeSync(a.svc, a.catalog, a.latest)
 	case it.id == "instructions":

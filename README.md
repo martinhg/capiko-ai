@@ -196,6 +196,7 @@ capiko-ai doctor --json || echo "capiko environment unhealthy"
 | **Configure SDD** | Assign a model per SDD phase, set per-phase reasoning effort, and toggle strict TDD. |
 | **SDD Status** | Read-only dashboard of active OpenSpec changes: each change's next phase and task progress, with a per-change phase graph (done / in progress / blocked) and any blocked reasons. |
 | **Configure engram** | Enable cross-session memory: pick the artifact-store mode, set the cloud URL, wire the MCP server into Copilot CLI and VS Code. |
+| **Configure code review** | Wire [Gentleman Guardian Angel](https://github.com/Gentleman-Programming/gentleman-guardian-angel) (gga) into the project: write `.gga`, inject a curated `AGENTS.md` rules block (kept in sync with the active persona), and install the pre-commit review hook. Pick the review provider; gga must be on PATH. |
 | **Upgrade tools** / **Upgrade + sync** | Self-update capiko, restart, and optionally re-sync against the new catalog. |
 | **Install instructions** | Write the curated scoped `*.instructions.md` files. |
 
