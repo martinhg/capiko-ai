@@ -54,9 +54,10 @@ func main() {
 			}
 			return
 		case "doctor":
-			// Read-only ecosystem health check: print pass/warn/fail diagnostics
-			// without launching the TUI. A failed check exits non-zero so the
-			// command is usable in scripts and CI.
+			// Ecosystem health check: print pass/warn/fail diagnostics without
+			// launching the TUI. A failed check exits non-zero so the command is
+			// usable in scripts and CI. --repair additionally re-applies the managed
+			// catalog when drift is detected.
 			_, healthy, err := doctorCommand(os.Args[1], os.Args[2:], os.Stdout)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "capiko-ai:", err)

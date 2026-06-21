@@ -47,13 +47,14 @@ func applyPersona(host *copilot.Host, store *state.Store, bkp *backup.Store, p p
 // global instructions file. Selecting one applies it and continues to the skill
 // selector; Back returns to the menu.
 type personaScreen struct {
-	svc       services
-	catalog   []skill.Skill
-	installed map[string]bool
-	personas  []persona.Persona
-	cursor    int
-	state     personaState
-	err       error
+	svc        services
+	catalog    []skill.Skill
+	installed  map[string]bool
+	personas   []persona.Persona
+	cursor     int
+	efficiency bool // opt-in: inject the output-efficiency block alongside the persona
+	state      personaState
+	err        error
 }
 
 type personaState int
@@ -101,6 +102,8 @@ func (s *personaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			if s.cursor < len(s.personas)-1 {
 				s.cursor++
 			}
+		case "e":
+			s.efficiency = !s.efficiency
 		case "enter":
 			s.state = personaApplying
 			return s, s.applyCmd(s.personas[s.cursor])
@@ -110,9 +113,14 @@ func (s *personaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 }
 
 func (s *personaScreen) applyCmd(p persona.Persona) tea.Cmd {
-	host, store, bkp := s.svc.host, s.svc.state, s.svc.backup
+	host, store, bkp, eff := s.svc.host, s.svc.state, s.svc.backup, s.efficiency
 	return func() tea.Msg {
-		return personaAppliedMsg{err: applyPersona(host, store, bkp, p)}
+		if err := applyPersona(host, store, bkp, p); err != nil {
+			return personaAppliedMsg{err: err}
+		}
+		// Apply (or clear) the output-efficiency block per the toggle. Default off,
+		// so an unchecked toggle removes any previously-managed block.
+		return personaAppliedMsg{err: applyOutputEfficiency(host, store, bkp, eff)}
 	}
 }
 
@@ -142,6 +150,13 @@ func (s *personaScreen) View() string {
 		b.WriteString(dimSty.Render("    "+p.Description) + "\n")
 	}
 
-	b.WriteString("\n" + dimSty.Render("↑/↓ move · enter select · esc back") + "\n")
+	checkbox := "[ ]"
+	if s.efficiency {
+		checkbox = "[x]"
+	}
+	b.WriteString("\n" + textSty.Render(checkbox+" Output efficiency") +
+		dimSty.Render("  fewer output tokens, same rigor") + "\n")
+
+	b.WriteString("\n" + dimSty.Render("↑/↓ move · enter select · e efficiency · esc back") + "\n")
 	return b.String()
 }

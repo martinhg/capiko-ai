@@ -9,11 +9,26 @@ import (
 	"github.com/martinhg/capiko-ai/internal/catalog"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/drift"
+	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headless"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/tui"
+	"github.com/martinhg/capiko-ai/internal/versions"
 )
+
+// engramAdvisory returns a non-fatal advisory when capiko manages engram and the
+// installed binary is behind the recommended version; "" otherwise. It is a
+// package var so tests can stub it without shelling out to engram.
+var engramAdvisory = func(store *state.Store) string {
+	managed := false
+	if store != nil {
+		if st, err := store.Load(); err == nil && st.Engram != nil {
+			managed = st.Engram.Enabled
+		}
+	}
+	return engram.OutdatedAdvisory(managed, versions.Engram)
+}
 
 // syncInputs bundles everything syncCommand needs from the outside world,
 // gathered by gatherSyncInputs so tests can stub the environment.
@@ -152,6 +167,9 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 	// Sanity: TotalChanged should match RunSync's returned count.
 	_ = n
 	r := headless.FromReconcileResult("sync", result, nil)
+	if w := engramAdvisory(in.store); w != "" {
+		r.Warnings = append(r.Warnings, w)
+	}
 	renderSync(out, r, asJSON)
 	return true, 0, nil
 }

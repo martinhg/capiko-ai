@@ -175,6 +175,27 @@ func TestSetHeadroom(t *testing.T) {
 	}
 }
 
+func TestSetOutputEfficiency(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetOutputEfficiency(true); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.OutputEfficiency {
+		t.Error("OutputEfficiency should be true after SetOutputEfficiency(true)")
+	}
+	if err := s.SetOutputEfficiency(false); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.OutputEfficiency {
+		t.Error("OutputEfficiency should be false after SetOutputEfficiency(false)")
+	}
+}
+
 func TestSetEngram(t *testing.T) {
 	s := NewStore(t.TempDir())
 	rec := &EngramRecord{

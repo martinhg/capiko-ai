@@ -211,6 +211,80 @@ func TestEvaluateHeadroomManagedAndPresentIsPass(t *testing.T) {
 	}
 }
 
+// engramEnv is a healthy environment with the engram binary present at version.
+func engramEnv(version string) sysinfo.Report {
+	env := healthyEnv()
+	env.Dependencies = append(env.Dependencies, sysinfo.Dependency{Name: "engram", Found: true, Version: version})
+	return env
+}
+
+// managedEngramState is a managed install with engram enabled.
+func managedEngramState() *state.State {
+	return &state.State{Version: "1.2.1", Engram: &state.EngramRecord{Enabled: true, ArtifactMode: "hybrid"}}
+}
+
+func TestEvaluateEngramOutdated(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:               engramEnv("1.16.3"),
+		CopilotHost:       &copilot.Host{BinPath: "/b/copilot"},
+		State:             managedEngramState(),
+		RecommendedEngram: "1.17.0",
+	})
+	c := find(t, r, "Engram version")
+	if c.Status != Warn {
+		t.Errorf("Engram version: want Warn when behind recommended, got %v", c.Status)
+	}
+	if c.Remedy == "" {
+		t.Error("outdated engram should suggest an upgrade")
+	}
+	if !strings.Contains(c.Detail, "1.16.3") || !strings.Contains(c.Detail, "1.17.0") {
+		t.Errorf("detail should name installed and recommended versions, got %q", c.Detail)
+	}
+}
+
+func TestEvaluateEngramCurrentIsPass(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:               engramEnv("1.17.0"),
+		CopilotHost:       &copilot.Host{BinPath: "/b/copilot"},
+		State:             managedEngramState(),
+		RecommendedEngram: "1.17.0",
+	})
+	c := find(t, r, "Engram version")
+	if c.Status != Pass {
+		t.Errorf("Engram version: want Pass when at recommended, got %v", c.Status)
+	}
+}
+
+func TestEvaluateEngramVersionSkippedWhenUnmanaged(t *testing.T) {
+	r := Evaluate(Inputs{
+		Env:               engramEnv("1.16.3"),
+		CopilotHost:       &copilot.Host{BinPath: "/b/copilot"},
+		State:             &state.State{Version: "1.2.1"}, // engram unmanaged
+		RecommendedEngram: "1.17.0",
+	})
+	for _, c := range r.Checks {
+		if c.Name == "Engram version" {
+			t.Error("Engram version check must not appear when engram is unmanaged")
+		}
+	}
+}
+
+func TestEvaluateEngramVersionSkippedWhenMissing(t *testing.T) {
+	// Managed but the engram binary is absent: engramCheck warns about the missing
+	// binary; no version line is added.
+	r := Evaluate(Inputs{
+		Env:               healthyEnv(), // no engram dep
+		CopilotHost:       &copilot.Host{BinPath: "/b/copilot"},
+		State:             managedEngramState(),
+		RecommendedEngram: "1.17.0",
+	})
+	for _, c := range r.Checks {
+		if c.Name == "Engram version" {
+			t.Error("Engram version check must not appear when the binary is missing")
+		}
+	}
+}
+
 func TestEvaluateEngramUnmanagedIsPass(t *testing.T) {
 	r := Evaluate(Inputs{
 		Env:         healthyEnv(),

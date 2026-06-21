@@ -36,6 +36,9 @@ type State struct {
 	// Headroom records the managed headroom (context-compression) MCP wiring;
 	// nil = unmanaged. Sync re-applies it only when enabled, mirroring engram.
 	Headroom *HeadroomRecord `json:"headroom,omitempty"`
+	// OutputEfficiency is true once the user enables the output-efficiency
+	// instruction block; sync re-applies it only when managed, mirroring persona/SDD.
+	OutputEfficiency bool `json:"output_efficiency,omitempty"`
 	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
 	// means "never checked" — the next launch will always call the API. The
 	// timestamp is advanced only on a successful check, so failures don't
@@ -288,6 +291,18 @@ func (s *Store) SetTriggerRules(on bool) error {
 		return err
 	}
 	st.TriggerRules = on
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetOutputEfficiency records whether the output-efficiency instruction block is
+// managed by capiko, so sync re-applies it only when enabled.
+func (s *Store) SetOutputEfficiency(on bool) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.OutputEfficiency = on
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

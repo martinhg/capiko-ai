@@ -9,9 +9,11 @@ import (
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/persona"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
+	"github.com/martinhg/capiko-ai/internal/versions"
 )
 
 // RunSync writes every catalog skill and agent to disk (overwriting), snapshotting
@@ -92,6 +94,13 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying engram: %w", err)
 				}
 			}
+			// Re-apply the output-efficiency block so it tracks the catalog, only
+			// once the user has enabled it — mirroring the persona/SDD opt-in.
+			if st.OutputEfficiency {
+				if err := applyOutputEfficiency(host, store, bkp, true); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying output efficiency: %w", err)
+				}
+			}
 			// Re-apply the headroom MCP wiring, only once the user has enabled it —
 			// mirroring the engram opt-in. Idempotent: rewrites only on checksum change.
 			if st.Headroom != nil && st.Headroom.Enabled {
@@ -107,14 +116,15 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 // syncScreen writes every catalog skill and agent to disk, overwriting so the
 // installed items match the current catalog exactly ("sync configs").
 type syncScreen struct {
-	svc          services
-	catalog      []skill.Skill
-	agentCatalog []agent.Agent
-	state        syncState
-	count        int
-	skillNames   []string // names of skills written in the last sync
-	agentNames   []string // names of agents written in the last sync
-	err          error
+	svc           services
+	catalog       []skill.Skill
+	agentCatalog  []agent.Agent
+	state         syncState
+	count         int
+	skillNames    []string // names of skills written in the last sync
+	agentNames    []string // names of agents written in the last sync
+	engramWarning string   // advisory when the managed engram binary is outdated
+	err           error
 }
 
 type syncState int
@@ -127,10 +137,11 @@ const (
 )
 
 type syncedMsg struct {
-	count      int
-	skillNames []string // names of skills written during this sync
-	agentNames []string // names of agents written during this sync
-	err        error
+	count         int
+	skillNames    []string // names of skills written during this sync
+	agentNames    []string // names of agents written during this sync
+	engramWarning string   // advisory when the managed engram binary is outdated
+	err           error
 }
 
 func newSync(svc services, catalog []skill.Skill, agentCatalog []agent.Agent) screen {
@@ -148,6 +159,7 @@ func (s *syncScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.count = msg.count
 		s.skillNames = msg.skillNames
 		s.agentNames = msg.agentNames
+		s.engramWarning = msg.engramWarning
 		return s, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -180,8 +192,21 @@ func (s *syncScreen) syncCmd() tea.Cmd {
 		for i, ag := range agentCat {
 			agentNames[i] = ag.Name
 		}
-		return syncedMsg{count: n, skillNames: skillNames, agentNames: agentNames}
+		return syncedMsg{count: n, skillNames: skillNames, agentNames: agentNames, engramWarning: engramSyncWarning(svc.state)}
 	}
+}
+
+// engramSyncWarning returns an advisory when capiko manages engram and the
+// installed binary is behind the recommended version; "" otherwise. The managed
+// gate means users who do not manage engram through capiko see nothing.
+func engramSyncWarning(store *state.Store) string {
+	managed := false
+	if store != nil {
+		if st, err := store.Load(); err == nil && st.Engram != nil {
+			managed = st.Engram.Enabled
+		}
+	}
+	return engram.OutdatedAdvisory(managed, versions.Engram)
 }
 
 func (s *syncScreen) View() string {
@@ -208,6 +233,9 @@ func (s *syncScreen) View() string {
 		}
 		if len(s.skillNames) == 0 && len(s.agentNames) == 0 {
 			b.WriteString(okSty.Render(fmt.Sprintf("Synced %d item(s) ✓", s.count)) + "\n\n")
+		}
+		if s.engramWarning != "" {
+			b.WriteString(warnSty.Render("! "+s.engramWarning) + "\n\n")
 		}
 		b.WriteString(dimSty.Render("any key to go back") + "\n")
 	case syncFailed:
