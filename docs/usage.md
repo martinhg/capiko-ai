@@ -31,6 +31,7 @@ persona) to change it.
 | Sync configs | Overwrite all installed skills to match the catalog; re-applies the persona and SDD blocks. |
 | Manage backups | Browse / restore / delete the snapshots taken before each change. |
 | Configure SDD | Edit the per-phase model table and strict-TDD toggle. |
+| SDD Status | Read-only dashboard of active OpenSpec changes: next phase, task progress, and a per-change phase graph (done / in progress / blocked) with blocked reasons. |
 | Configure engram | Enable cross-session memory: pick the artifact-store mode, set the cloud URL, and wire the engram MCP server into Copilot CLI and VS Code. |
 | Install instructions | Write the curated scoped `*.instructions.md` into `~/.copilot/instructions/`. |
 | Upgrade tools | Self-update capiko to the latest release, then restart. |
