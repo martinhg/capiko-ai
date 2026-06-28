@@ -93,6 +93,9 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 				if err := applyEngram(host, store, bkp, st.Engram); err != nil {
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying engram: %w", err)
 				}
+				if err := applyMemoryProtocol(host, store, bkp, true); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying memory protocol: %w", err)
+				}
 			}
 			// Re-apply the output-efficiency block so it tracks the catalog, only
 			// once the user has enabled it — mirroring the persona/SDD opt-in.
