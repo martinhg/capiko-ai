@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/efficiency"
 	"github.com/martinhg/capiko-ai/internal/memory"
@@ -107,6 +108,37 @@ func TestApplyMemoryProtocolPreservesPersonaAndEfficiency(t *testing.T) {
 	}
 	if !strings.Contains(content, memory.MarkerStart) {
 		t.Error("memory block missing after apply")
+	}
+}
+
+func TestApplyMemoryProtocolBacksUpOnChange(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir}
+	store := state.NewStore(t.TempDir())
+	bkp := backup.NewStore(t.TempDir())
+
+	// First enable changes the file, so a backup labeled "memory" is taken.
+	if err := applyMemoryProtocol(host, store, bkp, true); err != nil {
+		t.Fatalf("applyMemoryProtocol: %v", err)
+	}
+	backups, err := bkp.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("expected 1 backup after first apply, got %d", len(backups))
+	}
+	if backups[0].Reason != "memory" {
+		t.Errorf("backup reason = %q, want %q", backups[0].Reason, "memory")
+	}
+
+	// Re-applying the same enabled state is a no-op, so no second backup is taken.
+	if err := applyMemoryProtocol(host, store, bkp, true); err != nil {
+		t.Fatal(err)
+	}
+	backups, _ = bkp.List()
+	if len(backups) != 1 {
+		t.Errorf("no-op re-apply should not back up; got %d backups, want 1", len(backups))
 	}
 }
 
