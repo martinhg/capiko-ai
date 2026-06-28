@@ -88,6 +88,9 @@ func applyEngramConfig(svc services, workspace string, rec *state.EngramRecord) 
 	if err := applyEngram(svc.host, svc.state, svc.backup, rec); err != nil {
 		return err
 	}
+	if err := applyMemoryProtocol(svc.host, svc.state, svc.backup, true); err != nil {
+		return err
+	}
 	if hasSurface(rec.Surfaces, "vscode") {
 		path, err := vscodeMCPPath(workspace, rec.VSCodeScope)
 		if err != nil {
@@ -129,6 +132,9 @@ func disableEngram(svc services, workspace string, rec *state.EngramRecord) erro
 		if err := engram.RemoveMCPEntry(userPath, "servers", "engram"); err != nil {
 			return err
 		}
+	}
+	if err := applyMemoryProtocol(svc.host, svc.state, svc.backup, false); err != nil {
+		return err
 	}
 	rec.Checksum = ""
 	if svc.state != nil {
