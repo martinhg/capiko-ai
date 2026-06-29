@@ -201,6 +201,7 @@ capiko-ai doctor --json || echo "capiko environment unhealthy"
 | **SDD Status** | Read-only dashboard of active OpenSpec changes: each change's next phase and task progress, with a per-change phase graph (done / in progress / blocked) and any blocked reasons. |
 | **Configure engram** | Enable cross-session memory: pick the artifact-store mode, set the cloud URL, wire the MCP server into Copilot CLI and VS Code. |
 | **Configure code review** | Wire [Gentleman Guardian Angel](https://github.com/Gentleman-Programming/gentleman-guardian-angel) (gga) into the project: write `.gga`, inject a curated `AGENTS.md` rules block (kept in sync with the active persona), and install the pre-commit review hook. Pick the review provider; gga must be on PATH. |
+| **Configure team sync** | Opt-in: wire two marker-delimited blocks into `.git/hooks/post-merge` and `.git/hooks/pre-push` so teammates share Engram memory through git (local, no cloud). See [Team memory sync](#-team-memory-sync) below. |
 | **Upgrade tools** / **Upgrade + sync** | Self-update capiko, restart, and optionally re-sync against the new catalog. |
 | **Install instructions** | Write the curated scoped `*.instructions.md` files. |
 
@@ -255,6 +256,79 @@ whole cycle on your real code. See [docs/usage.md](docs/usage.md) for the full f
 | `internal/engram` | engram detection, MCP wiring (Copilot + VS Code), per-repo config, and cloud setup. |
 | `internal/state` · `internal/backup` · `internal/drift` | Persistent state, snapshot/restore, and catalog-vs-state drift. |
 | `internal/sysinfo` · `internal/release` · `internal/versions` | Environment detection, self-update, and pinned tool versions. |
+
+## 🤝 Team memory sync
+
+Share Engram memory across your team through git — no cloud required.
+
+**What it does:** capiko writes two marker-delimited shell blocks into your repo's
+`.git/hooks/`:
+
+| Hook | Block content |
+|------|--------------|
+| `post-merge` | `engram sync --import` — pulls teammates' memories in after every merge or pull |
+| `pre-push` | `engram sync --project '<name>'` — exports your memories to `.engram/` before each push, then echoes a reminder to commit `.engram/` |
+
+### How to enable
+
+1. Run `capiko-ai` → **Configure team sync**.
+2. Toggle **Enabled** on.
+3. Toggle **I understand the scope-leak risk** on.
+4. Press **Apply** — capiko writes both hook blocks in the current working directory.
+
+After the first enable, stage and commit `.engram/` so teammates receive your memories:
+
+```bash
+git add .engram/ && git commit -m "chore: add shared engram memories"
+git push
+```
+
+### First-push memory gap
+
+> **Caveat:** `pre-push` exports memories to the working tree. Those `.engram/` changes
+> are NOT part of the push set that triggered the hook. The first push after enabling
+> shares nothing with teammates until you make a **subsequent** commit that includes the
+> updated `.engram/` and push it.
+
+### Personal-scope-leak warning
+
+`engram sync` has no scope filter. When you run it, **every** Engram observation
+for the current project — including `scope:personal` ones — is written to `.engram/`
+and will be committed to git if you `git add .engram/`.
+
+**Mitigations:**
+
+| Mitigation | How |
+|---|---|
+| `<private>…</private>` tags | Wrap sensitive content in those tags before saving; Engram strips them on export |
+| Separate project name | Create a second Engram project for personal notes (`Configure engram` → set a distinct project name) |
+
+capiko surfaces this warning prominently in the UI and requires explicit acknowledgment
+before Apply will proceed.
+
+### Hook framework coexistence (husky, lefthook, pre-commit)
+
+If capiko detects a competing hook manager (`core.hooksPath`, `.husky/`, `lefthook.yml`,
+`.lefthook.yml`, or `.pre-commit-config.yaml`), it skips the writes, records the
+intended state, and shows the exact shell lines you can paste into your framework's
+configuration instead:
+
+```sh
+# post-merge
+engram sync --import || true
+
+# pre-push
+engram sync --project 'your-project' || true
+echo "capiko: Engram memory exported to .engram/ — commit and push it to share with your team."
+```
+
+The `|| true` guards ensure hooks never block a merge, checkout, or push even when
+`engram` is absent or fails.
+
+capiko **never installs the `engram` binary** — it only writes the hook scripts.
+Install `engram` separately: <https://github.com/Gentleman-Programming/engram>
+
+---
 
 ## 🛠️ Development
 
