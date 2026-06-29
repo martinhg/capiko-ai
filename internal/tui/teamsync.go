@@ -147,6 +147,12 @@ func applyTeamSync(workspace string, store *state.Store, bkp *backup.Store, rec 
 		return nil
 	}
 
+	// Resolve the project name at apply time and embed it in both the hook
+	// body and the persisted record so future drift/doctor checks can verify.
+	// Resolved BEFORE the conflict check so the manual-command guidance can
+	// render `engram sync --project <name>` even when hooks are skipped.
+	rec.Project = resolveProject(workspace)
+
 	// Conflict detection: warn-and-continue, never refuse.
 	if conflict := teamSyncDetectConflict(workspace); conflict != "" {
 		rec.Conflict = conflict
@@ -155,10 +161,6 @@ func applyTeamSync(workspace string, store *state.Store, bkp *backup.Store, rec 
 		}
 		return nil
 	}
-
-	// Resolve the project name at apply time and embed it in both the hook
-	// body and the persisted record so future drift/doctor checks can verify.
-	rec.Project = resolveProject(workspace)
 
 	// Snapshot existing hook files before any mutation (snapshot-before-mutate).
 	if err := backupTeamSyncHooks(bkp, workspace); err != nil {

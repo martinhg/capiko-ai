@@ -105,7 +105,9 @@ func TestApplyTeamSync_ConflictPath_SkipsWritesRecordsConflict(t *testing.T) {
 	teamSyncDetectConflict = func(_ string) string { return conflictReason }
 	t.Cleanup(func() { teamSyncDetectConflict = orig })
 
-	rec := &state.TeamSyncRecord{Enabled: true, Workspace: root, Project: "my-proj"}
+	// Deliberately do NOT pre-populate Project: applyTeamSync must resolve it
+	// even on the conflict path so the manual-command guidance can render a name.
+	rec := &state.TeamSyncRecord{Enabled: true, Workspace: root}
 	if err := applyTeamSync(root, store, bkp, rec); err != nil {
 		t.Fatalf("applyTeamSync conflict path must return nil, got: %v", err)
 	}
@@ -128,6 +130,10 @@ func TestApplyTeamSync_ConflictPath_SkipsWritesRecordsConflict(t *testing.T) {
 	}
 	if st.TeamSync.Conflict != conflictReason {
 		t.Errorf("TeamSync.Conflict = %q, want %q", st.TeamSync.Conflict, conflictReason)
+	}
+	// Project must be resolved on the conflict path (fallback to base name).
+	if want := filepath.Base(root); st.TeamSync.Project != want {
+		t.Errorf("TeamSync.Project = %q, want %q (resolved on conflict)", st.TeamSync.Project, want)
 	}
 }
 
