@@ -1149,17 +1149,20 @@ func TestSC07b_NextRecommendedParity_EngramVsFilePath(t *testing.T) {
 		name          string
 		fileArtifacts map[string]string
 		obsKeys       []string // observation titles to include under sdd/<change>/<key>
+		partialKeys   []string // obsKeys whose observation content is empty (→ partial)
 		tasksContent  string
 		verifyContent string
 	}
 
 	cases := []parityCase{
 		{
-			// File: empty proposal (partial) → propose. Engram: state-obs only
-			// (no artifact obs) → all missing → propose. Both route identically.
+			// Genuinely equivalent state on both sides: proposal=partial, rest missing.
+			// File: empty proposal.md (partial). Engram: empty-content proposal obs
+			// (partial, per reconciled REQ-7). Both → propose with identical deps.
 			name:          "partial-proposal",
 			fileArtifacts: map[string]string{"proposal.md": ""},
-			obsKeys:       []string{"state"},
+			obsKeys:       []string{"proposal"},
+			partialKeys:   []string{"proposal"},
 		},
 		{
 			name:          "proposal-only",
@@ -1246,6 +1249,11 @@ func TestSC07b_NextRecommendedParity_EngramVsFilePath(t *testing.T) {
 				"tasks":          tasksBody,
 				"apply-progress": obsDefaultContent["apply-progress"],
 				"verify-report":  verifyBody,
+			}
+			// An obs listed in partialKeys is present-but-empty → ArtifactPartial,
+			// matching an empty file on the file path.
+			for _, k := range tc.partialKeys {
+				keyContent[k] = ""
 			}
 
 			var obs []engramObservation
