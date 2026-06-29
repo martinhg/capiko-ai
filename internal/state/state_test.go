@@ -421,3 +421,107 @@ func TestChecksumStable(t *testing.T) {
 		t.Error("different content produced same checksum")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TeamSyncRecord / SetTeamSync
+// ---------------------------------------------------------------------------
+
+func TestSetTeamSync_RoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := &TeamSyncRecord{
+		Enabled:   true,
+		Workspace: "/home/user/repo",
+		Project:   "my-project",
+		Conflict:  "",
+	}
+	if err := s.SetTeamSync(rec); err != nil {
+		t.Fatalf("SetTeamSync: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.TeamSync == nil {
+		t.Fatal("TeamSync should be set after SetTeamSync")
+	}
+	if !st.TeamSync.Enabled {
+		t.Error("Enabled should be true")
+	}
+	if st.TeamSync.Workspace != "/home/user/repo" {
+		t.Errorf("Workspace = %q, want /home/user/repo", st.TeamSync.Workspace)
+	}
+	if st.TeamSync.Project != "my-project" {
+		t.Errorf("Project = %q, want my-project", st.TeamSync.Project)
+	}
+	if !st.UpdatedAt.IsZero() == false {
+		// UpdatedAt must be stamped.
+	}
+}
+
+func TestSetTeamSync_NilClears(t *testing.T) {
+	s := NewStore(t.TempDir())
+	// Seed a record first.
+	if err := s.SetTeamSync(&TeamSyncRecord{Enabled: true, Workspace: "/repo", Project: "p"}); err != nil {
+		t.Fatalf("SetTeamSync seed: %v", err)
+	}
+	// Now clear it.
+	if err := s.SetTeamSync(nil); err != nil {
+		t.Fatalf("SetTeamSync nil: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.TeamSync != nil {
+		t.Errorf("TeamSync should be nil after clear, got %+v", st.TeamSync)
+	}
+}
+
+func TestSetTeamSync_UpdatedAt(t *testing.T) {
+	s := NewStore(t.TempDir())
+	before := time.Now().UTC()
+	if err := s.SetTeamSync(&TeamSyncRecord{Enabled: true}); err != nil {
+		t.Fatalf("SetTeamSync: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !st.UpdatedAt.After(before) && !st.UpdatedAt.Equal(before) {
+		t.Errorf("UpdatedAt %v should be >= %v", st.UpdatedAt, before)
+	}
+}
+
+func TestSetTeamSync_ConflictPersisted(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := &TeamSyncRecord{
+		Enabled:   true,
+		Workspace: "/repo",
+		Project:   "proj",
+		Conflict:  "husky is configured (.husky/ directory found)",
+	}
+	if err := s.SetTeamSync(rec); err != nil {
+		t.Fatalf("SetTeamSync: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.TeamSync == nil {
+		t.Fatal("TeamSync should be set")
+	}
+	if st.TeamSync.Conflict != rec.Conflict {
+		t.Errorf("Conflict = %q, want %q", st.TeamSync.Conflict, rec.Conflict)
+	}
+}
+
+func TestTeamSyncOmittedWhenNil(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.Apply("1.0.0", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(data, []byte("team_sync")) {
+		t.Errorf("state without team_sync should omit the key, got:\n%s", data)
+	}
+}

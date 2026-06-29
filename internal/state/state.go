@@ -43,6 +43,10 @@ type State struct {
 	// .gga config, the curated AGENTS.md rules block, and the git hook. nil =
 	// unmanaged. Sync re-applies it only when enabled, mirroring engram/headroom.
 	CodeReview *CodeReviewRecord `json:"code_review,omitempty"`
+	// TeamSync records the managed engram team-sync git-hooks configuration; nil
+	// = unmanaged. When set, sync re-applies both the post-merge and pre-push
+	// hook blocks, mirroring CodeReview.
+	TeamSync *TeamSyncRecord `json:"team_sync,omitempty"`
 	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
 	// means "never checked" — the next launch will always call the API. The
 	// timestamp is advanced only on a successful check, so failures don't
@@ -83,6 +87,21 @@ type CodeReviewRecord struct {
 	ExcludePatterns string `json:"exclude_patterns,omitempty"` // comma-separated globs to skip
 	StrictMode      bool   `json:"strict_mode,omitempty"`      // fail the commit on an ambiguous AI response
 	Timeout         int    `json:"timeout,omitempty"`          // provider timeout in seconds
+}
+
+// TeamSyncRecord is the managed engram team-sync git-hooks configuration.
+// capiko writes marker-delimited blocks into the workspace's .git/hooks/
+// post-merge and pre-push files; it never installs the engram binary.
+// Enabled false records a deliberately-disabled wiring so sync does not
+// re-apply it. Workspace records which repo the hooks were written to, enabling
+// deferred drift detection (doctor) without a schema migration. Conflict records
+// the warn-and-continue outcome when a competing hook framework was detected at
+// apply time; the hooks are NOT written in that case.
+type TeamSyncRecord struct {
+	Enabled   bool   `json:"enabled"`
+	Workspace string `json:"workspace,omitempty"`
+	Project   string `json:"project,omitempty"`
+	Conflict  string `json:"conflict,omitempty"`
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -332,6 +351,19 @@ func (s *Store) SetOutputEfficiency(on bool) error {
 		return err
 	}
 	st.OutputEfficiency = on
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetTeamSync records the managed engram team-sync git-hooks configuration
+// (nil = unmanaged). Mirrors SetCodeReview: snapshot-before-mutate is the
+// caller's responsibility; this method only persists the record.
+func (s *Store) SetTeamSync(rec *TeamSyncRecord) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.TeamSync = rec
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
