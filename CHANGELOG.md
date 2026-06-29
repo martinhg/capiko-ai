@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.22.0](https://github.com/martinhg/capiko-ai/compare/v1.21.0...v1.22.0) (2026-06-29)
+
+
+### Features
+
+* **githooks:** marker-delimited git hook block writer/remover ([#146](https://github.com/martinhg/capiko-ai/issues/146)) ([a9beb9e](https://github.com/martinhg/capiko-ai/commit/a9beb9ee4a2786632ebce198274975a53ffc7c3e))
+* **teamsync:** Configure team sync TUI screen + menu + docs ([#149](https://github.com/martinhg/capiko-ai/issues/149)) ([71d5472](https://github.com/martinhg/capiko-ai/commit/71d54723cad9e082e69f9d0cc7c00238dec8ea4f))
+* **teamsync:** engram project resolver + hook conflict detection + body builders ([#147](https://github.com/martinhg/capiko-ai/issues/147)) ([1d11776](https://github.com/martinhg/capiko-ai/commit/1d11776ce92f11f6a9d1cd3ca511c3d858dbabd0))
+* **teamsync:** state record + apply/disable hook orchestration ([#148](https://github.com/martinhg/capiko-ai/issues/148)) ([774a626](https://github.com/martinhg/capiko-ai/commit/774a626db4069e7dc6855ea7156aaf144cdc4e5e))
+
 ## [1.21.0](https://github.com/martinhg/capiko-ai/compare/v1.20.0...v1.21.0) (2026-06-29)
 
 
