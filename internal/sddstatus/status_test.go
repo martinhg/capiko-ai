@@ -3,6 +3,7 @@ package sddstatus
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -459,6 +460,395 @@ func TestShouldTryEngram_CommentedConfig_NoGate(t *testing.T) {
 	}
 	if shouldTryEngram(cwd) {
 		t.Error("shouldTryEngram = true with a commented-out artifact_store, want false")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Engram export seam + observation helpers
+// ---------------------------------------------------------------------------
+
+// withEngram swaps the engramExport seam to return canned observations and
+// restores the original via t.Cleanup. Tests that exercise the Engram fallback
+// path call this helper instead of touching the real engram binary.
+func withEngram(t *testing.T, obs []engramObservation) {
+	t.Helper()
+	prev := engramExport
+	engramExport = func() ([]engramObservation, error) { return obs, nil }
+	t.Cleanup(func() { engramExport = prev })
+}
+
+// SC-11: The export seam must never call the real engram binary in tests.
+func TestEngramSeamIsolation(t *testing.T) {
+	prev := engramExport
+	engramExport = func() ([]engramObservation, error) {
+		t.Fatal("the real engram binary must never be invoked during tests")
+		return nil, nil
+	}
+	t.Cleanup(func() { engramExport = prev })
+
+	// Resolve with all gating OFF — the seam must not be consulted.
+	cwd := t.TempDir()
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "")
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.NextRecommended != "sdd-new" {
+		t.Errorf("expected sdd-new with no active changes and no gating, got %q", st.NextRecommended)
+	}
+}
+
+// ---------- inferEngramProject / projectFromGitConfig ----------
+
+func TestInferEngramProject_EnvVar(t *testing.T) {
+	t.Setenv("ENGRAM_PROJECT", "acme/my-service")
+	cwd := t.TempDir()
+	if got := inferEngramProject(cwd); got != "acme/my-service" {
+		t.Errorf("got %q, want acme/my-service", got)
+	}
+}
+
+func TestInferEngramProject_GitConfigHTTPS(t *testing.T) {
+	t.Setenv("ENGRAM_PROJECT", "")
+	cwd := t.TempDir()
+	gitDir := filepath.Join(cwd, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = https://github.com/myorg/myrepo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := inferEngramProject(cwd); got != "myorg/myrepo" {
+		t.Errorf("got %q, want myorg/myrepo", got)
+	}
+}
+
+func TestInferEngramProject_GitConfigSSH(t *testing.T) {
+	t.Setenv("ENGRAM_PROJECT", "")
+	cwd := t.TempDir()
+	gitDir := filepath.Join(cwd, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[remote \"origin\"]\n\turl = git@github.com:myorg/myrepo.git\n"
+	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := inferEngramProject(cwd); got != "myorg/myrepo" {
+		t.Errorf("got %q, want myorg/myrepo", got)
+	}
+}
+
+func TestInferEngramProject_DirBasename(t *testing.T) {
+	t.Setenv("ENGRAM_PROJECT", "")
+	// No .git/config — falls back to lowercased basename.
+	cwd := t.TempDir()
+	got := inferEngramProject(cwd)
+	want := strings.ToLower(filepath.Base(cwd))
+	if got != want {
+		t.Errorf("got %q, want %q (lowercased basename)", got, want)
+	}
+}
+
+func TestProjectFromGitConfig_NoGitDir(t *testing.T) {
+	cwd := t.TempDir()
+	if got := projectFromGitConfig(cwd); got != "" {
+		t.Errorf("got %q, want empty when .git/config is absent", got)
+	}
+}
+
+func TestProjectFromGitConfig_NoOriginSection(t *testing.T) {
+	cwd := t.TempDir()
+	gitDir := filepath.Join(cwd, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[core]\n\trepositoryformatversion = 0\n"
+	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := projectFromGitConfig(cwd); got != "" {
+		t.Errorf("got %q, want empty when no origin section", got)
+	}
+}
+
+// ---------- collectEngramChanges ----------
+
+func TestCollectEngramChanges_OneChange(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/my-feature/proposal", Content: "...", Project: "myorg/myrepo", Scope: "project"},
+		{Title: "sdd/my-feature/spec", Content: "...", Project: "myorg/myrepo", Scope: "project"},
+	}
+	got := collectEngramChanges(obs, "myorg/myrepo")
+	if len(got) != 1 || got[0] != "my-feature" {
+		t.Errorf("got %v, want [my-feature]", got)
+	}
+}
+
+func TestCollectEngramChanges_TwoChanges(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/feat-a/proposal", Project: "myorg/myrepo", Scope: "project"},
+		{Title: "sdd/feat-b/proposal", Project: "myorg/myrepo", Scope: "project"},
+	}
+	got := collectEngramChanges(obs, "myorg/myrepo")
+	if len(got) != 2 {
+		t.Errorf("got %v, want [feat-a feat-b]", got)
+	}
+	if got[0] != "feat-a" || got[1] != "feat-b" {
+		t.Errorf("got %v, want sorted [feat-a feat-b]", got)
+	}
+}
+
+func TestCollectEngramChanges_ExcludesPersonalScope(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/my-feature/proposal", Project: "myorg/myrepo", Scope: "personal"},
+	}
+	got := collectEngramChanges(obs, "myorg/myrepo")
+	if len(got) != 0 {
+		t.Errorf("personal-scope observations must be excluded, got %v", got)
+	}
+}
+
+func TestCollectEngramChanges_ExcludesProjectMismatch(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/my-feature/proposal", Project: "other/repo", Scope: "project"},
+	}
+	got := collectEngramChanges(obs, "myorg/myrepo")
+	if len(got) != 0 {
+		t.Errorf("project-mismatch observations must be excluded, got %v", got)
+	}
+}
+
+func TestCollectEngramChanges_Empty(t *testing.T) {
+	got := collectEngramChanges(nil, "myorg/myrepo")
+	if len(got) != 0 {
+		t.Errorf("got %v, want empty slice for nil observations", got)
+	}
+}
+
+// A change known only by its sdd/<change>/state observation is still discovered:
+// the title regex includes "state" on purpose (design: state is a discovery signal).
+// PR3 must confirm such a state-only change routes sanely (all artifacts missing →
+// propose); this test locks in the discovery behavior the routing relies on.
+func TestCollectEngramChanges_StateOnlyTitleIsDiscovered(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/state-only/state", Project: "myorg/myrepo", Scope: "project"},
+	}
+	got := collectEngramChanges(obs, "myorg/myrepo")
+	if len(got) != 1 || got[0] != "state-only" {
+		t.Errorf("got %v, want [state-only] (state title is a discovery signal)", got)
+	}
+}
+
+func TestEngramObservationMatchesProject_CaseInsensitive(t *testing.T) {
+	obs := engramObservation{Title: "sdd/x/proposal", Project: "MyOrg/MyRepo", Scope: "project"}
+	if !engramObservationMatchesProject(obs, "myorg/myrepo") {
+		t.Error("project match must be case-insensitive (MyOrg/MyRepo vs myorg/myrepo)")
+	}
+}
+
+func TestTitleRe_RejectsNonArtifactTitles(t *testing.T) {
+	for _, title := range []string{
+		"sdd/foo/bar",        // unknown artifact type
+		"sdd/foo",            // missing artifact segment
+		"sdd//proposal",      // empty change name
+		"random",             // not an sdd title
+		"x/sdd/foo/proposal", // not anchored at start
+	} {
+		if titleRe.MatchString(title) {
+			t.Errorf("titleRe must reject %q", title)
+		}
+	}
+}
+
+// ---------- selectEngramChange ----------
+
+func TestSelectEngramChange_SingleNoRequest(t *testing.T) {
+	name, ok := selectEngramChange([]string{"my-feature"}, "")
+	if !ok || name != "my-feature" {
+		t.Errorf("got (%q, %v), want (my-feature, true)", name, ok)
+	}
+}
+
+func TestSelectEngramChange_TwoChangesNoRequest(t *testing.T) {
+	_, ok := selectEngramChange([]string{"feat-a", "feat-b"}, "")
+	if ok {
+		t.Error("two changes with no request should return (_, false)")
+	}
+}
+
+func TestSelectEngramChange_ZeroChangesNoRequest(t *testing.T) {
+	_, ok := selectEngramChange([]string{}, "")
+	if ok {
+		t.Error("zero changes should return (_, false)")
+	}
+}
+
+func TestSelectEngramChange_RequestedFound(t *testing.T) {
+	name, ok := selectEngramChange([]string{"feat-a", "feat-b"}, "feat-b")
+	if !ok || name != "feat-b" {
+		t.Errorf("got (%q, %v), want (feat-b, true)", name, ok)
+	}
+}
+
+func TestSelectEngramChange_RequestedNotFound(t *testing.T) {
+	_, ok := selectEngramChange([]string{"feat-a"}, "ghost")
+	if ok {
+		t.Error("requested change not in list should return (_, false)")
+	}
+}
+
+// ---------- engramArtifactState ----------
+
+func TestEngramArtifactState_PresentNonEmpty(t *testing.T) {
+	if got := engramArtifactState("some content", true); got != ArtifactDone {
+		t.Errorf("got %q, want done", got)
+	}
+}
+
+func TestEngramArtifactState_Absent(t *testing.T) {
+	if got := engramArtifactState("", false); got != ArtifactMissing {
+		t.Errorf("got %q, want missing", got)
+	}
+}
+
+func TestEngramArtifactState_PresentButEmpty(t *testing.T) {
+	if got := engramArtifactState("   ", true); got != ArtifactPartial {
+		t.Errorf("got %q, want partial", got)
+	}
+}
+
+// ---------- engramArtifactContent ----------
+
+func TestEngramArtifactContent_Found(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/my-feature/tasks", Content: "- [ ] do it", Project: "p", Scope: "project"},
+	}
+	got := engramArtifactContent(obs, "my-feature", "p", "tasks")
+	if got != "- [ ] do it" {
+		t.Errorf("got %q, want %q", got, "- [ ] do it")
+	}
+}
+
+func TestEngramArtifactContent_NotFound(t *testing.T) {
+	got := engramArtifactContent(nil, "my-feature", "p", "tasks")
+	if got != "" {
+		t.Errorf("got %q, want empty for missing observation", got)
+	}
+}
+
+func TestEngramArtifactContent_ProjectMismatch(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/my-feature/tasks", Content: "- [ ] do it", Project: "other/repo", Scope: "project"},
+	}
+	got := engramArtifactContent(obs, "my-feature", "myorg/myrepo", "tasks")
+	if got != "" {
+		t.Errorf("got %q, want empty for project mismatch", got)
+	}
+}
+
+// ---------- engramArtifactsForChange ----------
+
+func TestEngramArtifactsForChange_SixKeyMap(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/my-feature/proposal", Content: "# Proposal", Project: "p", Scope: "project"},
+		{Title: "sdd/my-feature/spec", Content: "# Spec", Project: "p", Scope: "project"},
+		{Title: "sdd/my-feature/design", Content: "# Design", Project: "p", Scope: "project"},
+		{Title: "sdd/my-feature/tasks", Content: "- [ ] do it", Project: "p", Scope: "project"},
+		// applyProgress and verifyReport absent
+	}
+	got := engramArtifactsForChange(obs, "my-feature", "p")
+	required := []string{"proposal", "specs", "design", "tasks", "applyProgress", "verifyReport"}
+	for _, k := range required {
+		if _, ok := got[k]; !ok {
+			t.Errorf("artifact map is missing key %q", k)
+		}
+	}
+	if got["proposal"] != ArtifactDone {
+		t.Errorf("proposal = %q, want done", got["proposal"])
+	}
+	if got["specs"] != ArtifactDone {
+		t.Errorf("specs = %q, want done", got["specs"])
+	}
+	if got["design"] != ArtifactDone {
+		t.Errorf("design = %q, want done", got["design"])
+	}
+	if got["tasks"] != ArtifactDone {
+		t.Errorf("tasks = %q, want done", got["tasks"])
+	}
+	if got["applyProgress"] != ArtifactMissing {
+		t.Errorf("applyProgress = %q, want missing", got["applyProgress"])
+	}
+	if got["verifyReport"] != ArtifactMissing {
+		t.Errorf("verifyReport = %q, want missing", got["verifyReport"])
+	}
+}
+
+// ---------- engramArtifactPaths ----------
+
+func TestEngramArtifactPaths_SentinelForNonMissing(t *testing.T) {
+	artifacts := map[string]ArtifactState{
+		"proposal":      ArtifactDone,
+		"specs":         ArtifactDone,
+		"design":        ArtifactMissing,
+		"tasks":         ArtifactMissing,
+		"applyProgress": ArtifactMissing,
+		"verifyReport":  ArtifactMissing,
+	}
+	paths := engramArtifactPaths("my-feature", artifacts)
+	if len(paths.Proposal) != 1 || paths.Proposal[0] != "engram:sdd/my-feature/proposal" {
+		t.Errorf("Proposal = %v, want [engram:sdd/my-feature/proposal]", paths.Proposal)
+	}
+	if len(paths.Specs) != 1 || paths.Specs[0] != "engram:sdd/my-feature/spec" {
+		t.Errorf("Specs = %v, want [engram:sdd/my-feature/spec]", paths.Specs)
+	}
+	if len(paths.Design) != 0 {
+		t.Errorf("Design = %v, want empty slice for missing artifact", paths.Design)
+	}
+	if len(paths.Tasks) != 0 {
+		t.Errorf("Tasks = %v, want empty slice for missing artifact", paths.Tasks)
+	}
+	if len(paths.ApplyProgress) != 0 {
+		t.Errorf("ApplyProgress = %v, want empty slice for missing artifact", paths.ApplyProgress)
+	}
+	if len(paths.VerifyReport) != 0 {
+		t.Errorf("VerifyReport = %v, want empty slice for missing artifact", paths.VerifyReport)
+	}
+}
+
+func TestEngramArtifactPaths_AllMissing(t *testing.T) {
+	artifacts := map[string]ArtifactState{
+		"proposal": ArtifactMissing, "specs": ArtifactMissing, "design": ArtifactMissing,
+		"tasks": ArtifactMissing, "applyProgress": ArtifactMissing, "verifyReport": ArtifactMissing,
+	}
+	paths := engramArtifactPaths("my-feature", artifacts)
+	if len(paths.Proposal)+len(paths.Specs)+len(paths.Design)+len(paths.Tasks)+len(paths.ApplyProgress)+len(paths.VerifyReport) != 0 {
+		t.Errorf("expected all empty slices for all-missing artifacts, got %+v", paths)
+	}
+}
+
+func TestEngramArtifactPaths_AllPresent(t *testing.T) {
+	artifacts := map[string]ArtifactState{
+		"proposal": ArtifactDone, "specs": ArtifactDone, "design": ArtifactDone,
+		"tasks": ArtifactDone, "applyProgress": ArtifactDone, "verifyReport": ArtifactDone,
+	}
+	paths := engramArtifactPaths("my-feature", artifacts)
+	cases := []struct {
+		got  []string
+		want string
+	}{
+		{paths.Proposal, "engram:sdd/my-feature/proposal"},
+		{paths.Specs, "engram:sdd/my-feature/spec"},
+		{paths.Design, "engram:sdd/my-feature/design"},
+		{paths.Tasks, "engram:sdd/my-feature/tasks"},
+		{paths.ApplyProgress, "engram:sdd/my-feature/apply-progress"},
+		{paths.VerifyReport, "engram:sdd/my-feature/verify-report"},
+	}
+	for _, tc := range cases {
+		if len(tc.got) != 1 || tc.got[0] != tc.want {
+			t.Errorf("got %v, want [%s]", tc.got, tc.want)
+		}
 	}
 }
 
