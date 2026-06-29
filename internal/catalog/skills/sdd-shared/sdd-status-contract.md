@@ -43,15 +43,30 @@ both the same way.
 
 ## Artifact Store
 
-In capiko the SDD artifact store is ALWAYS file-based: every phase reads and writes
-the change's artifacts under `openspec/changes/<change>/`, and the native engine
-detects phase state by scanning those files. The engram artifact-store *mode*
-(`hybrid | engram | openspec | none`) only toggles the engram cross-session memory
-backend (the MCP server and optional Cloud sync) — it never moves the SDD artifacts
-out of the OpenSpec store. This differs from prompt-only tools where `engram` mode
-keeps artifacts solely in memory with no files: here the files are mandatory because
-the engine routes off them. Phase skills are OpenSpec-only by design; do not branch
-their artifact reads/writes on the mode.
+In capiko the SDD artifact store is file-first: phases read and write artifacts under
+`openspec/changes/<change>/`, and the native engine routes by scanning those files.
+The engram artifact-store *mode* (`hybrid | engram | openspec | none`) toggles the
+engram cross-session memory backend but does not move artifacts out of OpenSpec.
+Phase skills are OpenSpec-only by design; do not branch their artifact reads/writes on
+the mode.
+
+**Engram read-only fallback.** When no matching OpenSpec change exists on disk, the
+engine MAY resolve the change from Engram observations (`sdd/<change>/*`) if gating
+conditions indicate Engram is in use (env var `CAPIKO_SDD_STATUS_ENGRAM`, a `.engram/`
+directory, or `artifact_store: engram|hybrid` in `openspec/config.yaml`). In that
+case the status carries:
+
+```
+artifactStore:      "engram"
+changeRoot:         "engram:sdd/<change>"   (NOT a filesystem path)
+planningHome.path:  "engram:sdd"            (NOT a filesystem path)
+```
+
+The `engram:` prefix is an informational signal. Consumers that parse `changeRoot` as
+a filesystem path MUST guard against this prefix. Routing via `nextRecommended`
+continues to work identically. This fallback is strictly read-only; the canonical-files
+invariant is not weakened — when an OpenSpec change exists, files always win and Engram
+is never consulted.
 
 ## Change Selection
 
