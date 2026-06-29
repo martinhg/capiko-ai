@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.20.0](https://github.com/martinhg/capiko-ai/compare/v1.19.0...v1.20.0) (2026-06-29)
+
+
+### Features
+
+* **memory:** add engram proactive-memory protocol block ([#137](https://github.com/martinhg/capiko-ai/issues/137)) ([4ee45ed](https://github.com/martinhg/capiko-ai/commit/4ee45ed71fe435b8f5f813985a64576550fdc486))
+* **sddstatus:** Engram observation seam and artifact helpers (2/3) ([#140](https://github.com/martinhg/capiko-ai/issues/140)) ([d3ccd8d](https://github.com/martinhg/capiko-ai/commit/d3ccd8d0bf279950d8d9e63931de651ac4193d21))
+
 ## [1.19.0](https://github.com/martinhg/capiko-ai/compare/v1.18.0...v1.19.0) (2026-06-21)
 
 

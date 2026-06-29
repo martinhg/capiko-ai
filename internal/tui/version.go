@@ -17,7 +17,7 @@ const devVersion = "dev"
 // available (local `go build`, `go run`). Bump this when cutting a release so
 // dev builds report the line they are based on instead of an ugly id. Real
 // releases override it via ldflags; `go install …@vX.Y.Z` recovers the exact tag.
-const baseVersion = "1.19.0" // x-release-please-version
+const baseVersion = "1.20.0" // x-release-please-version
 
 func init() {
 	Version = resolveVersion(Version, mainModuleVersion())
