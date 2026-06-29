@@ -277,6 +277,75 @@ func TestCLIEntryChecksumAbsent(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// ReadProjectName
+// ---------------------------------------------------------------------------
+
+func TestReadProjectName_ConfigPresent(t *testing.T) {
+	root := t.TempDir()
+	if err := WriteProjectConfig(root, "my-project"); err != nil {
+		t.Fatal(err)
+	}
+	if got := ReadProjectName(root); got != "my-project" {
+		t.Errorf("ReadProjectName = %q, want %q", got, "my-project")
+	}
+}
+
+func TestReadProjectName_ConfigAbsent(t *testing.T) {
+	root := t.TempDir()
+	// No .engram/config.json — should fall back to directory basename.
+	want := filepath.Base(root)
+	if got := ReadProjectName(root); got != want {
+		t.Errorf("ReadProjectName = %q, want %q (basename fallback)", got, want)
+	}
+}
+
+func TestReadProjectName_MalformedJSON(t *testing.T) {
+	root := t.TempDir()
+	confDir := filepath.Join(root, ".engram")
+	if err := os.MkdirAll(confDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(confDir, "config.json"), []byte(`not-json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Base(root)
+	if got := ReadProjectName(root); got != want {
+		t.Errorf("ReadProjectName (malformed) = %q, want basename %q", got, want)
+	}
+}
+
+func TestReadProjectName_EmptyProjectName(t *testing.T) {
+	root := t.TempDir()
+	confDir := filepath.Join(root, ".engram")
+	if err := os.MkdirAll(confDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(confDir, "config.json"), []byte(`{"project_name":""}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Base(root)
+	if got := ReadProjectName(root); got != want {
+		t.Errorf("ReadProjectName (empty name) = %q, want basename %q", got, want)
+	}
+}
+
+func TestReadProjectName_WrongKey(t *testing.T) {
+	root := t.TempDir()
+	confDir := filepath.Join(root, ".engram")
+	if err := os.MkdirAll(confDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// JSON uses a different key — project_name is missing → fall back.
+	if err := os.WriteFile(filepath.Join(confDir, "config.json"), []byte(`{"project":"capiko-ai"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Base(root)
+	if got := ReadProjectName(root); got != want {
+		t.Errorf("ReadProjectName (wrong key) = %q, want basename %q", got, want)
+	}
+}
+
 func TestWriteProjectConfig(t *testing.T) {
 	root := t.TempDir()
 	if err := WriteProjectConfig(root, "repo-core"); err != nil {

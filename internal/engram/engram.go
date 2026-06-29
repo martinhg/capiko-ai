@@ -284,6 +284,22 @@ func WriteProjectConfig(repoRoot, name string) error {
 	return atomicWrite(path, out)
 }
 
+// ReadProjectName returns the project name recorded in
+// <repoRoot>/.engram/config.json ("project_name" key). Falls back to
+// filepath.Base(repoRoot) when the file is absent, unreadable, malformed, or
+// contains an empty project_name. It shares the projectConfig struct with
+// WriteProjectConfig so schema changes stay in one place.
+func ReadProjectName(repoRoot string) string {
+	path := filepath.Join(repoRoot, ".engram", "config.json")
+	if data, err := os.ReadFile(path); err == nil {
+		var cfg projectConfig
+		if json.Unmarshal(data, &cfg) == nil && cfg.ProjectName != "" {
+			return cfg.ProjectName
+		}
+	}
+	return filepath.Base(repoRoot)
+}
+
 // atomicWrite creates the parent directory and writes data via a temp file +
 // rename, so a crash mid-write cannot leave a partial config.
 func atomicWrite(path string, data []byte) error {
