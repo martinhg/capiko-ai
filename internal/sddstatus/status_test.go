@@ -438,9 +438,27 @@ func TestShouldTryEngram_YmlExtension(t *testing.T) {
 
 func TestShouldTryEngram_AllOff_ReturnsFalse(t *testing.T) {
 	cwd := t.TempDir()
-	// No env var, no .engram dir, no config file
+	// Explicitly clear the override so an ambient value never leaks into this case;
+	// no .engram dir and no config file are created.
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "")
 	if shouldTryEngram(cwd) {
 		t.Error("shouldTryEngram = true with no triggers active, want false")
+	}
+}
+
+func TestShouldTryEngram_CommentedConfig_NoGate(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A commented-out artifact_store line must not gate on — only a live key counts.
+	body := "# artifact_store: engram\nother_key: value\n"
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = true with a commented-out artifact_store, want false")
 	}
 }
 

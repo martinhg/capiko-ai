@@ -9,7 +9,7 @@ import (
 
 // artifactStoreRe matches an artifact_store or artifactStore YAML key and captures
 // the value. Case-insensitive multiline to handle either key variant.
-var artifactStoreRe = regexp.MustCompile(`(?mi)^\s*artifact[_]?[Ss]tore\s*:\s*["']?([A-Za-z]+)`)
+var artifactStoreRe = regexp.MustCompile(`(?mi)^\s*artifact[_]?store\s*:\s*["']?([A-Za-z]+)`)
 
 // configArtifactStoreIsEngram reports whether the openspec config file declares
 // artifact_store (or artifactStore) as "engram" or "hybrid". It reads
