@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.0](https://github.com/martinhg/capiko-ai/compare/v1.20.0...v1.21.0) (2026-06-29)
+
+
+### Features
+
+* **sddstatus:** resolveEngramStatus fallback + Resolve wiring (3/3) ([#141](https://github.com/martinhg/capiko-ai/issues/141)) ([80b2041](https://github.com/martinhg/capiko-ai/commit/80b20412fe906affcd8436bfaac34b189fa662b3))
+
 ## [1.20.0](https://github.com/martinhg/capiko-ai/compare/v1.19.0...v1.20.0) (2026-06-29)
 
 
