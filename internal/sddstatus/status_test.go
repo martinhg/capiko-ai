@@ -344,6 +344,106 @@ func TestResolvePartialArtifactBlocks(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2: gating infrastructure (shouldTryEngram, configArtifactStoreIsEngram)
+// ---------------------------------------------------------------------------
+
+func TestShouldTryEngram_EnvVar(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with env var set, want true")
+	}
+}
+
+func TestShouldTryEngram_EngramDir(t *testing.T) {
+	cwd := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cwd, ".engram"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with .engram dir present, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigArtifactStoreEngram(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: engram\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with artifact_store: engram config, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigArtifactStoreHybrid(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: hybrid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with artifact_store: hybrid config, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigCamelCaseArtifactStore(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifactStore: engram\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with camelCase artifactStore: engram, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigArtifactStoreOpenspec_NoGate(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: openspec\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = true with artifact_store: openspec, want false")
+	}
+}
+
+func TestShouldTryEngram_YmlExtension(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yml"), []byte("artifact_store: engram\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with .yml extension config, want true")
+	}
+}
+
+func TestShouldTryEngram_AllOff_ReturnsFalse(t *testing.T) {
+	cwd := t.TempDir()
+	// No env var, no .engram dir, no config file
+	if shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = true with no triggers active, want false")
+	}
+}
+
 func TestResolveMissingTasksCheckboxesBlocks(t *testing.T) {
 	files := coreArtifacts()
 	files["tasks.md"] = "# Tasks\njust prose, no checkboxes"

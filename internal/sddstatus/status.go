@@ -67,10 +67,11 @@ type Dependencies struct {
 
 // Schema identity emitted in every status payload.
 const (
-	SchemaName    = "capiko.sdd-status"
-	SchemaVersion = 1
-	artifactStore = "openspec"
-	modeRepoLocal = "repo-local"
+	SchemaName          = "capiko.sdd-status"
+	SchemaVersion       = 1
+	artifactStore       = "openspec" // default used by baseStatus
+	ArtifactStoreEngram = "engram"   // origin flag set only on the Engram fallback path
+	modeRepoLocal       = "repo-local"
 )
 
 // PlanningHome locates the OpenSpec store.
