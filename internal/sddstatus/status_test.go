@@ -627,6 +627,41 @@ func TestCollectEngramChanges_Empty(t *testing.T) {
 	}
 }
 
+// A change known only by its sdd/<change>/state observation is still discovered:
+// the title regex includes "state" on purpose (design: state is a discovery signal).
+// PR3 must confirm such a state-only change routes sanely (all artifacts missing →
+// propose); this test locks in the discovery behavior the routing relies on.
+func TestCollectEngramChanges_StateOnlyTitleIsDiscovered(t *testing.T) {
+	obs := []engramObservation{
+		{Title: "sdd/state-only/state", Project: "myorg/myrepo", Scope: "project"},
+	}
+	got := collectEngramChanges(obs, "myorg/myrepo")
+	if len(got) != 1 || got[0] != "state-only" {
+		t.Errorf("got %v, want [state-only] (state title is a discovery signal)", got)
+	}
+}
+
+func TestEngramObservationMatchesProject_CaseInsensitive(t *testing.T) {
+	obs := engramObservation{Title: "sdd/x/proposal", Project: "MyOrg/MyRepo", Scope: "project"}
+	if !engramObservationMatchesProject(obs, "myorg/myrepo") {
+		t.Error("project match must be case-insensitive (MyOrg/MyRepo vs myorg/myrepo)")
+	}
+}
+
+func TestTitleRe_RejectsNonArtifactTitles(t *testing.T) {
+	for _, title := range []string{
+		"sdd/foo/bar",        // unknown artifact type
+		"sdd/foo",            // missing artifact segment
+		"sdd//proposal",      // empty change name
+		"random",             // not an sdd title
+		"x/sdd/foo/proposal", // not anchored at start
+	} {
+		if titleRe.MatchString(title) {
+			t.Errorf("titleRe must reject %q", title)
+		}
+	}
+}
+
 // ---------- selectEngramChange ----------
 
 func TestSelectEngramChange_SingleNoRequest(t *testing.T) {
