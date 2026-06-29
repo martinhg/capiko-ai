@@ -278,3 +278,74 @@ func engramArtifactPaths(change string, artifacts map[string]ArtifactState) Arti
 		VerifyReport:  sentinel("verifyReport", "verify-report"),
 	}.withArrays()
 }
+
+// ---------------------------------------------------------------------------
+// Engram fallback resolver
+// ---------------------------------------------------------------------------
+
+// resolveEngramStatus reconstructs a capiko.sdd-status from Engram observations
+// when the file path found no matching change. It never errors: any failure
+// (gating off, export error, malformed JSON, no matching change) degrades to
+// ok=false so Resolve returns the normal blocked status. Files stay canonical.
+//
+// The one exception: when multiple Engram changes exist and no change is
+// requested, the caller gets a select-change blocked status (ok=true) so the
+// user sees the Engram-aware ambiguity message rather than the generic sdd-new.
+func resolveEngramStatus(cwd, requested string) (Status, bool) {
+	if !shouldTryEngram(cwd) {
+		return Status{}, false
+	}
+	obs, err := engramExport()
+	if err != nil {
+		return Status{}, false // binary absent / non-zero exit / malformed JSON
+	}
+	project := inferEngramProject(cwd)
+
+	changes := collectEngramChanges(obs, project)
+
+	// Ambiguity: multiple Engram changes with no explicit request → surface a
+	// select-change blocked status so the user sees the names rather than a
+	// generic sdd-new. ok=true causes Resolve to use this status instead.
+	if len(changes) > 1 && requested == "" {
+		joined := strings.Join(changes, ", ")
+		reasons := []string{"Multiple Engram SDD changes found. Specify which to resume: " + joined + "."}
+		return blockedStatus(cwd, nil, "select-change", reasons), true
+	}
+
+	change, ok := selectEngramChange(changes, requested)
+	if !ok {
+		return Status{}, false // zero changes, or requested not found in Engram
+	}
+
+	artifacts := engramArtifactsForChange(obs, change, project)
+	tasksText := engramArtifactContent(obs, change, project, "tasks")
+	verifyText := engramArtifactContent(obs, change, project, "verify-report")
+
+	taskProgress := countTaskProgressText(tasksText)
+	verifyPassing := reportTextIsClearlyPassing(verifyText)
+
+	coreReady := artifacts["proposal"] == ArtifactDone &&
+		artifacts["specs"] == ArtifactDone &&
+		artifacts["design"] == ArtifactDone &&
+		artifacts["tasks"] == ArtifactDone &&
+		taskProgress.Total > 0
+	applyState := resolveApplyState(coreReady, taskProgress)
+
+	blockedReasons := artifactBlockedReasons(artifacts, taskProgress)
+	if artifacts["verifyReport"] == ArtifactDone && !verifyPassing && applyState != ApplyReady {
+		blockedReasons = append(blockedReasons, "verify-report.md is not clearly passing.")
+	}
+	dependencies := resolveDependencies(artifacts, taskProgress, applyState, coreReady, verifyPassing)
+	nextRecommended := resolveNextRecommended(dependencies, applyState)
+
+	root := "engram:sdd/" + change
+	status := baseStatus(cwd, &change, &root, nextRecommended, blockedReasons)
+	status.ArtifactStore = ArtifactStoreEngram
+	status.PlanningHome.Path = "engram:sdd"
+	status.ArtifactPaths = engramArtifactPaths(change, artifacts)
+	status.Artifacts = artifacts
+	status.TaskProgress = taskProgress
+	status.Dependencies = dependencies
+	status.ApplyState = applyState
+	return status, true
+}

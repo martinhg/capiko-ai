@@ -1,6 +1,7 @@
 package sddstatus
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -867,5 +868,541 @@ func TestResolveMissingTasksCheckboxesBlocks(t *testing.T) {
 	}
 	if st.NextRecommended != "resolve-blockers" {
 		t.Errorf("next = %q, want resolve-blockers for malformed tasks", st.NextRecommended)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: resolveEngramStatus + Resolve wiring (SC-01 through SC-10, 4.9b)
+// ---------------------------------------------------------------------------
+
+// withFatalSeam installs the engram export seam so that any call to it fails
+// the test immediately. Use this to assert the seam is never invoked.
+func withFatalSeam(t *testing.T) {
+	t.Helper()
+	prev := engramExport
+	engramExport = func() ([]engramObservation, error) {
+		t.Fatal("engramExport seam must not be invoked in this scenario")
+		return nil, nil
+	}
+	t.Cleanup(func() { engramExport = prev })
+}
+
+// engramObs builds a single observation for the given change, artifact type,
+// content, and project (scope defaults to "project").
+func engramObs(change, artifactType, content, project string) engramObservation {
+	return engramObservation{
+		Title:   "sdd/" + change + "/" + artifactType,
+		Content: content,
+		Project: project,
+		Scope:   "project",
+	}
+}
+
+// engramCwd creates a temp workspace with the .engram directory and
+// returns (cwd, inferred project name).
+func engramCwd(t *testing.T) (string, string) {
+	t.Helper()
+	cwd := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cwd, ".engram"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return cwd, inferEngramProject(cwd)
+}
+
+// SC-01: Gating OFF — seam is never invoked, nextRecommended stays sdd-new.
+func TestSC01_GatingOff_FatalSeam(t *testing.T) {
+	withFatalSeam(t)
+	cwd := t.TempDir()
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "")
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.NextRecommended != "sdd-new" {
+		t.Errorf("nextRecommended = %q, want sdd-new with gating OFF", st.NextRecommended)
+	}
+}
+
+// SC-02a: Gating ON via env var — seam IS invoked, ArtifactStore = "engram".
+func TestSC02a_GatingOn_EnvVar(t *testing.T) {
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
+	cwd := t.TempDir()
+	project := inferEngramProject(cwd)
+	obs := []engramObservation{
+		engramObs("my-feature", "proposal", "# Proposal\n...", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram (gating ON via env)", st.ArtifactStore)
+	}
+}
+
+// SC-02b: Gating ON via .engram dir — seam IS invoked, ArtifactStore = "engram".
+func TestSC02b_GatingOn_EngramDir(t *testing.T) {
+	cwd, project := engramCwd(t)
+	obs := []engramObservation{
+		engramObs("my-feature", "proposal", "# Proposal\n...", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram (gating ON via .engram dir)", st.ArtifactStore)
+	}
+}
+
+// SC-02c: Gating ON via openspec/config.yaml artifact_store: engram.
+func TestSC02c_GatingOn_ConfigEngram(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: engram\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := inferEngramProject(cwd)
+	obs := []engramObservation{
+		engramObs("my-feature", "proposal", "# Proposal\n...", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram (gating ON via config engram)", st.ArtifactStore)
+	}
+}
+
+// SC-02d: Gating ON via openspec/config.yaml artifact_store: hybrid.
+func TestSC02d_GatingOn_ConfigHybrid(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: hybrid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := inferEngramProject(cwd)
+	obs := []engramObservation{
+		engramObs("my-feature", "proposal", "# Proposal\n...", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram (gating ON via config hybrid)", st.ArtifactStore)
+	}
+}
+
+// SC-03: Files-first — OpenSpec change wins even when gating is ON. Seam must
+// NOT be called.
+func TestSC03_FilesFirst_OpenSpecWins(t *testing.T) {
+	withFatalSeam(t)
+	// The change helper creates the cwd; we then also create .engram so gating
+	// is ON. But selectChange finds the on-disk change and returns non-blocked,
+	// so Resolve never reaches the Engram fallback.
+	cwd := change(t, "my-feature", map[string]string{"proposal.md": "# Proposal\n..."})
+	if err := os.MkdirAll(filepath.Join(cwd, ".engram"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ArtifactStore == ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = engram, but files must win when OpenSpec change exists")
+	}
+}
+
+// SC-04: Fallback branch (a) — zero OpenSpec changes, one Engram change with
+// full planning artifacts and one unchecked task.
+func TestSC04_FallbackA_ZeroOpenSpecOneEngram(t *testing.T) {
+	cwd, project := engramCwd(t)
+	obs := []engramObservation{
+		engramObs("add-login", "proposal", "# Proposal\n...", project),
+		engramObs("add-login", "spec", "# Spec\n...", project),
+		engramObs("add-login", "design", "# Design\n...", project),
+		engramObs("add-login", "tasks", "- [ ] do the thing", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.NextRecommended != "apply" {
+		t.Errorf("nextRecommended = %q, want apply", st.NextRecommended)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram", st.ArtifactStore)
+	}
+	if st.ChangeRoot == nil || *st.ChangeRoot != "engram:sdd/add-login" {
+		t.Errorf("changeRoot = %v, want engram:sdd/add-login", st.ChangeRoot)
+	}
+	if st.PlanningHome.Path != "engram:sdd" {
+		t.Errorf("planningHome.path = %q, want engram:sdd", st.PlanningHome.Path)
+	}
+	if st.ChangeName == nil || *st.ChangeName != "add-login" {
+		t.Errorf("changeName = %v, want add-login", st.ChangeName)
+	}
+	if st.Artifacts["proposal"] != ArtifactDone {
+		t.Errorf("proposal = %q, want done", st.Artifacts["proposal"])
+	}
+	if st.Artifacts["specs"] != ArtifactDone {
+		t.Errorf("specs = %q, want done", st.Artifacts["specs"])
+	}
+	if st.Artifacts["design"] != ArtifactDone {
+		t.Errorf("design = %q, want done", st.Artifacts["design"])
+	}
+	if st.Artifacts["tasks"] != ArtifactDone {
+		t.Errorf("tasks = %q, want done", st.Artifacts["tasks"])
+	}
+	tp := st.TaskProgress
+	if tp.Total != 1 || tp.Completed != 0 || tp.Pending != 1 || tp.AllComplete {
+		t.Errorf("taskProgress = %+v, want Total=1 Completed=0 Pending=1 AllComplete=false", tp)
+	}
+	if len(st.BlockedReasons) != 0 {
+		t.Errorf("blockedReasons = %v, want empty", st.BlockedReasons)
+	}
+}
+
+// SC-05: Fallback branch (b) — named change absent from OpenSpec but present
+// in Engram.
+func TestSC05_FallbackB_NamedChangeInEngram(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
+	project := inferEngramProject(cwd)
+	obs := []engramObservation{
+		engramObs("auth-refactor", "proposal", "# Proposal\n...", project),
+		engramObs("auth-refactor", "spec", "# Spec\n...", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd, ChangeName: "auth-refactor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram", st.ArtifactStore)
+	}
+	if st.ChangeRoot == nil || *st.ChangeRoot != "engram:sdd/auth-refactor" {
+		t.Errorf("changeRoot = %v, want engram:sdd/auth-refactor", st.ChangeRoot)
+	}
+	if st.ChangeName == nil || *st.ChangeName != "auth-refactor" {
+		t.Errorf("changeName = %v, want auth-refactor", st.ChangeName)
+	}
+	if st.NextRecommended != "design" {
+		t.Errorf("nextRecommended = %q, want design", st.NextRecommended)
+	}
+}
+
+// SC-06: Ambiguity — zero OpenSpec, multiple Engram changes, no request →
+// select-change blocked with both names in reasons; ArtifactStore != engram.
+func TestSC06_Ambiguity_MultipleEngramChanges(t *testing.T) {
+	cwd, project := engramCwd(t)
+	obs := []engramObservation{
+		engramObs("feat-a", "proposal", "# P\n...", project),
+		engramObs("feat-b", "proposal", "# P\n...", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.NextRecommended != "select-change" {
+		t.Errorf("nextRecommended = %q, want select-change for multiple Engram changes", st.NextRecommended)
+	}
+	if len(st.BlockedReasons) == 0 {
+		t.Error("blockedReasons must be non-empty for ambiguous Engram changes")
+	}
+	joined := strings.Join(st.BlockedReasons, " ")
+	if !strings.Contains(joined, "feat-a") || !strings.Contains(joined, "feat-b") {
+		t.Errorf("blockedReasons %v must mention feat-a and feat-b", st.BlockedReasons)
+	}
+	if st.ArtifactStore == ArtifactStoreEngram {
+		t.Error("ArtifactStore must not be engram for ambiguous (blocked) Engram result")
+	}
+}
+
+// SC-07b: nextRecommended parity — for each artifact state, Engram path and
+// file path must return identical NextRecommended, Dependencies, and ApplyState.
+func TestSC07b_NextRecommendedParity_EngramVsFilePath(t *testing.T) {
+	type parityCase struct {
+		name          string
+		fileArtifacts map[string]string
+		obsKeys       []string // observation titles to include under sdd/<change>/<key>
+		tasksContent  string
+		verifyContent string
+	}
+
+	cases := []parityCase{
+		{
+			// File: empty proposal (partial) → propose. Engram: state-obs only
+			// (no artifact obs) → all missing → propose. Both route identically.
+			name:          "partial-proposal",
+			fileArtifacts: map[string]string{"proposal.md": ""},
+			obsKeys:       []string{"state"},
+		},
+		{
+			name:          "proposal-only",
+			fileArtifacts: map[string]string{"proposal.md": "# Proposal\n..."},
+			obsKeys:       []string{"proposal"},
+		},
+		{
+			name:          "proposal-and-spec",
+			fileArtifacts: map[string]string{"proposal.md": "# P\n...", "spec.md": "# S\n..."},
+			obsKeys:       []string{"proposal", "spec"},
+		},
+		{
+			name: "proposal-spec-design",
+			fileArtifacts: map[string]string{
+				"proposal.md": "# P\n...", "spec.md": "# S\n...", "design.md": "# D\n...",
+			},
+			obsKeys: []string{"proposal", "spec", "design"},
+		},
+		{
+			name: "all-core-unchecked-tasks",
+			fileArtifacts: map[string]string{
+				"proposal.md": "# P\n...", "spec.md": "# S\n...", "design.md": "# D\n...",
+				"tasks.md": "- [ ] do the thing",
+			},
+			obsKeys:      []string{"proposal", "spec", "design", "tasks"},
+			tasksContent: "- [ ] do the thing",
+		},
+		{
+			name: "apply-progress",
+			fileArtifacts: map[string]string{
+				"proposal.md": "# P\n...", "spec.md": "# S\n...", "design.md": "# D\n...",
+				"tasks.md": "- [x] done", "apply-progress.md": "# Progress\n...",
+			},
+			obsKeys:      []string{"proposal", "spec", "design", "tasks", "apply-progress"},
+			tasksContent: "- [x] done",
+		},
+		{
+			name: "passing-verify",
+			fileArtifacts: map[string]string{
+				"proposal.md": "# P\n...", "spec.md": "# S\n...", "design.md": "# D\n...",
+				"tasks.md": "- [x] done", "verify-report.md": "Verdict: PASS\nAll checks passed.",
+			},
+			obsKeys:       []string{"proposal", "spec", "design", "tasks", "verify-report"},
+			tasksContent:  "- [x] done",
+			verifyContent: "Verdict: PASS\nAll checks passed.",
+		},
+	}
+
+	// obsContent maps obs key → content for building observations.
+	obsDefaultContent := map[string]string{
+		"state":          "some state content",
+		"proposal":       "# Proposal\n...",
+		"spec":           "# Spec\n...",
+		"design":         "# Design\n...",
+		"apply-progress": "# Progress\n...",
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// File-path resolution.
+			fileCwd := change(t, "parity-chg", tc.fileArtifacts)
+			fileStatus, err := Resolve(ResolveOptions{Cwd: fileCwd})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Engram-path resolution: fresh cwd, no OpenSpec changes.
+			eCwd, project := engramCwd(t)
+
+			tasksBody := tc.tasksContent
+			if tasksBody == "" {
+				tasksBody = obsDefaultContent["tasks"]
+			}
+			verifyBody := tc.verifyContent
+			if verifyBody == "" {
+				verifyBody = obsDefaultContent["verify-report"]
+			}
+			keyContent := map[string]string{
+				"state":          obsDefaultContent["state"],
+				"proposal":       obsDefaultContent["proposal"],
+				"spec":           obsDefaultContent["spec"],
+				"design":         obsDefaultContent["design"],
+				"tasks":          tasksBody,
+				"apply-progress": obsDefaultContent["apply-progress"],
+				"verify-report":  verifyBody,
+			}
+
+			var obs []engramObservation
+			for _, key := range tc.obsKeys {
+				obs = append(obs, engramObservation{
+					Title:   "sdd/parity-chg/" + key,
+					Content: keyContent[key],
+					Project: project,
+					Scope:   "project",
+				})
+			}
+			withEngram(t, obs)
+
+			engramStatus, err := Resolve(ResolveOptions{Cwd: eCwd})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if fileStatus.NextRecommended != engramStatus.NextRecommended {
+				t.Errorf("nextRecommended mismatch: file=%q engram=%q",
+					fileStatus.NextRecommended, engramStatus.NextRecommended)
+			}
+			if fileStatus.Dependencies != engramStatus.Dependencies {
+				t.Errorf("dependencies mismatch:\nfile  =%+v\nengram=%+v",
+					fileStatus.Dependencies, engramStatus.Dependencies)
+			}
+			if fileStatus.ApplyState != engramStatus.ApplyState {
+				t.Errorf("applyState mismatch: file=%q engram=%q",
+					fileStatus.ApplyState, engramStatus.ApplyState)
+			}
+		})
+	}
+}
+
+// SC-09a: Degradation — seam returns error (binary absent / non-zero exit).
+// Resolve must return err=nil and route sdd-new without panic.
+func TestSC09a_Degradation_SeamError(t *testing.T) {
+	cwd, _ := engramCwd(t)
+	prev := engramExport
+	engramExport = func() ([]engramObservation, error) {
+		return nil, os.ErrNotExist // simulates engram binary not found
+	}
+	t.Cleanup(func() { engramExport = prev })
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatalf("Resolve must not return an error on seam failure, got: %v", err)
+	}
+	if st.NextRecommended != "sdd-new" {
+		t.Errorf("nextRecommended = %q, want sdd-new on seam error", st.NextRecommended)
+	}
+	if len(st.BlockedReasons) == 0 {
+		t.Error("blockedReasons must be non-empty (standard sdd-new blocked status)")
+	}
+}
+
+// SC-09b: Degradation — seam returns malformed output (simulated via error).
+// Same contract as SC-09a: err=nil, sdd-new, no panic.
+func TestSC09b_Degradation_MalformedExport(t *testing.T) {
+	cwd, _ := engramCwd(t)
+	prev := engramExport
+	engramExport = func() ([]engramObservation, error) {
+		return nil, &json.SyntaxError{} // simulates json.Unmarshal failure
+	}
+	t.Cleanup(func() { engramExport = prev })
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatalf("Resolve must not return an error on malformed export, got: %v", err)
+	}
+	if st.NextRecommended != "sdd-new" {
+		t.Errorf("nextRecommended = %q, want sdd-new on malformed export", st.NextRecommended)
+	}
+}
+
+// SC-09c: Degradation — seam returns empty observations (no matching change).
+// Resolve must route sdd-new normally.
+func TestSC09c_Degradation_EmptyObservations(t *testing.T) {
+	cwd, _ := engramCwd(t)
+	withEngram(t, []engramObservation{}) // empty slice
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.NextRecommended != "sdd-new" {
+		t.Errorf("nextRecommended = %q, want sdd-new for empty observations", st.NextRecommended)
+	}
+}
+
+// SC-10: Origin flags are explicit and consumer-safe; JSON round-trip is valid.
+func TestSC10_OriginFlags_ConsumerSafe(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
+	project := inferEngramProject(cwd)
+	obs := []engramObservation{
+		engramObs("my-feature", "proposal", "# Proposal\n...", project),
+	}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram", st.ArtifactStore)
+	}
+	if st.ChangeRoot == nil || !strings.HasPrefix(*st.ChangeRoot, "engram:sdd/") {
+		t.Errorf("changeRoot = %v, must start with engram:sdd/", st.ChangeRoot)
+	}
+	if st.PlanningHome.Path != "engram:sdd" {
+		t.Errorf("planningHome.path = %q, want engram:sdd", st.PlanningHome.Path)
+	}
+	if st.PlanningHome.Mode != modeRepoLocal {
+		t.Errorf("planningHome.mode = %q, want %q", st.PlanningHome.Mode, modeRepoLocal)
+	}
+	// JSON round-trip must be valid and parseable.
+	data, err := json.Marshal(st)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	var reparse Status
+	if err := json.Unmarshal(data, &reparse); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+	if reparse.NextRecommended == "sdd-new" {
+		t.Error("a resolved Engram status must not route sdd-new; got sdd-new after JSON round-trip")
+	}
+}
+
+// Task 4.9b (carry-forward from PR2 WARNING-2): A change discovered ONLY via
+// its sdd/<change>/state observation (no artifact obs) must route sanely —
+// all artifacts missing → nextRecommended = "propose", no panic.
+func TestSC_StateOnlyChange_RoutesToPropose(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
+	project := inferEngramProject(cwd)
+	// Only a state observation — no proposal, spec, etc.
+	obs := []engramObservation{{
+		Title:   "sdd/state-only-change/state",
+		Content: "some dag state content",
+		Project: project,
+		Scope:   "project",
+	}}
+	withEngram(t, obs)
+
+	st, err := Resolve(ResolveOptions{Cwd: cwd})
+	if err != nil {
+		t.Fatalf("Resolve must not error for state-only Engram change, got: %v", err)
+	}
+	if st.NextRecommended != "propose" {
+		t.Errorf("nextRecommended = %q, want propose for state-only change (all artifacts missing)", st.NextRecommended)
+	}
+	if st.ArtifactStore != ArtifactStoreEngram {
+		t.Errorf("ArtifactStore = %q, want engram", st.ArtifactStore)
+	}
+	if st.ChangeName == nil || *st.ChangeName != "state-only-change" {
+		t.Errorf("changeName = %v, want state-only-change", st.ChangeName)
 	}
 }

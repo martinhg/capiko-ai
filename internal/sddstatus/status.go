@@ -130,6 +130,14 @@ func Resolve(options ResolveOptions) (Status, error) {
 		return Status{}, err
 	}
 	if blocked != "" {
+		// Files-first: only the two sdd-new branches (no active change / requested
+		// change absent) fall back to Engram. The ambiguous select-change branch
+		// means matching OpenSpec files exist on disk, so files win.
+		if blocked == "sdd-new" {
+			if st, ok := resolveEngramStatus(cwd, options.ChangeName); ok {
+				return st, nil
+			}
+		}
 		return blockedStatus(cwd, changeNamePtr(changeName), blocked, reasons), nil
 	}
 
