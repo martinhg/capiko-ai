@@ -50,6 +50,15 @@ Exit codes for headless commands: 0 success, 1 error, 2 Copilot not found.
 - **Engram memory** (`~/.copilot/mcp-config.json`, VS Code `mcp.json`) — wires the
   [engram](https://github.com/Gentleman-Programming/engram) MCP server for cross-session
   memory (local or `hybrid` cloud).
+- **Team memory sync** (`.git/hooks/post-merge` + `.git/hooks/pre-push`, opt-in) —
+  writes marker-delimited hook blocks so `post-merge` runs `engram sync --import` and
+  `pre-push` runs `engram sync --project '<name>'`, sharing Engram memory across the
+  team through git with no cloud required. Requires explicit ack of the scope-leak risk
+  (all project memories including `scope:personal` are committed to git). Mitigations:
+  wrap sensitive content in `<private>…</private>` tags, or use a separate project name
+  for personal memories. If a competing hook framework (`core.hooksPath`, husky, lefthook,
+  pre-commit) is detected, writes are skipped and the equivalent shell lines are shown
+  for manual integration. capiko never installs the `engram` binary.
 - **Safety net** (`~/.capiko/`) — snapshot-before-mutate backups, per-skill checksum
   state, drift detection, and self-update.
 
@@ -65,6 +74,7 @@ Exit codes for headless commands: 0 success, 1 error, 2 Copilot not found.
 ## Docs
 
 - [README](https://github.com/martinhg/capiko-ai/blob/main/README.md) — full overview, quickstart, menu, SDD workflow
+- [Team memory sync](https://github.com/martinhg/capiko-ai/blob/main/README.md#-team-memory-sync) — git hook sharing, scope-leak warning, conflict coexistence
 - [Headless CLI](https://github.com/martinhg/capiko-ai/blob/main/README.md#-headless-cli) — scripting, CI, dotfiles
 - [Spec-Driven Development](https://github.com/martinhg/capiko-ai/blob/main/README.md#-spec-driven-development) — the 8-phase pipeline
 - [How it works](https://github.com/martinhg/capiko-ai/blob/main/README.md#-how-it-works) — the direct/execute split

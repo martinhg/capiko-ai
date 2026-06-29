@@ -136,6 +136,30 @@ func TestViewGolden(t *testing.T) {
 		{"sdd", App{state: appScreen, active: sddView}.View()},
 		{"engram", App{state: appScreen, active: engramView}.View()},
 		{"headroom", App{state: appScreen, active: &headroomScreen{svc: svc, detected: false}}.View()},
+		{"teamsync_editing", App{state: appScreen, active: &teamSyncScreen{
+			svc: svc, engramAvailable: true,
+		}}.View()},
+		{"teamsync_ack", App{state: appScreen, active: &teamSyncScreen{
+			svc: svc, engramAvailable: true, ack: true,
+		}}.View()},
+		{"teamsync_ack_hint", App{state: appScreen, active: &teamSyncScreen{
+			svc: svc, engramAvailable: true, enabled: true, ackHint: true,
+		}}.View()},
+		{"teamsync_conflict", App{state: appScreen, active: &teamSyncScreen{
+			svc:             svc,
+			engramAvailable: true,
+			conflictReason:  "husky is configured (.husky/ directory found)",
+			conflictProject: "my-team",
+		}}.View()},
+		{"teamsync_no_engram", App{state: appScreen, active: &teamSyncScreen{
+			svc: svc, engramAvailable: false,
+		}}.View()},
+		{"teamsync_done", App{state: appScreen, active: &teamSyncScreen{
+			svc: svc, engramAvailable: true, enabled: true, state: teamSyncDone,
+		}}.View()},
+		{"teamsync_failed", App{state: appScreen, active: &teamSyncScreen{
+			svc: svc, engramAvailable: true, state: teamSyncFailed, err: errTest,
+		}}.View()},
 		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
 		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog(), nil)}.View()},

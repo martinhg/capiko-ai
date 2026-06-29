@@ -124,9 +124,27 @@ func TestEnterOpensCodeReview(t *testing.T) {
 	}
 }
 
+func TestEnterOpensTeamSync(t *testing.T) {
+	a := readyApp(t, t.TempDir())
+	a.cursor = 9 // Configure team sync
+
+	// Stub seams so newTeamSync does not hit the real filesystem or exec.
+	origGetwd := teamSyncGetwd
+	teamSyncGetwd = func() (string, error) { return t.TempDir(), nil }
+	t.Cleanup(func() { teamSyncGetwd = origGetwd })
+	origConflict := teamSyncDetectConflict
+	teamSyncDetectConflict = func(_ string) string { return "" }
+	t.Cleanup(func() { teamSyncDetectConflict = origConflict })
+
+	next, _ := a.Update(key("enter"))
+	if _, ok := next.(App).active.(*teamSyncScreen); !ok {
+		t.Errorf("active = %T, want *teamSyncScreen", next.(App).active)
+	}
+}
+
 func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 9 // Upgrade tools
+	a.cursor = 10 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -141,7 +159,7 @@ func TestEnterOpensUpgrade(t *testing.T) {
 
 func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 10 // Upgrade + sync
+	a.cursor = 11 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -167,7 +185,7 @@ func TestEnterOpensBackups(t *testing.T) {
 
 func TestEnterOpensInstructions(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 11 // Install instructions
+	a.cursor = 12 // Install instructions
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*instructionsScreen); !ok {

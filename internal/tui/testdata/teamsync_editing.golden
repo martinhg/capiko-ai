@@ -1,0 +1,20 @@
+capiko-ai  ·  Copilot configurator
+
+Configure team sync
+
+Wire engram memory sharing via git hooks.
+post-merge: import team memories after pull/merge.
+pre-push:   export your memories and remind to commit .engram/.
+
+! Scope-leak warning: engram sync has no scope filter.
+  scope:personal memories for this project WILL be committed to git.
+  Mitigations:
+    (a) Wrap sensitive content in <private>…</private> tags.
+    (b) Use a separate project name for personal memories.
+
+▸ Enabled                             off
+  I understand the scope-leak risk    off
+  Apply                             
+  Back                              
+
+↑/↓ move · space toggle · enter select · esc back
