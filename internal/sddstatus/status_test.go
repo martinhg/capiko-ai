@@ -6,6 +6,129 @@ import (
 	"testing"
 )
 
+// ---------------------------------------------------------------------------
+// Phase 1: text cores (countTaskProgressText, reportTextIsClearlyPassing)
+// ---------------------------------------------------------------------------
+
+func TestCountTaskProgressText_Mixed(t *testing.T) {
+	content := "- [x] Step 1\n- [ ] Step 2\n- [X] Step 3"
+	got := countTaskProgressText(content)
+	if got.Total != 3 {
+		t.Errorf("Total = %d, want 3", got.Total)
+	}
+	if got.Completed != 2 {
+		t.Errorf("Completed = %d, want 2", got.Completed)
+	}
+	if got.Pending != 1 {
+		t.Errorf("Pending = %d, want 1", got.Pending)
+	}
+	if got.AllComplete {
+		t.Error("AllComplete = true, want false")
+	}
+}
+
+func TestCountTaskProgressText_ProseOnly(t *testing.T) {
+	content := "# Tasks\nJust some prose.\nNo checkboxes here."
+	got := countTaskProgressText(content)
+	if got.Total != 0 || got.Completed != 0 || got.Pending != 0 {
+		t.Errorf("expected zero counts for prose-only, got %+v", got)
+	}
+	if got.AllComplete {
+		t.Error("AllComplete = true for prose-only, want false")
+	}
+}
+
+func TestCountTaskProgressText_Empty(t *testing.T) {
+	got := countTaskProgressText("")
+	if got.Total != 0 || got.Completed != 0 || got.Pending != 0 || got.AllComplete {
+		t.Errorf("expected zero TaskProgress for empty string, got %+v", got)
+	}
+}
+
+// TestCountTaskProgressText_FileParity asserts that countTaskProgressText(content)
+// returns the same result as countTaskProgress applied to a temp file with the same content.
+func TestCountTaskProgressText_FileParity(t *testing.T) {
+	content := "- [x] Step 1\n- [ ] Step 2\n- [X] Step 3"
+	dir := t.TempDir()
+	p := filepath.Join(dir, "tasks.md")
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fromText := countTaskProgressText(content)
+	fromFile := countTaskProgress(p)
+	if fromText != fromFile {
+		t.Errorf("parity broken: text=%+v file=%+v", fromText, fromFile)
+	}
+}
+
+func TestReportTextIsClearlyPassing_PassKeyword(t *testing.T) {
+	text := "Verdict: PASS\nAll checks passed."
+	if !reportTextIsClearlyPassing(text) {
+		t.Error("expected true for text with PASS keyword, got false")
+	}
+}
+
+func TestReportTextIsClearlyPassing_FailKeyword(t *testing.T) {
+	text := "Verdict: FAIL\nSomething went wrong."
+	if reportTextIsClearlyPassing(text) {
+		t.Error("expected false for text with FAIL keyword, got true")
+	}
+}
+
+func TestReportTextIsClearlyPassing_CriticalBlocker(t *testing.T) {
+	text := "CRITICAL: null deref detected\nVerdict: PASS"
+	if reportTextIsClearlyPassing(text) {
+		t.Error("expected false for text with non-benign CRITICAL, got true")
+	}
+}
+
+func TestReportTextIsClearlyPassing_NegationPattern(t *testing.T) {
+	text := "Tests are not passing yet."
+	if reportTextIsClearlyPassing(text) {
+		t.Error("expected false for text with negation of pass, got true")
+	}
+}
+
+func TestReportTextIsClearlyPassing_Empty(t *testing.T) {
+	if reportTextIsClearlyPassing("") {
+		t.Error("expected false for empty string, got true")
+	}
+}
+
+func TestReportTextIsClearlyPassing_Blank(t *testing.T) {
+	if reportTextIsClearlyPassing("   \n\t  ") {
+		t.Error("expected false for blank string, got true")
+	}
+}
+
+// TestReportTextIsClearlyPassing_FileParity asserts that reportTextIsClearlyPassing(text)
+// returns the same result as reportIsClearlyPassing applied to a temp file with the same content.
+func TestReportTextIsClearlyPassing_FileParity(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"pass", "Verdict: PASS\nAll checks passed."},
+		{"fail", "Verdict: FAIL\nCRITICAL: null deref"},
+		{"empty", ""},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := filepath.Join(dir, "verify-report.md")
+			if err := os.WriteFile(p, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			fromText := reportTextIsClearlyPassing(tc.content)
+			fromFile := reportIsClearlyPassing(p)
+			if fromText != fromFile {
+				t.Errorf("parity broken for %q: text=%v file=%v", tc.name, fromText, fromFile)
+			}
+		})
+	}
+}
+
 // change writes a set of artifact files for a change and returns the workspace
 // root. Each map entry is a relative path under the change dir → file content.
 func change(t *testing.T, name string, files map[string]string) string {
@@ -218,6 +341,124 @@ func TestResolvePartialArtifactBlocks(t *testing.T) {
 	// A partial mid-DAG artifact re-routes to its own phase, not forward.
 	if st.NextRecommended != string(PhaseDesign) {
 		t.Errorf("next = %q, want design when design is partial", st.NextRecommended)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: gating infrastructure (shouldTryEngram, configArtifactStoreIsEngram)
+// ---------------------------------------------------------------------------
+
+func TestShouldTryEngram_EnvVar(t *testing.T) {
+	cwd := t.TempDir()
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with env var set, want true")
+	}
+}
+
+func TestShouldTryEngram_EngramDir(t *testing.T) {
+	cwd := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cwd, ".engram"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with .engram dir present, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigArtifactStoreEngram(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: engram\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with artifact_store: engram config, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigArtifactStoreHybrid(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: hybrid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with artifact_store: hybrid config, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigCamelCaseArtifactStore(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifactStore: engram\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with camelCase artifactStore: engram, want true")
+	}
+}
+
+func TestShouldTryEngram_ConfigArtifactStoreOpenspec_NoGate(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: openspec\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = true with artifact_store: openspec, want false")
+	}
+}
+
+func TestShouldTryEngram_YmlExtension(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yml"), []byte("artifact_store: engram\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = false with .yml extension config, want true")
+	}
+}
+
+func TestShouldTryEngram_AllOff_ReturnsFalse(t *testing.T) {
+	cwd := t.TempDir()
+	// Explicitly clear the override so an ambient value never leaks into this case;
+	// no .engram dir and no config file are created.
+	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "")
+	if shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = true with no triggers active, want false")
+	}
+}
+
+func TestShouldTryEngram_CommentedConfig_NoGate(t *testing.T) {
+	cwd := t.TempDir()
+	cfgDir := filepath.Join(cwd, "openspec")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A commented-out artifact_store line must not gate on — only a live key counts.
+	body := "# artifact_store: engram\nother_key: value\n"
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if shouldTryEngram(cwd) {
+		t.Error("shouldTryEngram = true with a commented-out artifact_store, want false")
 	}
 }
 

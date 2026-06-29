@@ -67,10 +67,11 @@ type Dependencies struct {
 
 // Schema identity emitted in every status payload.
 const (
-	SchemaName    = "capiko.sdd-status"
-	SchemaVersion = 1
-	artifactStore = "openspec"
-	modeRepoLocal = "repo-local"
+	SchemaName          = "capiko.sdd-status"
+	SchemaVersion       = 1
+	artifactStore       = "openspec" // default used by baseStatus
+	ArtifactStoreEngram = "engram"   // origin flag set only on the Engram fallback path
+	modeRepoLocal       = "repo-local"
 )
 
 // PlanningHome locates the OpenSpec store.
@@ -367,17 +368,11 @@ func blockedStatus(cwd string, name *string, next string, reasons []string) Stat
 
 var taskCheckbox = regexp.MustCompile(`^\s*(?:[-*]|\d+[.)])\s+\[([ xX])\]`)
 
-// countTaskProgress counts markdown task checkboxes in tasks.md.
-func countTaskProgress(tasksPath string) TaskProgress {
-	if tasksPath == "" {
-		return TaskProgress{}
-	}
-	content, err := os.ReadFile(tasksPath)
-	if err != nil {
-		return TaskProgress{}
-	}
+// countTaskProgressText counts markdown task checkboxes in arbitrary text (a
+// tasks.md file body or an Engram tasks observation). Shares the taskCheckbox regex.
+func countTaskProgressText(content string) TaskProgress {
 	var tp TaskProgress
-	for _, line := range strings.Split(string(content), "\n") {
+	for _, line := range strings.Split(content, "\n") {
 		m := taskCheckbox.FindStringSubmatch(line)
 		if len(m) == 0 {
 			continue
@@ -393,6 +388,18 @@ func countTaskProgress(tasksPath string) TaskProgress {
 	return tp
 }
 
+// countTaskProgress counts markdown task checkboxes in tasks.md.
+func countTaskProgress(tasksPath string) TaskProgress {
+	if tasksPath == "" {
+		return TaskProgress{}
+	}
+	content, err := os.ReadFile(tasksPath)
+	if err != nil {
+		return TaskProgress{}
+	}
+	return countTaskProgressText(string(content))
+}
+
 var (
 	reportPassPattern     = regexp.MustCompile(`(?i)\b(?:PASS|PASSED|SUCCESS|SUCCESSFUL)\b`)
 	reportFailPattern     = regexp.MustCompile(`(?i)\b(?:FAIL|FAILED|FAILING|FAILURE|BLOCKED|UNTESTED)\b`)
@@ -403,17 +410,10 @@ var (
 	reportBenign          = regexp.MustCompile(`(?i)^(?:none|no|n/a|0(?:\s+\w+)?)\.?$`)
 )
 
-// reportIsClearlyPassing reports whether verify-report.md has an explicit pass
-// signal and no blocker signal. A missing or empty report is not passing.
-func reportIsClearlyPassing(path string) bool {
-	if path == "" {
-		return false
-	}
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	text := string(content)
+// reportTextIsClearlyPassing holds the line-scan logic that determines whether
+// a verify-report body has an explicit pass signal and no blocker signal. The
+// path wrapper (reportIsClearlyPassing) just supplies the text.
+func reportTextIsClearlyPassing(text string) bool {
 	if strings.TrimSpace(text) == "" {
 		return false
 	}
@@ -431,6 +431,19 @@ func reportIsClearlyPassing(path string) bool {
 		}
 	}
 	return hasPass
+}
+
+// reportIsClearlyPassing reports whether verify-report.md has an explicit pass
+// signal and no blocker signal. A missing or empty report is not passing.
+func reportIsClearlyPassing(path string) bool {
+	if path == "" {
+		return false
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return reportTextIsClearlyPassing(string(content))
 }
 
 func reportLineHasBlocker(line string) bool {
