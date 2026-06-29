@@ -58,31 +58,31 @@ Chain strategy: pending
 - [x] 3.6 **(GREEN)** In `engram.go`: implement `inferEngramProject(cwd string) string` and `projectFromGitConfig(cwd string) string` — read `.git/config`, extract `[remote "origin"]` url via narrow regex `[:/]([^/:]+/[^/]+?)(?:\.git)?$`, lowercase result.
 - [x] 3.7 **(GREEN)** In `engram.go`: add `titleRe` regex; implement `engramObservationMatchesProject`, `collectEngramChanges` (distinct sorted change names), `selectEngramChange` (exact-match or single-auto; zero/multi + no-request → false).
 - [x] 3.8 **(GREEN)** In `engram.go`: implement `engramArtifactContent`, `engramArtifactState`, `engramArtifactsForChange` (six-key map), `engramArtifactPaths` (sentinel `engram:sdd/<change>/<artifact>` for non-missing artifacts; `.withArrays()` finalization).
-- [x] 3.9 Run `go test -race ./internal/sddstatus/...` — all green.
+- [x] 3.9 Run `go test -race ./internal/sddstatus/...` — all green (30 new tests).
 
 ## Phase 4: `resolveEngramStatus` + `Resolve` wiring + full test suite
 
 *Satisfies: REQ-3–REQ-10 | Design: `resolveEngramStatus`, insertion point in `Resolve` (ADR-1)*
 
-- [ ] 4.1 **(RED)** Write failing test SC-01: install a seam that calls `t.Fatal`; no gating triggers set; assert `Resolve` returns `nextRecommended = "sdd-new"` and seam is never called.
-- [ ] 4.2 **(RED)** Write failing tests SC-02a–d: each gating trigger ON; seam returns one change with `proposal` done; assert `ArtifactStore == "engram"` and seam IS called.
-- [ ] 4.3 **(RED)** Write failing test SC-03: `.engram` present; OpenSpec change exists on disk; seam returns same change with all artifacts done; assert `ArtifactStore == "openspec"` and seam NOT called.
-- [ ] 4.4 **(RED)** Write failing tests SC-04 (zero OpenSpec, one Engram change — full origin flags + `nextRecommended == "apply"` + task progress counts) and SC-05 (named change absent from OpenSpec, present in Engram → resolves).
-- [ ] 4.5 **(RED)** Write failing test SC-06: two distinct Engram changes, no `ChangeName` request → `nextRecommended == "select-change"`, `BlockedReasons` non-empty, `ArtifactStore != "engram"`.
-- [ ] 4.6 **(RED)** Write failing table-driven test SC-07b: `nextRecommended` parity — for each planning-phase artifact state (propose/spec/design/tasks/apply/verify/archive), assert Engram path and file path return identical `NextRecommended`, `Dependencies`, `ApplyState`.
-- [ ] 4.7 **(RED)** Write failing tests SC-09a–c (degradation: seam returns error / `"not-json"` / `{"observations":[]}` → `err == nil`, `nextRecommended == "sdd-new"`, no panic) and SC-10 (origin flags: `ChangeRoot` starts with `"engram:sdd/"`, `PlanningHome.Path == "engram:sdd"`, valid `json.Marshal`).
-- [ ] 4.8 **(GREEN)** In `engram.go`: implement `resolveEngramStatus(cwd, requested string) (Status, bool)` — calls `shouldTryEngram`, `engramExport` seam, `inferEngramProject`, `collectEngramChanges`, `selectEngramChange`, builds artifacts/taskProgress/verifyPassing via shared text cores, calls `resolveApplyState`/`resolveDependencies`/`resolveNextRecommended`, assembles via `baseStatus` + three origin overrides.
-- [ ] 4.9 **(GREEN)** In `internal/sddstatus/status.go` `Resolve`: insert `if blocked == "sdd-new" { if st, ok := resolveEngramStatus(cwd, options.ChangeName); ok { return st, nil } }` before the existing `return blockedStatus(...)`.
-- [ ] 4.9b **(carry-forward from PR2 verify, WARNING-2)** Add a routing test: a change discovered ONLY via its `sdd/<change>/state` observation (no proposal/spec/etc.) must route sanely — all artifacts `missing` → `nextRecommended == "propose"`, no panic. `collectEngramChanges` already discovers state-only changes (locked by `TestCollectEngramChanges_StateOnlyTitleIsDiscovered`); this confirms `resolveEngramStatus` handles them.
-- [ ] 4.10 Run `go test -race ./internal/sddstatus/...` — all 22+ test functions green.
+- [x] 4.1 **(RED)** Write failing test SC-01: install a seam that calls `t.Fatal`; no gating triggers set; assert `Resolve` returns `nextRecommended = "sdd-new"` and seam is never called.
+- [x] 4.2 **(RED)** Write failing tests SC-02a–d: each gating trigger ON; seam returns one change with `proposal` done; assert `ArtifactStore == "engram"` and seam IS called.
+- [x] 4.3 **(RED)** Write failing test SC-03: `.engram` present; OpenSpec change exists on disk; seam returns same change with all artifacts done; assert `ArtifactStore == "openspec"` and seam NOT called.
+- [x] 4.4 **(RED)** Write failing tests SC-04 (zero OpenSpec, one Engram change — full origin flags + `nextRecommended == "apply"` + task progress counts) and SC-05 (named change absent from OpenSpec, present in Engram → resolves).
+- [x] 4.5 **(RED)** Write failing test SC-06: two distinct Engram changes, no `ChangeName` request → `nextRecommended == "select-change"`, `BlockedReasons` non-empty, `ArtifactStore != "engram"`.
+- [x] 4.6 **(RED)** Write failing table-driven test SC-07b: `nextRecommended` parity — for each planning-phase artifact state (propose/spec/design/tasks/apply-progress/verify/archive), assert Engram path and file path return identical `NextRecommended`, `Dependencies`, `ApplyState`.
+- [x] 4.7 **(RED)** Write failing tests SC-09a–c (degradation: seam returns error / `"not-json"` / `{"observations":[]}` → `err == nil`, `nextRecommended == "sdd-new"`, no panic) and SC-10 (origin flags: `ChangeRoot` starts with `"engram:sdd/"`, `PlanningHome.Path == "engram:sdd"`, valid `json.Marshal`).
+- [x] 4.8 **(GREEN)** In `engram.go`: implement `resolveEngramStatus(cwd, requested string) (Status, bool)` — calls `shouldTryEngram`, `engramExport` seam, `inferEngramProject`, `collectEngramChanges`, `selectEngramChange`, builds artifacts/taskProgress/verifyPassing via shared text cores, calls `resolveApplyState`/`resolveDependencies`/`resolveNextRecommended`, assembles via `baseStatus` + three origin overrides.
+- [x] 4.9 **(GREEN)** In `internal/sddstatus/status.go` `Resolve`: insert `if blocked == "sdd-new" { if st, ok := resolveEngramStatus(cwd, options.ChangeName); ok { return st, nil } }` before the existing `return blockedStatus(...)`.
+- [x] 4.9b **(carry-forward from PR2 verify, WARNING-2)** Add a routing test: a change discovered ONLY via its `sdd/<change>/state` observation (no proposal/spec/etc.) must route sanely — all artifacts `missing` → `nextRecommended == "propose"`, no panic. `collectEngramChanges` already discovers state-only changes (locked by `TestCollectEngramChanges_StateOnlyTitleIsDiscovered`); this confirms `resolveEngramStatus` handles them.
+- [x] 4.10 Run `go test -race ./internal/sddstatus/...` — all 86 test functions green.
 
 ## Phase 5: Contract doc + quality gate + PR
 
 *Satisfies: REQ-11 | Design: contract doc note, capiko-dev workflow*
 
-- [ ] 5.1 In `internal/catalog/skills/sdd-shared/sdd-status-contract.md`: add bounded note under **Artifact Store** section — engine MAY report `artifactStore: "engram"` with `changeRoot: "engram:sdd/<change>"` and `planningHome.path: "engram:sdd"` only when no matching OpenSpec change exists; read-only fallback; parsers MUST guard `engram:` prefix as non-filesystem origin marker.
-- [ ] 5.2 Run `go test ./internal/catalog/...` — embed tests green; confirm `internal/tui` golden files unchanged (`go test ./internal/tui`).
-- [ ] 5.3 `gofmt -l .` — no output; `go vet ./...` — clean.
-- [ ] 5.4 `go test -race ./...` — all green.
-- [ ] 5.5 `go build ./...` — clean.
-- [ ] 5.6 From fresh `git pull main`, create feature branch; commit in 3 work-unit commits (one per PR slice, test+impl together per `work-unit-commits` convention); open PR 1 targeting `main`.
+- [x] 5.1 In `internal/catalog/skills/sdd-shared/sdd-status-contract.md`: add bounded note under **Artifact Store** section — engine MAY report `artifactStore: "engram"` with `changeRoot: "engram:sdd/<change>"` and `planningHome.path: "engram:sdd"` only when no matching OpenSpec change exists; read-only fallback; parsers MUST guard `engram:` prefix as non-filesystem origin marker.
+- [x] 5.2 Run `go test ./internal/catalog/...` — embed tests green; confirm `internal/tui` golden files unchanged (`go test ./internal/tui`).
+- [x] 5.3 `gofmt -l .` — no output; `go vet ./...` — clean.
+- [x] 5.4 `go test -race ./...` — all 27 packages green.
+- [x] 5.5 `go build ./...` — clean.
+- [x] 5.6 Delivered as 3 chained PRs (stacked-to-main): PR #139 (Phases 1–2), PR #140 (Phase 3), PR #141 (Phases 4–5). All merged to main.

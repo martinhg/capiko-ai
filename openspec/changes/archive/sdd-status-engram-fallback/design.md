@@ -563,6 +563,15 @@ disk but synced Engram observations do. Parsers MUST treat an `engram:`-prefixed
 canonical-files invariant: Engram is a read-only fallback, never a write target and
 never preferred over files.
 
+## Reconciliation note (applied at PR3)
+
+The design's pseudocode for `selectEngramChange` and `resolveEngramStatus` described
+the multiple-Engram-changes-no-request case as returning `ok=false` (falling back to
+`sdd-new`). The implementation (and the authoritative spec, SC-06) correctly returns a
+`select-change` blocked status listing the change names — a better UX. The verify
+(PR3) confirmed this deviation was spec-compliant and the design was stale on this
+point. This note records the reconciliation; the implementation follows the spec.
+
 ## Risks
 
 - **Project-inference mismatch** is fail-safe but can miss a recoverable change saved
@@ -573,4 +582,3 @@ never preferred over files.
   could skew progress; mitigated by reusing the exact `taskCheckbox` regex and test #8.
 - **Contract tension**: the doc currently says "ALWAYS file-based"; the note must frame
   Engram strictly as a read-only fallback to avoid implying the invariant is weakened.
-```
