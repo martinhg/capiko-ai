@@ -111,6 +111,15 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying headroom: %w", err)
 				}
 			}
+			// Re-apply the copilot-hooks guardrails, only once the user has
+			// enabled them — mirroring the headroom/engram opt-in. Idempotent:
+			// applyCopilotHooks rewrites only when the rendered bytes differ
+			// from disk (ADR-6 change gate).
+			if st.CopilotHooks != nil && st.CopilotHooks.Enabled {
+				if err := applyCopilotHooks(host, store, bkp, st.CopilotHooks); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying copilot hooks: %w", err)
+				}
+			}
 		}
 	}
 	return len(recorded) + len(agentRecorded), nil

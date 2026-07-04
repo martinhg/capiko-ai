@@ -9,6 +9,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/copilothooks"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -157,6 +158,60 @@ func TestRunSyncReappliesSDD(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "capiko:sdd:start") {
 		t.Errorf("sync did not re-apply the SDD block: %q", data)
+	}
+}
+
+// TestRunSyncReappliesCopilotHooks asserts that once copilot hooks are managed
+// (enabled in state), sync re-applies the guardrails hook file so it tracks the
+// catalog's pattern set (SC-10).
+func TestRunSyncReappliesCopilotHooks(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills"), HooksDir: filepath.Join(cfgDir, "hooks")}
+	store := state.NewStore(t.TempDir())
+	if err := store.SetCopilotHooks(&state.CopilotHooksRecord{Enabled: true, Posture: string(copilothooks.PostureStrict)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(host.HooksDir, copilothooks.GuardrailsFile)); err != nil {
+		t.Errorf("sync did not re-apply the guardrails hook file: %v", err)
+	}
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.CopilotHooks == nil || st.CopilotHooks.Checksum == "" {
+		t.Errorf("expected a recorded checksum after re-apply, got %+v", st.CopilotHooks)
+	}
+}
+
+// TestRunSyncSkipsCopilotHooksWhenDisabled asserts sync does NOT write the
+// guardrails hook file for a user who never enabled it, nor for one who
+// explicitly disabled it (SC-11).
+func TestRunSyncSkipsCopilotHooksWhenDisabled(t *testing.T) {
+	cfgDir := t.TempDir()
+	hooksDir := filepath.Join(cfgDir, "hooks")
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills"), HooksDir: hooksDir}
+	store := state.NewStore(t.TempDir())
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync (nil record): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(hooksDir, copilothooks.GuardrailsFile)); err == nil {
+		t.Error("sync wrote the guardrails hook file for a user who never enabled it")
+	}
+
+	if err := store.SetCopilotHooks(&state.CopilotHooksRecord{Enabled: false, Posture: "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync (disabled record): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(hooksDir, copilothooks.GuardrailsFile)); err == nil {
+		t.Error("sync wrote the guardrails hook file for a disabled record")
 	}
 }
 
