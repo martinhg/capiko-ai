@@ -16,13 +16,19 @@ import (
 // directories beyond ~/.copilot/instructions/.
 const customInstructionDirsEnv = "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"
 
+// copilotHomeEnv is the env var that overrides the Copilot config directory,
+// consistent with the CLI's own config-root resolution. When set and non-empty
+// it takes precedence over the default ~/.copilot.
+const copilotHomeEnv = "COPILOT_HOME"
+
 // Host describes a detected and initialized Copilot CLI installation.
 type Host struct {
 	BinPath       string // absolute path to the copilot binary
-	ConfigDir     string // ~/.copilot
+	ConfigDir     string // $COPILOT_HOME or ~/.copilot
 	SkillsDir     string // ~/.copilot/skills
 	AgentsDir     string // ~/.copilot/agents
 	MCPConfigPath string // ~/.copilot/mcp-config.json
+	HooksDir      string // <ConfigDir>/hooks
 }
 
 // Test seams: swapped in tests so detection does not depend on the real PATH or
@@ -41,11 +47,14 @@ func Detect() (*Host, error) {
 	if err != nil {
 		return nil, nil // not installed
 	}
-	home, err := userHomeDir()
-	if err != nil {
-		return nil, err
+	cfg := os.Getenv(copilotHomeEnv)
+	if cfg == "" {
+		home, err := userHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		cfg = filepath.Join(home, ".copilot")
 	}
-	cfg := filepath.Join(home, ".copilot")
 	if _, err := os.Stat(cfg); err != nil {
 		return nil, nil // installed but never logged in
 	}
@@ -55,6 +64,7 @@ func Detect() (*Host, error) {
 		SkillsDir:     filepath.Join(cfg, "skills"),
 		AgentsDir:     filepath.Join(cfg, "agents"),
 		MCPConfigPath: filepath.Join(cfg, "mcp-config.json"),
+		HooksDir:      filepath.Join(cfg, "hooks"),
 	}, nil
 }
 

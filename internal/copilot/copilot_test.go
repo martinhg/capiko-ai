@@ -59,6 +59,45 @@ func TestDetect(t *testing.T) {
 			t.Errorf("MCPConfigPath = %q, want %q", h.MCPConfigPath, want)
 		}
 	})
+
+	t.Run("HooksDir default falls back to ~/.copilot/hooks", func(t *testing.T) {
+		home := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(home, ".copilot"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		lookPath = found
+		userHomeDir = func() (string, error) { return home, nil }
+		t.Setenv(copilotHomeEnv, "")
+
+		h, err := Detect()
+		if err != nil || h == nil {
+			t.Fatalf("got (%v, %v), want a host", h, err)
+		}
+		if want := filepath.Join(home, ".copilot", "hooks"); h.HooksDir != want {
+			t.Errorf("HooksDir = %q, want %q", h.HooksDir, want)
+		}
+	})
+
+	t.Run("HooksDir honors COPILOT_HOME override without calling userHomeDir", func(t *testing.T) {
+		lookPath = found
+		userHomeDir = func() (string, error) {
+			t.Fatal("userHomeDir should not be called when COPILOT_HOME is set")
+			return "", nil
+		}
+		custom := t.TempDir()
+		t.Setenv(copilotHomeEnv, custom)
+
+		h, err := Detect()
+		if err != nil || h == nil {
+			t.Fatalf("got (%v, %v), want a host", h, err)
+		}
+		if h.ConfigDir != custom {
+			t.Errorf("ConfigDir = %q, want %q", h.ConfigDir, custom)
+		}
+		if want := filepath.Join(custom, "hooks"); h.HooksDir != want {
+			t.Errorf("HooksDir = %q, want %q", h.HooksDir, want)
+		}
+	})
 }
 
 func TestInstalledSkills(t *testing.T) {
