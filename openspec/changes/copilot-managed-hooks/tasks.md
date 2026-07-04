@@ -143,14 +143,14 @@ path guard mirrors copilot.go:132-149), `HookFileChecksum`/`CombinedChecksum`
 
 ## Work Unit 6 — TUI orchestration: `applyCopilotHooks`/`disableCopilotHooks`/`backupCopilotHooks`
 
-### T-11 `[ ]` `[RED]` Write apply/disable tests
+### T-11 `[x]` `[RED]` Write apply/disable tests
 
 `strict`/`warn` write file + update state; `off` routes to disable;
 pre-existing non-capiko file untouched (REQ-6.5); posture downgrade
 strict→warn→off leaves state/file consistent; backup called before write
 when file exists, write aborted on backup error (SC-15).
 
-### T-12 `[ ]` `[GREEN + GATE]` Implement orchestration functions
+### T-12 `[x]` `[GREEN + GATE]` Implement orchestration functions
 
 `internal/tui/copilothooks.go`: `applyCopilotHooks`/`disableCopilotHooks`/
 `backupCopilotHooks` (REQ-9.4/9.5, mirrors `applyHeadroom`). Gate: green.
@@ -159,12 +159,12 @@ when file exists, write aborted on backup error (SC-15).
 
 ## Work Unit 7 — `drift.StaleCopilotHooks`
 
-### T-13 `[ ]` `[RED]` Write drift tests
+### T-13 `[x]` `[RED]` Write drift tests
 
 Unmanaged/disabled → false; matching checksum → false; hand-edited file →
 true; missing file while enabled → true. (REQ-7.3, SC-08/SC-09)
 
-### T-14 `[ ]` `[GREEN + GATE]` Implement `StaleCopilotHooks`
+### T-14 `[x]` `[GREEN + GATE]` Implement `StaleCopilotHooks`
 
 `internal/drift/drift.go:30-43`, mirroring `StaleHeadroom`. Gate: green.
 
@@ -172,12 +172,12 @@ true; missing file while enabled → true. (REQ-7.3, SC-08/SC-09)
 
 ## Work Unit 8 — RunSync re-apply gate
 
-### T-15 `[ ]` `[RED]` Write RunSync tests
+### T-15 `[x]` `[RED]` Write RunSync tests
 
 `state.CopilotHooks` enabled → `RunSync` calls `applyCopilotHooks` with
 stored posture (SC-10); nil/disabled → hooks dir untouched (SC-11).
 
-### T-16 `[ ]` `[GREEN + GATE]` Add re-apply gate
+### T-16 `[x]` `[GREEN + GATE]` Add re-apply gate
 
 `internal/tui/sync.go:107-113`, mirroring the headroom/engram gates
 (ADR-10). Gate: green.
