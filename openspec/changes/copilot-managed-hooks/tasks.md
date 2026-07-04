@@ -126,14 +126,14 @@ output per REQ-4. Gate: green.
 
 ## Work Unit 5 — `internal/copilothooks`: atomic writer + checksum
 
-### T-09 `[ ]` `[RED]` Write writer/checksum tests
+### T-09 `[x]` `[RED]` Write writer/checksum tests
 
 `WriteHookFile`: creates `HooksDir`, atomic tmp-then-rename, mode `0o644`,
 overwrite. `RemoveHookFile`: idempotent on missing, path-guard rejects `..`
 and separators. `HookFileChecksum`/`CombinedChecksum`: absent dir → `""`,
 single/two-file, order-independent, changes on byte change.
 
-### T-10 `[ ]` `[GREEN + GATE]` Implement writer + checksum
+### T-10 `[x]` `[GREEN + GATE]` Implement writer + checksum
 
 `internal/copilothooks/writer.go`: `WriteHookFile`/`RemoveHookFile` (ADR-8,
 path guard mirrors copilot.go:132-149), `HookFileChecksum`/`CombinedChecksum`
