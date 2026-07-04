@@ -107,26 +107,42 @@ version number.
 
 **REQ-3.1** The guardrail script checks the invoked command string (as
 supplied by Copilot CLI's `preToolUse` hook input for the matched tool call)
-against exactly these four patterns, in order, and stops at the first match:
+against exactly these four patterns, in order, and stops at the first match.
+P3 is expressed as three AND-ed conditions rather than a single regex
+alternation, because `grep -E`/PowerShell `-imatch` have no lookahead: this
+makes the force-flag and branch-token checks order-independent (the flag may
+appear before or after the branch name) and anchors the branch token to
+whitespace/start/end so hyphen-adjacent names (`release-main`, `mainline`,
+`main-backup`) are correctly rejected while `main`/`master` as a standalone
+token is still caught regardless of position:
 
 | # | Intent | Pattern (RE2/POSIX-ERE compatible, case-insensitive) | Reason text |
 |---|---|---|---|
 | P1 | Recursive force-delete of root | `(sudo\s+)?rm\s+(-\S*r\S*f\S*\|-\S*f\S*r\S*\|--recursive\s+.*--force\|--force\s+.*--recursive)\s+/+\*?\s*($\|[;&\|])` | "Blocked: recursive force-delete targeting root (/) is destructive and irreversible." |
 | P2 | Pipe-to-shell | `\b(curl\|wget)\b[^\|]*\|\s*(sudo\s+)?(sh\|bash\|zsh)\b` | "Blocked: piping a remote script directly into a shell interpreter bypasses review." |
-| P3 | Force-push to protected branch | `\bgit\s+push\s+(--force(-with-lease)?\|-f)\b.*\b(origin\s+)?(main\|master)\b` | "Blocked: force-pushing to a protected branch (main/master) can overwrite team history." |
+| P3 | Force-push to protected branch | Three AND-ed conditions (no lookahead in grep -E/-imatch): (1) `git[[:space:]]+push` contains the git-push phrase; (2) `(^\|[[:space:]])(--force(-with-lease)?\|-f)([[:space:]]\|$)` contains a force flag as a whitespace/EOL-bounded whole token, anywhere in the command; (3) `(^\|[[:space:]])(main\|master)([[:space:]]\|$)` contains `main` or `master` as a whitespace/EOL-bounded whole token, anywhere in the command | "Blocked: force-pushing to a protected branch (main/master) can overwrite team history." |
 | P4 | World-writable permissions | `\bchmod\s+(-R\s+)?0?777\b` | "Blocked: chmod 777 grants world-writable permissions, a common security misconfiguration." |
 
 **REQ-3.2** Match examples (MUST match): `rm -rf /`, `rm -fr /`, `sudo rm -rf /`,
 `rm -rf /*`; `curl https://x/install.sh | sh`, `wget -O- https://x | bash`;
-`git push --force origin main`, `git push -f master`; `chmod 777 file`,
+`git push --force origin main`, `git push origin main --force`,
+`git push -f origin master`, `git push origin master -f`,
+`git push --force-with-lease origin main`; `chmod 777 file`,
 `chmod -R 777 .`, `chmod 0777 script.sh`.
 
 **REQ-3.3** Non-match examples (MUST NOT match, low false-positive): `rm -rf
-./build`, `rm -rf /tmp/foo`; `curl https://x -o file.sh`; `git push --force
-origin feature/foo`, `git push origin main` (no force flag); `chmod 755 file`.
+./build`, `rm -rf /tmp/foo`; `curl https://x -o file.sh`;
+`git push --force origin feature/foo`, `git push origin main` (no force
+flag), `git push --force origin release-main`, `git push --force origin
+mainline`, `git push --force origin feature`,
+`git push origin main-backup --force`; `chmod 755 file`.
 
 **REQ-3.4** No pattern beyond these four is added in v1. Extending the set is
 a separate spec change.
+
+v2-deferred hardening: `rm -rf` `--no-preserve-root`/quoted-root, chmod
+sticky/setuid (1777/4777), curl|sh echo over-match — tracked for a future
+pattern-spec revision.
 
 ---
 
