@@ -136,12 +136,16 @@ func renderBashScript(decision string) string {
 // bash script (ADR-5); its runtime behavior is not exercised on CI (it only
 // executes on a Windows host) — verified here by rendering/structural
 // coverage rather than execution (see design "Risks").
+//
+// The payload variable is named $payload rather than $input: $input is a
+// PowerShell AUTOMATIC variable (the pipeline enumerator), and assigning to
+// it shadows a reserved name.
 func renderPowerShellScript(decision string) string {
-	script := "$input = [Console]::In.ReadToEnd()\n"
+	script := "$payload = [Console]::In.ReadToEnd()\n"
 	for _, pat := range patterns {
 		conds := make([]string, len(pat.powershellConds))
 		for i, c := range pat.powershellConds {
-			conds[i] = fmt.Sprintf(`$input -imatch '%s'`, c)
+			conds[i] = fmt.Sprintf(`$payload -imatch '%s'`, c)
 		}
 		script += fmt.Sprintf(
 			"if (%s) {\n"+
