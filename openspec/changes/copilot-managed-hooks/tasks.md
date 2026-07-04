@@ -90,13 +90,13 @@ Round-trip enabled+posture+presets+checksum; nil clears the field;
 
 ## Work Unit 3 — `internal/copilothooks`: v1 schema types + `Marshal`
 
-### T-05 `[ ]` `[RED]` Write schema/golden tests
+### T-05 `[x]` `[RED]` Write schema/golden tests
 
 `HookFile`/`Hook` JSON shape: `hooks` object keyed by `preToolUse`, single
 entry carries both `bash`+`powershell`, `version:1` pinned, exactly one entry
 in `Hooks["preToolUse"]`. (REQ-2, ADR-2)
 
-### T-06 `[ ]` `[GREEN + GATE]` Implement types + `Marshal`
+### T-06 `[x]` `[GREEN + GATE]` Implement types + `Marshal`
 
 New package `internal/copilothooks/copilothooks.go`: `Posture` enum
 (off/warn/strict), consts (`GuardrailsFile`, `FilePrefix`, `SchemaVersion`,
@@ -108,7 +108,7 @@ structs, `Marshal` (`json.MarshalIndent` + trailing newline). Add
 
 ## Work Unit 4 — `internal/copilothooks`: `RenderGuardrails` (bash+powershell)
 
-### T-07 `[ ]` `[RED]` Write renderer tests
+### T-07 `[x]` `[RED]` Write renderer tests
 
 Table-driven: 4 patterns × match/non-match (REQ-3.2/3.3) × both shells ×
 posture (`warn`→`ask`, `strict`→`deny`); REQ-4.3 silent-allow for
@@ -116,7 +116,7 @@ non-matches; `RenderGuardrails` takes no OS param and output has non-empty
 `bash` AND `powershell` fields in one entry (SC-13); `matcher=bash`,
 `timeoutSec=5` pinned.
 
-### T-08 `[ ]` `[GREEN + GATE]` Implement `RenderGuardrails`
+### T-08 `[x]` `[GREEN + GATE]` Implement `RenderGuardrails`
 
 `internal/copilothooks/render.go`: baked-in 4-pattern alternation (ADR-4),
 `renderBashScript`/`renderPowerShellScript` (ADR-3/ADR-5), decision JSON
