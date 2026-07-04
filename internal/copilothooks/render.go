@@ -1,16 +1,25 @@
 package copilothooks
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
-// pattern is one of the four v1 guardrail patterns (REQ-3.1): a bash-syntax
-// (POSIX ERE, as consumed by `grep -Eiq`) regex, a PowerShell-syntax (.NET
-// regex, as consumed by `-imatch`) equivalent, and the exact reason text
-// emitted on a match. Patterns are checked in order; the first match wins
-// (REQ-3.1).
+// pattern is one of the four v1 guardrail patterns (REQ-3.1): a set of
+// bash-syntax (POSIX ERE, as consumed by `grep -Eiq`) conditions and a set of
+// PowerShell-syntax (.NET regex, as consumed by `-imatch`) conditions that
+// implement the same intent, plus the exact reason text emitted on a match.
+// Patterns are checked in order; the first match wins (REQ-3.1).
+//
+// bashConds/powershellConds are AND-ed together (grep -E and -imatch have no
+// lookahead, so an order-independent, multi-clause intent like P3's
+// "force flag anywhere + branch token anywhere, regardless of order" is
+// expressed as multiple ANDed single-clause conditions rather than one
+// alternation). Most patterns need only one condition; P3 needs three.
 type pattern struct {
-	bashRegexp       string
-	powershellRegexp string
-	reason           string
+	bashConds       []string
+	powershellConds []string
+	reason          string
 }
 
 // patterns is the frozen v1 pattern set (REQ-3). It is baked in and NOT
@@ -20,27 +29,40 @@ type pattern struct {
 var patterns = []pattern{
 	{
 		// P1 — recursive force-delete of root.
-		bashRegexp:       `(sudo[[:space:]]+)?\brm\b[[:space:]]+(-[^[:space:]]*r[^[:space:]]*f[^[:space:]]*|-[^[:space:]]*f[^[:space:]]*r[^[:space:]]*|--recursive[[:space:]]+.*--force|--force[[:space:]]+.*--recursive)[[:space:]]+/+\*?[[:space:]]*($|[;&|])`,
-		powershellRegexp: `(sudo\s+)?\brm\b\s+(-\S*r\S*f\S*|-\S*f\S*r\S*|--recursive\s+.*--force|--force\s+.*--recursive)\s+/+\*?\s*($|[;&|])`,
-		reason:           "Blocked: recursive force-delete targeting root (/) is destructive and irreversible.",
+		bashConds:       []string{`(sudo[[:space:]]+)?\brm\b[[:space:]]+(-[^[:space:]]*r[^[:space:]]*f[^[:space:]]*|-[^[:space:]]*f[^[:space:]]*r[^[:space:]]*|--recursive[[:space:]]+.*--force|--force[[:space:]]+.*--recursive)[[:space:]]+/+\*?[[:space:]]*($|[;&|])`},
+		powershellConds: []string{`(sudo\s+)?\brm\b\s+(-\S*r\S*f\S*|-\S*f\S*r\S*|--recursive\s+.*--force|--force\s+.*--recursive)\s+/+\*?\s*($|[;&|])`},
+		reason:          "Blocked: recursive force-delete targeting root (/) is destructive and irreversible.",
 	},
 	{
 		// P2 — pipe a remote script directly into a shell interpreter.
-		bashRegexp:       `\b(curl|wget)\b[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(sh|bash|zsh)\b`,
-		powershellRegexp: `\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(sh|bash|zsh)\b`,
-		reason:           "Blocked: piping a remote script directly into a shell interpreter bypasses review.",
+		bashConds:       []string{`\b(curl|wget)\b[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(sh|bash|zsh)\b`},
+		powershellConds: []string{`\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(sh|bash|zsh)\b`},
+		reason:          "Blocked: piping a remote script directly into a shell interpreter bypasses review.",
 	},
 	{
-		// P3 — force-push to a protected branch.
-		bashRegexp:       `\bgit[[:space:]]+push[[:space:]]+(--force(-with-lease)?|-f)\b.*\b(origin[[:space:]]+)?(main|master)\b`,
-		powershellRegexp: `\bgit\s+push\s+(--force(-with-lease)?|-f)\b.*\b(origin\s+)?(main|master)\b`,
-		reason:           "Blocked: force-pushing to a protected branch (main/master) can overwrite team history.",
+		// P3 — force-push to a protected branch. Expressed as three ANDed
+		// conditions (grep -E / -imatch have no lookahead) so the match is
+		// commutative — the force flag may appear before or after the
+		// branch name — and the branch token is whitespace/EOL-anchored so
+		// hyphen-adjacent names like `release-main`, `mainline`, or
+		// `main-backup` are correctly rejected (REQ-3.2/REQ-3.3).
+		bashConds: []string{
+			`git[[:space:]]+push`,
+			`(^|[[:space:]])(--force(-with-lease)?|-f)([[:space:]]|$)`,
+			`(^|[[:space:]])(main|master)([[:space:]]|$)`,
+		},
+		powershellConds: []string{
+			`git\s+push`,
+			`(^|\s)(--force(-with-lease)?|-f)(\s|$)`,
+			`(^|\s)(main|master)(\s|$)`,
+		},
+		reason: "Blocked: force-pushing to a protected branch (main/master) can overwrite team history.",
 	},
 	{
 		// P4 — world-writable permissions.
-		bashRegexp:       `\bchmod[[:space:]]+(-R[[:space:]]+)?0?777\b`,
-		powershellRegexp: `\bchmod\s+(-R\s+)?0?777\b`,
-		reason:           "Blocked: chmod 777 grants world-writable permissions, a common security misconfiguration.",
+		bashConds:       []string{`\bchmod[[:space:]]+(-R[[:space:]]+)?0?777\b`},
+		powershellConds: []string{`\bchmod\s+(-R\s+)?0?777\b`},
+		reason:          "Blocked: chmod 777 grants world-writable permissions, a common security misconfiguration.",
 	},
 }
 
@@ -92,12 +114,16 @@ func RenderGuardrails(posture Posture) (HookFile, error) {
 func renderBashScript(decision string) string {
 	script := "input=\"$(cat)\"\n"
 	for _, pat := range patterns {
+		conds := make([]string, len(pat.bashConds))
+		for i, c := range pat.bashConds {
+			conds[i] = fmt.Sprintf(`printf '%%s' "$input" | grep -Eiq '%s'`, c)
+		}
 		script += fmt.Sprintf(
-			"if printf '%%s' \"$input\" | grep -Eiq '%s'; then\n"+
+			"if %s; then\n"+
 				"  printf '{\"permissionDecision\":\"%s\",\"permissionDecisionReason\":\"%s\"}'\n"+
 				"  exit 0\n"+
 				"fi\n",
-			pat.bashRegexp, decision, pat.reason,
+			strings.Join(conds, " && "), decision, pat.reason,
 		)
 	}
 	script += "exit 0\n"
@@ -113,12 +139,16 @@ func renderBashScript(decision string) string {
 func renderPowerShellScript(decision string) string {
 	script := "$input = [Console]::In.ReadToEnd()\n"
 	for _, pat := range patterns {
+		conds := make([]string, len(pat.powershellConds))
+		for i, c := range pat.powershellConds {
+			conds[i] = fmt.Sprintf(`$input -imatch '%s'`, c)
+		}
 		script += fmt.Sprintf(
-			"if ($input -imatch '%s') {\n"+
+			"if (%s) {\n"+
 				"  Write-Output '{\"permissionDecision\":\"%s\",\"permissionDecisionReason\":\"%s\"}'\n"+
 				"  exit 0\n"+
 				"}\n",
-			pat.powershellRegexp, decision, pat.reason,
+			strings.Join(conds, " -and "), decision, pat.reason,
 		)
 	}
 	script += "exit 0\n"
