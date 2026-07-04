@@ -525,3 +525,99 @@ func TestTeamSyncOmittedWhenNil(t *testing.T) {
 		t.Errorf("state without team_sync should omit the key, got:\n%s", data)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// CopilotHooksRecord / SetCopilotHooks
+// ---------------------------------------------------------------------------
+
+func TestSetCopilotHooks_RoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := &CopilotHooksRecord{
+		Enabled:  true,
+		Posture:  "strict",
+		Presets:  []string{"guardrails"},
+		Checksum: "abc123",
+	}
+	if err := s.SetCopilotHooks(rec); err != nil {
+		t.Fatalf("SetCopilotHooks: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CopilotHooks == nil {
+		t.Fatal("CopilotHooks should be set after SetCopilotHooks")
+	}
+	if !st.CopilotHooks.Enabled {
+		t.Error("Enabled should be true")
+	}
+	if st.CopilotHooks.Posture != "strict" {
+		t.Errorf("Posture = %q, want strict", st.CopilotHooks.Posture)
+	}
+	if len(st.CopilotHooks.Presets) != 1 || st.CopilotHooks.Presets[0] != "guardrails" {
+		t.Errorf("Presets = %v, want [guardrails]", st.CopilotHooks.Presets)
+	}
+	if st.CopilotHooks.Checksum != "abc123" {
+		t.Errorf("Checksum = %q, want abc123", st.CopilotHooks.Checksum)
+	}
+}
+
+func TestSetCopilotHooks_NilClears(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetCopilotHooks(&CopilotHooksRecord{Enabled: true, Posture: "warn"}); err != nil {
+		t.Fatalf("SetCopilotHooks seed: %v", err)
+	}
+	if err := s.SetCopilotHooks(nil); err != nil {
+		t.Fatalf("SetCopilotHooks nil: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CopilotHooks != nil {
+		t.Errorf("CopilotHooks should be nil after clear, got %+v", st.CopilotHooks)
+	}
+}
+
+func TestSetCopilotHooks_UpdatedAt(t *testing.T) {
+	s := NewStore(t.TempDir())
+	before := time.Now().UTC()
+	if err := s.SetCopilotHooks(&CopilotHooksRecord{Enabled: true, Posture: "warn"}); err != nil {
+		t.Fatalf("SetCopilotHooks: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.UpdatedAt.Before(before) {
+		t.Errorf("UpdatedAt %v should be >= %v", st.UpdatedAt, before)
+	}
+}
+
+func TestCopilotHooksOmittedWhenNil(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.Apply("1.0.0", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(data, []byte("copilot_hooks")) {
+		t.Errorf("state without copilot_hooks should omit the key, got:\n%s", data)
+	}
+}
+
+func TestLoadCopilotHooksBackwardCompat(t *testing.T) {
+	// A state.json written before this field existed must still load cleanly,
+	// with CopilotHooks left nil (unmanaged).
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(dir)
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CopilotHooks != nil {
+		t.Errorf("CopilotHooks should be nil for a state.json predating this field, got %+v", st.CopilotHooks)
+	}
+}

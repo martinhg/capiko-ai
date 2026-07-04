@@ -47,6 +47,10 @@ type State struct {
 	// = unmanaged. When set, sync re-applies both the post-merge and pre-push
 	// hook blocks, mirroring CodeReview.
 	TeamSync *TeamSyncRecord `json:"team_sync,omitempty"`
+	// CopilotHooks records the managed user-level Copilot CLI hook wiring; nil =
+	// unmanaged. When set, sync re-applies the guardrails hook file at the
+	// stored posture, mirroring Headroom/TeamSync.
+	CopilotHooks *CopilotHooksRecord `json:"copilot_hooks,omitempty"`
 	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
 	// means "never checked" — the next launch will always call the API. The
 	// timestamp is advanced only on a successful check, so failures don't
@@ -102,6 +106,17 @@ type TeamSyncRecord struct {
 	Workspace string `json:"workspace,omitempty"`
 	Project   string `json:"project,omitempty"`
 	Conflict  string `json:"conflict,omitempty"`
+}
+
+// CopilotHooksRecord is the managed user-level Copilot hook wiring. capiko owns
+// the capiko-*.json files under $COPILOT_HOME/hooks entirely. Enabled false
+// records a deliberately-disabled wiring so sync does not re-apply it. Mirrors
+// HeadroomRecord.
+type CopilotHooksRecord struct {
+	Enabled  bool     `json:"enabled"`
+	Posture  string   `json:"posture,omitempty"`  // off|warn|strict — drives RenderGuardrails
+	Presets  []string `json:"presets,omitempty"`  // active preset ids, e.g. ["guardrails"]
+	Checksum string   `json:"checksum,omitempty"` // CombinedChecksum of capiko-*.json
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -364,6 +379,19 @@ func (s *Store) SetTeamSync(rec *TeamSyncRecord) error {
 		return err
 	}
 	st.TeamSync = rec
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetCopilotHooks records the managed user-level Copilot hook wiring (nil =
+// unmanaged). Mirrors SetTeamSync: snapshot-before-mutate is the caller's
+// responsibility; this method only persists the record.
+func (s *Store) SetCopilotHooks(rec *CopilotHooksRecord) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.CopilotHooks = rec
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
