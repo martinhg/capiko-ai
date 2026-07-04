@@ -59,12 +59,12 @@ WU-9 after WU-6+WU-2; WU-10 after WU-9
 
 ## Work Unit 1 — `$COPILOT_HOME` resolution + `HooksDir` (`internal/copilot`)
 
-### T-01 `[ ]` `[RED]` Write `copilot_test.go` cases
+### T-01 `[x]` `[RED]` Write `copilot_test.go` cases
 
 `COPILOT_HOME` set → `HooksDir` under it, `userHomeDir` NOT called; unset →
 `<home>/.copilot/hooks`; `HooksDir` always populated. (REQ-1, SC-01, SC-02)
 
-### T-02 `[ ]` `[GREEN + GATE]` Implement `HooksDir` + env resolution
+### T-02 `[x]` `[GREEN + GATE]` Implement `HooksDir` + env resolution
 
 Add `HooksDir string` to `Host`, `copilotHomeEnv` const, replace hardcoded
 `cfg := filepath.Join(home, ".copilot")` in `Detect()` (copilot.go:20-26,
@@ -74,13 +74,13 @@ Add `HooksDir string` to `Host`, `copilotHomeEnv` const, replace hardcoded
 
 ## Work Unit 2 — State layer: `CopilotHooksRecord` + `SetCopilotHooks`
 
-### T-03 `[ ]` `[RED]` Write state tests
+### T-03 `[x]` `[RED]` Write state tests
 
 Round-trip enabled+posture+presets+checksum; nil clears the field;
 `omitempty` backward-compat load of a `state.json` without `copilot_hooks`.
 (REQ-8)
 
-### T-04 `[ ]` `[GREEN + GATE]` Add record + setter
+### T-04 `[x]` `[GREEN + GATE]` Add record + setter
 
 `CopilotHooksRecord{Enabled,Posture,Presets,Checksum}` (ADR-7),
 `State.CopilotHooks` field after `TeamSync` (state.go:18-55, ~line 49),
