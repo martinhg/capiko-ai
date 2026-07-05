@@ -15,11 +15,10 @@
 | Chained PRs recommended | Yes |
 | Suggested split | PR-1 → PR-2 → PR-3 → PR-4 → PR-5 → PR-6 (6 slices, stacked-to-main suggested) |
 | Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Chain strategy | stacked-to-main (resolved at apply time — see archive-report.md) |
 
 Decision needed before apply: Yes
 Chained PRs recommended: Yes
-Chain strategy: pending
 400-line budget risk: High
 
 ### Suggested Work Units (PR slices)

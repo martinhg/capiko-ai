@@ -200,9 +200,12 @@ scripts are always rendered together in one entry.
 
 ## REQ-6 — Atomic write, disable, and directory handling
 
-**REQ-6.1** `WriteHookFile(path string, content []byte) error` writes via
-write-to-a-temporary-file-in-the-same-directory followed by an atomic rename
-over `path`. A write failure never leaves a partially-written file at `path`.
+**REQ-6.1** `WriteHookFile(hooksDir, name string, data []byte) error` writes
+via write-to-a-temporary-file-in-the-same-directory followed by an atomic
+rename over the target. A write failure never leaves a partially-written file
+at the target path. (As-built signature takes `hooksDir, name` per design
+ADR-8 — see the archive report's "Spec reconciliations" note; the earlier
+`(path string, ...)` signature in an interim spec draft was stale.)
 
 **REQ-6.2** When `HooksDir` (REQ-1.2) does not exist, `WriteHookFile` (or its
 caller) creates it via `os.MkdirAll` before writing. Any other filesystem error
@@ -212,7 +215,7 @@ is returned unchanged; no file is written.
 `backup.Store.CreateFiles` snapshots the current file content. If the backup
 fails, the write is aborted and the error is returned.
 
-**REQ-6.4** `RemoveHookFile(path string) error` (disable) removes
+**REQ-6.4** `RemoveHookFile(hooksDir, name string) error` (disable) removes
 `capiko-guardrails.json` via `os.Remove`. Removing a file that does not exist
 is a no-op (idempotent), not an error. No other file in `HooksDir` is ever
 touched by write or remove.
@@ -282,11 +285,14 @@ user-level Copilot CLI hooks only, and that repo-level/cloud-agent hook
 enforcement is a future feature not covered by this screen.
 
 **REQ-9.4** `applyCopilotHooks(host *copilot.Host, store *state.Store, bkp
-*backup.Store, posture string) error` is a package-level function that: for
-`posture != "off"`, backs up any existing file (REQ-6.3), renders the
-guardrail script (REQ-5) for the given posture (REQ-4), writes it atomically (REQ-6.1),
-computes and stores the checksum (REQ-7.2), and calls `SetCopilotHooks`; for
-`posture == "off"`, delegates to `disableCopilotHooks`.
+*backup.Store, rec *state.CopilotHooksRecord) error` is a package-level
+function that: for `posture != "off"`, backs up any existing file (REQ-6.3),
+renders the guardrail script (REQ-5) for the given posture (REQ-4), writes it
+atomically (REQ-6.1), computes and stores the checksum (REQ-7.2), and calls
+`SetCopilotHooks`; for `posture == "off"`, delegates to `disableCopilotHooks`.
+(As-built takes the full `*state.CopilotHooksRecord`, not a bare `posture
+string` — the record-based signature is the design-approved shape, verified
+in verify-report-pr4; see the archive report.)
 
 **REQ-9.5** `disableCopilotHooks(host *copilot.Host, store *state.Store, bkp
 *backup.Store) error` backs up the existing file if present, removes it
