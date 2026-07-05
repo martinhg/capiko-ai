@@ -19,6 +19,7 @@ Use this when you know **what** you need to change but not **where** it belongs.
 | `internal/instructions/` | Marker-bound block injection (`Inject`/`Render`/`Write`) into Copilot instruction files. | Feature-specific content. |
 | `internal/persona/` | Persona content (embedded) + selection; renders via `instructions`. | File IO (delegated to `instructions`). |
 | `internal/efficiency/` | The opt-in output-efficiency instruction block (trims ceremony/restated context to cut output tokens); rendered + injected like persona. | File IO (delegated to `instructions`). |
+| `internal/memory/` | The `capiko:memory` managed instruction block that teaches Copilot how to use the engram `mem_*` tools (search-first, proactive save, session-close summary); rendered + injected like persona, re-applied on sync when engram is enabled. | File IO (delegated to `instructions`). |
 | `internal/trigger/` | Declarative review-trigger rules rendered as instruction text that teaches Copilot when to suggest the review skills — no hooks, no runtime dispatch. | Runtime logic, UI. |
 | `internal/sdd/` | The SDD orchestrator block render + phase/model definitions. | UI, file IO. |
 | `internal/sddstatus/` | The native SDD state engine: reads the OpenSpec store, computes status, renders JSON/markdown for `sdd-status`/`sdd-continue`. | UI, file mutation. |
@@ -27,6 +28,8 @@ Use this when you know **what** you need to change but not **where** it belongs.
 | `internal/engram/` | engram detection, MCP wiring (Copilot CLI + VS Code), per-repo `.engram/config.json`, cloud config, and the server scaffold. | UI. |
 | `internal/headroom/` | Wires the (opt-in) headroom context-compression MCP server into Copilot and instructs the agent to use it. Configures only — never installs the tool. | UI, running daemons. |
 | `internal/codereview/` | Generates the config capiko writes to wire Gentleman Guardian Angel (gga): `.gga`, the curated `AGENTS.md` rules block, and the pre-commit hook. | UI, running gga. |
+| `internal/githooks/` | Marker-delimited git-hook block writer/remover (`WriteBlock`/`RemoveBlock`, atomic temp+`chmod 0755`+rename) for the opt-in team-sync `post-merge`/`pre-push` hooks. | UI, feature-specific hook bodies. |
+| `internal/copilothooks/` | The Copilot CLI hook layer: v1 JSON schema types + `RenderGuardrails` (both bash & powershell bodies in one entry), atomic whole-file `WriteHookFile`/`RemoveHookFile`, and `CombinedChecksum`. Configures user-level `$COPILOT_HOME/hooks/*.json`. | UI, `state`/backup orchestration (lives in `tui`). |
 | `internal/sysinfo/` | Environment detection (OS, tools, dependency versions, install hints, configs). | UI. |
 | `internal/doctor/` | Composes the detectors (sysinfo, copilot, state, drift) into one read-only pass/warn/fail health report behind `capiko-ai doctor`. Pure `Evaluate`. | UI, file mutation. |
 | `internal/release/` | GitHub release version check + the self-update engine (brew/go/binary) + restart. | UI. |
@@ -40,4 +43,9 @@ Use this when you know **what** you need to change but not **where** it belongs.
 - A new **managed instruction block** → render in its feature package, inject via
   `internal/instructions`, persist a flag in `internal/state`, back up via
   `internal/backup`, re-apply in `RunSync`.
+- A new **managed feature file** (a git hook or a Copilot CLI hook, i.e. a whole file
+  capiko owns) → a whole-file atomic writer in its feature package (mirror
+  `internal/githooks` / `internal/copilothooks`), orchestrate backup → write → record in
+  `internal/tui/<feature>.go`, persist a record in `internal/state`, add a
+  `drift.StaleXxx`, and re-apply in `RunSync`.
 - New **environment detection** → `internal/sysinfo`.

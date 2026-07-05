@@ -62,6 +62,7 @@ verify → archive`.
 | **Artifact-store modes** | Pick `hybrid` (both — the team default), `engram` (memory only), `openspec` (files only), or `none`. |
 | **Engram Cloud** | Configures the cloud client, enrolls the project, and writes a per-repo `.engram/config.json` so memories are scoped correctly in multi-repo workspaces. The token is never written to disk — only the `${ENGRAM_CLOUD_TOKEN}` reference. |
 | **Team server scaffold** | Ships a hardened `docker-compose.cloud.yml` and a [setup guide](engram-cloud-setup.md) for devops to stand up the shared server. |
+| **Team memory sync** | Opt-in. Wires two marker-delimited git hooks into a repo — `post-merge` (`engram sync --import`) and `pre-push` (`engram sync --project <name>` + a commit reminder, no auto-commit) — so a team shares engram memory through git with local engram only, no cloud. Gated behind an explicit scope-leak acknowledgment (all project memories, including `scope:personal`, get committed once enabled). If a competing hook framework (husky/lefthook/pre-commit) is detected, capiko skips the writes and shows the equivalent shell lines. |
 
 Tracked in `state.json`, re-applied on sync, surfaced as drift. capiko configures the
 client and never runs the infra.
@@ -84,6 +85,22 @@ client and never runs the infra.
 | **Persistent state** | `~/.capiko/state.json` (atomic writes) records every installed skill with a content checksum, plus the persona, SDD config, scoped-instruction flag, and engram config. |
 | **Drift detection** | Pure catalog-vs-state checksum comparison flags which managed items have gone stale. |
 | **Self-update** | A banner detects new releases; **Upgrade tools** updates in place (brew/go/binary) and restarts. **Upgrade + sync** also re-applies the new catalog. |
+
+## Enforcement & guardrails
+
+capiko's first HARD lever. Beyond the soft instruction blocks (which the model may
+ignore) and MCP servers (which the model chooses to call), Copilot CLI hooks let capiko
+enforce policy deterministically.
+
+| Capability | What it does |
+|---|---|
+| **Copilot hooks (guardrails)** | Opt-in. Installs a capiko-owned user-level `preToolUse` hook (`$COPILOT_HOME/hooks/capiko-guardrails.json`) that inspects each tool call and, per posture — `off` / `warn` (ask) / `strict` (deny) — asks or blocks before four high-signal dangerous commands: `rm -rf /`, pipe-to-shell (`curl \| sh`), `git push --force` to main/master, and `chmod 777`. Non-matches pass silently. capiko owns the file entirely; re-applied on sync, surfaced as drift via a combined checksum. |
+
+Scope + caveats: user-level only (repo-level `.github/hooks` cloud-agent enforcement is a
+future slice); org policy hooks (`/etc/github-copilot/policy.d/`) can override user hooks;
+a `timeoutSec` overrun is fail-**open** (a crash is fail-**closed**), so the script stays
+trivial — a `grep` over stdin, no network. See the
+[README](../README.md#-copilot-hooks-guardrails).
 
 ## Documentation generation
 

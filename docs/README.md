@@ -23,4 +23,4 @@ then read these before changing the code:
 - [codebase/repository-map.md](codebase/repository-map.md) — which package owns
   what, and where common changes go.
 - [codebase/architecture.md](codebase/architecture.md) — the recurring patterns
-  (screens, instruction blocks, state/backups, testing).
+  (screens, instruction blocks, managed feature files, state/backups, testing).
