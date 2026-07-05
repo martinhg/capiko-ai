@@ -1,11 +1,13 @@
 package drift
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
+	"github.com/martinhg/capiko-ai/internal/copilothooks"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headroom"
 	"github.com/martinhg/capiko-ai/internal/skill"
@@ -63,6 +65,64 @@ func TestStaleHeadroom(t *testing.T) {
 
 	if !StaleHeadroom(path, &state.State{Headroom: &state.HeadroomRecord{Enabled: true, Checksum: "different"}}) {
 		t.Error("a diverged recorded checksum should be stale")
+	}
+}
+
+// TestStaleCopilotHooks covers unmanaged/disabled -> false, a matching
+// checksum -> false, a hand-edited file -> true, and a missing file while
+// enabled -> true (REQ-7.3, SC-08/SC-09).
+func TestStaleCopilotHooks(t *testing.T) {
+	hooksDir := filepath.Join(t.TempDir(), "hooks")
+
+	if StaleCopilotHooks(hooksDir, nil) {
+		t.Error("nil state should not be stale")
+	}
+	if StaleCopilotHooks(hooksDir, &state.State{}) {
+		t.Error("unmanaged copilot hooks should not be stale")
+	}
+	if StaleCopilotHooks(hooksDir, &state.State{CopilotHooks: &state.CopilotHooksRecord{Enabled: false}}) {
+		t.Error("disabled copilot hooks should not be stale")
+	}
+
+	// A recorded (non-empty) checksum with nothing on disk is stale, regardless
+	// of the checksum's exact value — CombinedChecksum on a missing dir is "".
+	rec := &state.CopilotHooksRecord{Enabled: true, Posture: string(copilothooks.PostureStrict), Checksum: "expected-checksum"}
+	if !StaleCopilotHooks(hooksDir, &state.State{CopilotHooks: rec}) {
+		t.Error("enabled copilot hooks with no on-disk file should be stale")
+	}
+
+	// Write the file capiko would render and record its combined checksum.
+	hf, err := copilothooks.RenderGuardrails(copilothooks.PostureStrict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := copilothooks.Marshal(hf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := copilothooks.WriteHookFile(hooksDir, copilothooks.GuardrailsFile, data); err != nil {
+		t.Fatal(err)
+	}
+	rec.Checksum = copilothooks.CombinedChecksum(hooksDir)
+	if StaleCopilotHooks(hooksDir, &state.State{CopilotHooks: rec}) {
+		t.Error("a matching on-disk file should not be stale")
+	}
+
+	// Hand-edit the file: checksum diverges.
+	target := filepath.Join(hooksDir, copilothooks.GuardrailsFile)
+	if err := os.WriteFile(target, append(data, []byte("tampered")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !StaleCopilotHooks(hooksDir, &state.State{CopilotHooks: rec}) {
+		t.Error("a hand-edited file should be stale")
+	}
+
+	// Remove the file entirely while still enabled.
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if !StaleCopilotHooks(hooksDir, &state.State{CopilotHooks: rec}) {
+		t.Error("a missing file while enabled should be stale")
 	}
 }
 

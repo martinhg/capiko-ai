@@ -6,6 +6,7 @@ package drift
 
 import (
 	"github.com/martinhg/capiko-ai/internal/agent"
+	"github.com/martinhg/capiko-ai/internal/copilothooks"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headroom"
 	"github.com/martinhg/capiko-ai/internal/skill"
@@ -40,6 +41,20 @@ func StaleHeadroom(mcpConfigPath string, st *state.State) bool {
 		return true
 	}
 	return cur != st.Headroom.Checksum
+}
+
+// StaleCopilotHooks reports whether the managed guardrails hook file has
+// fallen behind what capiko would write: missing from disk, or diverged from
+// the recorded checksum (e.g. a hand-edit). It returns false when copilot
+// hooks are unmanaged or disabled. Mirrors StaleHeadroom; the comparison
+// value is copilothooks.CombinedChecksum(hooksDir) — the same function
+// applyCopilotHooks uses to compute the stored checksum, so the two can never
+// diverge (ADR-6).
+func StaleCopilotHooks(hooksDir string, st *state.State) bool {
+	if st == nil || st.CopilotHooks == nil || !st.CopilotHooks.Enabled {
+		return false
+	}
+	return copilothooks.CombinedChecksum(hooksDir) != st.CopilotHooks.Checksum
 }
 
 // StaleAgents returns the names of catalog agents that are either missing from
