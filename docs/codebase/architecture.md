@@ -25,6 +25,21 @@ Persona and the SDD orchestrator are **marker-bound blocks** in
 4. Record the choice in `internal/state`.
 5. `RunSync` re-applies all managed blocks (the InjectForSync equivalent).
 
+## Managed feature files
+
+Some features are **whole files capiko owns**, not marker-bound blocks inside a shared
+file — team-sync git hooks and Copilot CLI hooks (`$COPILOT_HOME/hooks/*.json`). These
+follow whole-file atomic ownership (write to a temp file, then rename) instead of marker
+injection, because a marker inside JSON would corrupt it:
+
+1. The feature package renders the whole file and writes it atomically
+   (`copilothooks.WriteHookFile`, `githooks.WriteBlock`).
+2. `internal/tui/<feature>.go` orchestrates **backup → write → record**, writing only
+   when the rendered bytes differ from disk (a checksum gate).
+3. A record in `internal/state` stores the intent (enabled, posture, checksum), and
+   `drift.StaleXxx` recomputes the checksum to detect hand-edits.
+4. `RunSync` re-applies the file so an upgraded catalog propagates.
+
 ## State and backups
 
 - `internal/state` owns `~/.capiko/state.json` (atomic writes; per-skill checksums).

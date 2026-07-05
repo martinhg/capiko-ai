@@ -23,6 +23,9 @@ The rule of thumb: **capiko directs, Copilot executes.** Anything that needs an 
   `~/.copilot/copilot-instructions.md` (always-on global instructions).
 - **Scoped instructions** → `~/.copilot/instructions/*.instructions.md` (applied
   per matching file via `applyTo`).
+- **Managed feature files** → whole files capiko owns, written atomically: opt-in
+  team-sync git hooks (`.git/hooks/`) and Copilot CLI guardrail hooks
+  (`$COPILOT_HOME/hooks/*.json`).
 - **Its own state** → `~/.capiko/state.json`, with a snapshot to
   `~/.capiko/backups/` before every mutation.
 
