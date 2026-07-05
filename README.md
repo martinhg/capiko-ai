@@ -69,6 +69,7 @@ auto-discovers — so what capiko installs is reproducible, auditable, and yours
 | **Copilot agents** | `.agent.md` SDD-phase agents — the real delegation targets the workflow routes to. | `~/.copilot/agents/` |
 | **Scoped instructions** | `*.instructions.md` with `applyTo` globs, applied per matching file. | `~/.copilot/instructions/` |
 | **Engram memory** | Wires the [engram](https://github.com/Gentleman-Programming/engram) MCP server into Copilot CLI **and** VS Code, with local + cloud (`hybrid`) cross-session memory. | `~/.copilot/mcp-config.json`; VS Code `mcp.json` |
+| **Team sync** *(opt-in)* | Wires `post-merge` + `pre-push` git hooks so a team shares engram memory through git — local, no cloud — behind an explicit scope-leak acknowledgment. See [Team memory sync](#-team-memory-sync) below. | repo `.git/hooks/` |
 | **Headroom compression** *(opt-in)* | Wires the [headroom](https://github.com/chopratejas/headroom) (Apache-2.0) MCP server into Copilot for context compression — fewer tokens, same answers — **and** instructs the agent to use it. capiko configures it; it never installs the tool. | `~/.copilot/mcp-config.json`; `copilot-instructions.md` |
 | **Copilot hooks (guardrails)** *(opt-in)* | Installs a `preToolUse` hook that asks or blocks before dangerous commands (`rm -rf /`, `curl \| sh`, `chmod 777`, `git push --force` to main). Pick a posture: off / warn / strict. User-level only. See [Copilot hooks (guardrails)](#-copilot-hooks-guardrails) below. | `$COPILOT_HOME/hooks/capiko-guardrails.json` |
 | **Safety net** | Snapshot-before-mutate backups, persistent state with per-skill checksums, drift detection, and self-update. | `~/.capiko/` |
@@ -169,13 +170,13 @@ machine-readable output.
 | `capiko-ai sync` | Overwrite all installed skills + agents to match the catalog; re-applies the persona, SDD, and engram blocks. Warns when a capiko-managed engram binary is behind the recommended version. | `--auto-repair`, `--json`, `--verbose` |
 | `capiko-ai uninstall` | Remove every capiko-managed skill + agent and clear them from state. Leaves persona/SDD/engram blocks untouched. | `--all`, `--json`, `--verbose` |
 | `capiko-ai doctor` | Ecosystem health check (OS, prereqs, Copilot init, state, drift, engram). Non-zero exit on failure. `--repair` re-applies the managed catalog when drift is found. | `--json`, `--repair`, `--verbose` |
+| `capiko-ai sdd-status` · `sdd-continue` | Native SDD engine: print or advance the deterministic workflow state. | |
+| `capiko-ai skill-registry` | Print the skill index so an orchestrator can resolve exact `SKILL.md` paths. | |
+| `capiko-ai version` | Print the installed version and the targeted Copilot CLI version. | `-v`, `--version` |
 
 > `--verbose` streams structured JSON-lines diagnostics (timestamp, event, result,
 > duration) to **stderr**, so stdout stays clean for scripting. Available on every
 > action command above.
-| `capiko-ai sdd-status` · `sdd-continue` | Native SDD engine: print or advance the deterministic workflow state. | |
-| `capiko-ai skill-registry` | Print the skill index so an orchestrator can resolve exact `SKILL.md` paths. | |
-| `capiko-ai version` | Print the installed version and the targeted Copilot CLI version. | `-v`, `--version` |
 
 **Exit codes** (`install` / `sync` / `uninstall`): `0` success · `1` error · `2` Copilot CLI not found.
 
@@ -256,6 +257,7 @@ whole cycle on your real code. See [docs/usage.md](docs/usage.md) for the full f
 | `internal/sdd` · `internal/sddstatus` | The SDD orchestrator block + model table, and the native state engine. |
 | `internal/scoped` · `internal/skillregistry` | Scoped `*.instructions.md`, and the skill-registry resolution engine. |
 | `internal/engram` | engram detection, MCP wiring (Copilot + VS Code), per-repo config, and cloud setup. |
+| `internal/codereview` · `internal/headroom` · `internal/githooks` · `internal/copilothooks` · `internal/memory` | The managed integrations: gga code review, headroom compression, team-sync git hooks, Copilot guardrail hooks, and the `capiko:memory` block. |
 | `internal/state` · `internal/backup` · `internal/drift` | Persistent state, snapshot/restore, and catalog-vs-state drift. |
 | `internal/sysinfo` · `internal/release` · `internal/versions` | Environment detection, self-update, and pinned tool versions. |
 
