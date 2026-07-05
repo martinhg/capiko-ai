@@ -73,6 +73,7 @@ var menuItems = []menuItem{
 	{"Configure headroom", "headroom", true},
 	{"Configure code review", "code-review", true},
 	{"Configure team sync", "team-sync", true},
+	{"Configure Copilot hooks", "copilot-hooks", true},
 	{"Upgrade tools", "upgrade", true},
 	{"Upgrade + sync", "upgrade-sync", true},
 	{"Install instructions", "instructions", true},
@@ -250,6 +251,8 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newCodeReview(a.svc)
 	case it.id == "team-sync":
 		a.active = newTeamSync(a.svc)
+	case it.id == "copilot-hooks":
+		a.active = newCopilotHooks(a.svc)
 	case it.id == "upgrade-sync":
 		a.active = newUpgradeSync(a.svc, a.catalog, a.latest)
 	case it.id == "instructions":
