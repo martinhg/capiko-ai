@@ -70,6 +70,7 @@ auto-discovers — so what capiko installs is reproducible, auditable, and yours
 | **Scoped instructions** | `*.instructions.md` with `applyTo` globs, applied per matching file. | `~/.copilot/instructions/` |
 | **Engram memory** | Wires the [engram](https://github.com/Gentleman-Programming/engram) MCP server into Copilot CLI **and** VS Code, with local + cloud (`hybrid`) cross-session memory. | `~/.copilot/mcp-config.json`; VS Code `mcp.json` |
 | **Headroom compression** *(opt-in)* | Wires the [headroom](https://github.com/chopratejas/headroom) (Apache-2.0) MCP server into Copilot for context compression — fewer tokens, same answers — **and** instructs the agent to use it. capiko configures it; it never installs the tool. | `~/.copilot/mcp-config.json`; `copilot-instructions.md` |
+| **Copilot hooks (guardrails)** *(opt-in)* | Installs a `preToolUse` hook that asks or blocks before dangerous commands (`rm -rf /`, `curl \| sh`, `chmod 777`, `git push --force` to main). Pick a posture: off / warn / strict. User-level only. See [Copilot hooks (guardrails)](#-copilot-hooks-guardrails) below. | `$COPILOT_HOME/hooks/capiko-guardrails.json` |
 | **Safety net** | Snapshot-before-mutate backups, persistent state with per-skill checksums, drift detection, and self-update. | `~/.capiko/` |
 
 And capiko ships **its own native SDD engine** in Go — `capiko-ai sdd-status` /
@@ -202,6 +203,7 @@ capiko-ai doctor --json || echo "capiko environment unhealthy"
 | **Configure engram** | Enable cross-session memory: pick the artifact-store mode, set the cloud URL, wire the MCP server into Copilot CLI and VS Code. |
 | **Configure code review** | Wire [Gentleman Guardian Angel](https://github.com/Gentleman-Programming/gentleman-guardian-angel) (gga) into the project: write `.gga`, inject a curated `AGENTS.md` rules block (kept in sync with the active persona), and install the pre-commit review hook. Pick the review provider; gga must be on PATH. |
 | **Configure team sync** | Opt-in: wire two marker-delimited blocks into `.git/hooks/post-merge` and `.git/hooks/pre-push` so teammates share Engram memory through git (local, no cloud). See [Team memory sync](#-team-memory-sync) below. |
+| **Configure Copilot hooks** | Opt-in: install a user-level `preToolUse` guardrail hook that asks or blocks before dangerous commands. Pick a posture (off / warn / strict). See [Copilot hooks (guardrails)](#-copilot-hooks-guardrails) below. |
 | **Upgrade tools** / **Upgrade + sync** | Self-update capiko, restart, and optionally re-sync against the new catalog. |
 | **Install instructions** | Write the curated scoped `*.instructions.md` files. |
 
@@ -327,6 +329,54 @@ The `|| true` guards ensure hooks never block a merge, checkout, or push even wh
 
 capiko **never installs the `engram` binary** — it only writes the hook scripts.
 Install `engram` separately: <https://github.com/Gentleman-Programming/engram>
+
+---
+
+## 🛡️ Copilot hooks (guardrails)
+
+Install a capiko-managed GitHub Copilot CLI `preToolUse` hook that inspects every
+tool call and can **ask** or **deny** before a dangerous command runs. capiko owns
+the file entirely (`$COPILOT_HOME/hooks/capiko-guardrails.json`) and re-applies it on
+every sync.
+
+### Posture levels
+
+| Posture | Effect |
+|---------|--------|
+| **off** | No hook file — the guardrail is removed. |
+| **warn** | Matches emit `permissionDecision: "ask"` — Copilot prompts you before running. |
+| **strict** | Matches emit `permissionDecision: "deny"` — Copilot refuses the command. |
+
+Non-matching commands are always allowed silently.
+
+### What it catches
+
+A frozen, high-signal set of four patterns (v1 is not user-editable — no shell string
+is interpolated, so the injection surface is empty):
+
+| Pattern | Example |
+|---------|---------|
+| `rm -rf /` and equivalents | `rm -rf /` |
+| Pipe-to-shell | `curl … \| sh`, `wget … \| bash` |
+| Force-push to a protected branch | `git push --force … main` / `master` |
+| World-writable perms | `chmod 777 …` |
+
+### Scope and caveats
+
+- **User-level only.** The hook lands in `$COPILOT_HOME/hooks` and applies to your local
+  Copilot CLI. Repo-level cloud-agent enforcement (`.github/hooks`) is a future feature.
+- **Org policy wins.** Admin policy hooks (`/etc/github-copilot/policy.d/`) can override
+  user hooks.
+- **Fail-open on timeout.** The hook has a 5-second budget. A crash or non-zero exit is
+  fail-**closed** (Copilot denies), but exceeding the timeout is fail-**open** (Copilot
+  proceeds as if no hook fired). The script stays trivial — a `grep` over stdin, no
+  network, no external calls — so a hang is unlikely by design.
+
+### How to enable
+
+1. Run `capiko-ai` → **Configure Copilot hooks**.
+2. Cycle **Posture** to `warn` or `strict` (`←/→` or `space`).
+3. Press **Apply**. Setting posture back to `off` removes the file.
 
 ---
 

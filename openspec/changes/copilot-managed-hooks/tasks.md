@@ -222,7 +222,7 @@ Regenerate + inspect main-menu golden diff.
 
 ## Work Unit 11 — Docs
 
-### T-22 `[ ]` Update `README.md` and `llms.txt`
+### T-22 `[x]` Update `README.md` and `llms.txt`
 
 README: menu table entry + "Copilot hooks (guardrails)" section (posture
 levels, four patterns, user-level-only scope note, fail-open timeout

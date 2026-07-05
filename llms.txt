@@ -59,6 +59,13 @@ Exit codes for headless commands: 0 success, 1 error, 2 Copilot not found.
   for personal memories. If a competing hook framework (`core.hooksPath`, husky, lefthook,
   pre-commit) is detected, writes are skipped and the equivalent shell lines are shown
   for manual integration. capiko never installs the `engram` binary.
+- **Copilot hooks (guardrails)** (`$COPILOT_HOME/hooks/capiko-guardrails.json`, opt-in) —
+  a capiko-owned `preToolUse` hook that inspects each tool call and, per posture, asks
+  (`warn`) or denies (`strict`) before four dangerous patterns: `rm -rf /`, pipe-to-shell
+  (`curl | sh`), `git push --force` to main/master, and `chmod 777`. Non-matches are
+  allowed silently. User-level only (repo-level `.github/hooks` is future); org policy
+  hooks can override; a `timeoutSec` overrun fails open. v1 interpolates no user input,
+  so the shell-injection surface is empty. Re-applied on every sync.
 - **Safety net** (`~/.capiko/`) — snapshot-before-mutate backups, per-skill checksum
   state, drift detection, and self-update.
 
@@ -75,6 +82,7 @@ Exit codes for headless commands: 0 success, 1 error, 2 Copilot not found.
 
 - [README](https://github.com/martinhg/capiko-ai/blob/main/README.md) — full overview, quickstart, menu, SDD workflow
 - [Team memory sync](https://github.com/martinhg/capiko-ai/blob/main/README.md#-team-memory-sync) — git hook sharing, scope-leak warning, conflict coexistence
+- [Copilot hooks (guardrails)](https://github.com/martinhg/capiko-ai/blob/main/README.md#-copilot-hooks-guardrails) — posture levels, the four patterns, scope and fail-open caveats
 - [Headless CLI](https://github.com/martinhg/capiko-ai/blob/main/README.md#-headless-cli) — scripting, CI, dotfiles
 - [Spec-Driven Development](https://github.com/martinhg/capiko-ai/blob/main/README.md#-spec-driven-development) — the 8-phase pipeline
 - [How it works](https://github.com/martinhg/capiko-ai/blob/main/README.md#-how-it-works) — the direct/execute split
