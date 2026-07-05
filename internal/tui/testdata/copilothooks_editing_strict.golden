@@ -1,0 +1,16 @@
+capiko-ai  ·  Copilot configurator
+
+Configure Copilot hooks
+
+Guardrail hooks for the Copilot CLI — block or ask before dangerous
+commands (rm -rf /, curl | sh, chmod 777, git push --force to main).
+
+▸ Posture         strict (deny)
+  Apply         
+  Back          
+
+Manages user-level CLI hooks. Repo-level cloud-agent enforcement
+(.github/hooks) is a future feature.
+Org policy hooks (/etc/github-copilot/policy.d/) can override these.
+
+↑/↓ move · ←/→/space cycle posture · enter select · esc back

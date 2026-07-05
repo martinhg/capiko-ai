@@ -12,6 +12,7 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/copilot"
+	"github.com/martinhg/capiko-ai/internal/copilothooks"
 	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/sysinfo"
 )
@@ -159,6 +160,21 @@ func TestViewGolden(t *testing.T) {
 		}}.View()},
 		{"teamsync_failed", App{state: appScreen, active: &teamSyncScreen{
 			svc: svc, engramAvailable: true, state: teamSyncFailed, err: errTest,
+		}}.View()},
+		{"copilothooks_editing_off", App{state: appScreen, active: &copilotHooksScreen{
+			svc: svc, posture: copilothooks.PostureOff,
+		}}.View()},
+		{"copilothooks_editing_warn", App{state: appScreen, active: &copilotHooksScreen{
+			svc: svc, posture: copilothooks.PostureWarn,
+		}}.View()},
+		{"copilothooks_editing_strict", App{state: appScreen, active: &copilotHooksScreen{
+			svc: svc, posture: copilothooks.PostureStrict,
+		}}.View()},
+		{"copilothooks_done", App{state: appScreen, active: &copilotHooksScreen{
+			svc: svc, posture: copilothooks.PostureStrict, state: copilotHooksDone,
+		}}.View()},
+		{"copilothooks_failed", App{state: appScreen, active: &copilotHooksScreen{
+			svc: svc, state: copilotHooksFailed, err: errTest,
 		}}.View()},
 		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View()},
 		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
