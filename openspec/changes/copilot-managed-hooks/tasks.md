@@ -186,19 +186,19 @@ stored posture (SC-10); nil/disabled → hooks dir untouched (SC-11).
 
 ## Work Unit 9 — TUI screen FSM + goldens
 
-### T-17 `[ ]` `[RED]` Write `Update()`-driven screen tests
+### T-17 `[x]` `[RED]` Write `Update()`-driven screen tests
 
 Posture cycle off→warn→strict→off; Apply from warn/strict emits cmd →
 `copilotHooksAppliedMsg` → Done; Apply from off routes to disable;
 failure → Failed; hydrates from `state.CopilotHooks.Posture` (default off).
 
-### T-18 `[ ]` `[GREEN + GATE]` Implement `copilotHooksScreen`
+### T-18 `[x]` `[GREEN + GATE]` Implement `copilotHooksScreen`
 
 `internal/tui/copilothooks.go` (ADR-9): posture dropdown row, Apply/Back
 rows, repo-level future-note banner (REQ-9.3), `newCopilotHooks(svc)`
 constructor (REQ-9.7). Gate: green.
 
-### T-19 `[ ]` Generate + inspect goldens
+### T-19 `[x]` Generate + inspect goldens
 
 `copilothooks_{editing_off,editing_warn,editing_strict,done,failed}.golden`
 (REQ-11.3, SC-17). Inspect diffs per capiko-dev skill.
@@ -207,12 +207,12 @@ constructor (REQ-9.7). Gate: green.
 
 ## Work Unit 10 — App menu wiring
 
-### T-20 `[ ]` `[RED]` Write `TestEnterOpensCopilotHooks`
+### T-20 `[x]` `[RED]` Write `TestEnterOpensCopilotHooks`
 
 Menu item id `copilot-hooks` positioned after "Configure team sync",
 `ready:true`; enter sets `a.active` to the Copilot hooks screen (SC-16).
 
-### T-21 `[ ]` `[GREEN + GATE]` Wire menu item + `open()`
+### T-21 `[x]` `[GREEN + GATE]` Wire menu item + `open()`
 
 `{"Configure Copilot hooks","copilot-hooks",true}` in `menuItems`
 (app.go:65-80) + `case it.id == "copilot-hooks"` in `open()` (app.go:225-262).
