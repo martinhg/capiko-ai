@@ -327,6 +327,190 @@ func TestCatalog_LanguageContract_Workers(t *testing.T) {
 	}
 }
 
+// --- Phase 1.1/2.1: WithRouting tests ---
+
+func TestWithRouting(t *testing.T) {
+	tests := []struct {
+		name        string
+		agents      []agent.Agent
+		models      map[string]string
+		wantContent map[string]string // agent Name -> expected Content (only checked when present)
+	}{
+		{
+			name: "injects new model line when none present",
+			agents: []agent.Agent{
+				{Name: "capiko-sdd-design", Content: "---\ndescription: \"design\"\ntools: ['read']\nuser-invocable: false\n---\nbody\n"},
+			},
+			models: map[string]string{"design": "gemini-5.4"},
+			wantContent: map[string]string{
+				"capiko-sdd-design": "---\ndescription: \"design\"\ntools: ['read']\nuser-invocable: false\nmodel: gemini-5.4\n---\nbody\n",
+			},
+		},
+		{
+			name: "replaces existing model line idempotently",
+			agents: []agent.Agent{
+				{Name: "capiko-sdd-spec", Content: "---\ndescription: \"spec\"\nmodel: old-value\ntools: ['read']\n---\nbody\n"},
+			},
+			models: map[string]string{"spec": "new-value"},
+			wantContent: map[string]string{
+				"capiko-sdd-spec": "---\ndescription: \"spec\"\nmodel: new-value\ntools: ['read']\n---\nbody\n",
+			},
+		},
+		{
+			name: "strips model line on default sentinel",
+			agents: []agent.Agent{
+				{Name: "capiko-sdd-explore", Content: "---\ndescription: \"explore\"\nmodel: gpt-5.1\ntools: ['read']\n---\nbody\n"},
+			},
+			models: map[string]string{"explore": "default"},
+			wantContent: map[string]string{
+				"capiko-sdd-explore": "---\ndescription: \"explore\"\ntools: ['read']\n---\nbody\n",
+			},
+		},
+		{
+			name: "strips model line on empty string",
+			agents: []agent.Agent{
+				{Name: "capiko-sdd-archive", Content: "---\ndescription: \"archive\"\nmodel: something\ntools: ['read']\n---\nbody\n"},
+			},
+			models: map[string]string{"archive": ""},
+			wantContent: map[string]string{
+				"capiko-sdd-archive": "---\ndescription: \"archive\"\ntools: ['read']\n---\nbody\n",
+			},
+		},
+		{
+			name: "coordinator agent passes through untouched",
+			agents: []agent.Agent{
+				{Name: "capiko-sdd-coordinator", Content: "---\ndescription: \"coordinator\"\nagents: ['capiko-sdd-explore']\n---\nbody\n"},
+			},
+			// Convention derives phase key "coordinator" from the name, which is
+			// never a key in the models map (SDDModels only carries sdd.Phases
+			// entries, and "coordinator" is not one), so it must no-op even if a
+			// caller mistakenly includes it.
+			models: map[string]string{"coordinator": "claude-opus-4.8", "explore": "gemini-5.4"},
+			wantContent: map[string]string{
+				"capiko-sdd-coordinator": "---\ndescription: \"coordinator\"\nagents: ['capiko-sdd-explore']\n---\nbody\n",
+			},
+		},
+		{
+			name: "unmapped phase key is a no-op",
+			agents: []agent.Agent{
+				{Name: "capiko-sdd-verify", Content: "---\ndescription: \"verify\"\ntools: ['read']\n---\nbody\n"},
+			},
+			models: map[string]string{"design": "gemini-5.4"}, // no "verify" key
+			wantContent: map[string]string{
+				"capiko-sdd-verify": "---\ndescription: \"verify\"\ntools: ['read']\n---\nbody\n",
+			},
+		},
+		{
+			name: "non-SDD agent name passes through untouched",
+			agents: []agent.Agent{
+				{Name: "some-other-agent", Content: "---\ndescription: \"other\"\ntools: ['read']\n---\nbody\n"},
+			},
+			models: map[string]string{"other-agent": "gemini-5.4"}, // TrimPrefix leaves name unchanged, no match
+			wantContent: map[string]string{
+				"some-other-agent": "---\ndescription: \"other\"\ntools: ['read']\n---\nbody\n",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agent.WithRouting(tt.agents, tt.models)
+			if len(got) != len(tt.agents) {
+				t.Fatalf("WithRouting returned %d agents, want %d", len(got), len(tt.agents))
+			}
+			byName := indexByName(got)
+			for name, want := range tt.wantContent {
+				a, ok := byName[name]
+				if !ok {
+					t.Fatalf("agent %q missing from WithRouting output", name)
+				}
+				if a.Content != want {
+					t.Errorf("agent %q Content:\ngot:  %q\nwant: %q", name, a.Content, want)
+				}
+			}
+		})
+	}
+}
+
+func TestWithRouting_PreservesOtherFrontmatterFields(t *testing.T) {
+	original := "---\ndescription: \"apply\"\ntools: ['read', 'edit']\nuser-invocable: false\n---\nbody text\n"
+	agents := []agent.Agent{{Name: "capiko-sdd-apply", Content: original}}
+
+	got := agent.WithRouting(agents, map[string]string{"apply": "custom-model"})
+
+	fm, err := agent.ParseFrontmatter(got[0].Content)
+	if err != nil {
+		t.Fatalf("ParseFrontmatter: %v", err)
+	}
+	if fm.Description != "apply" {
+		t.Errorf("Description = %q, want %q", fm.Description, "apply")
+	}
+	if len(fm.Tools) != 2 || fm.Tools[0] != "read" || fm.Tools[1] != "edit" {
+		t.Errorf("Tools = %v, want [read edit]", fm.Tools)
+	}
+	if fm.UserInvocable {
+		t.Error("UserInvocable = true, want false")
+	}
+	if fm.Model != "custom-model" {
+		t.Errorf("Model = %q, want %q", fm.Model, "custom-model")
+	}
+	if !strings.Contains(got[0].Content, "body text") {
+		t.Error("body text lost after routing")
+	}
+}
+
+func TestWithRouting_DoesNotMutateInput(t *testing.T) {
+	original := "---\ndescription: \"design\"\ntools: ['read']\n---\nbody\n"
+	agents := []agent.Agent{{Name: "capiko-sdd-design", Content: original}}
+
+	_ = agent.WithRouting(agents, map[string]string{"design": "gemini-5.4"})
+
+	if agents[0].Content != original {
+		t.Errorf("input agent Content mutated:\ngot:  %q\nwant: %q", agents[0].Content, original)
+	}
+}
+
+// TestWithRouting_RoutedCatalogRejectsBareAlias is the routed-output
+// counterpart to TestCatalog_WorkerFrontmatter: it exercises the real
+// embedded catalog through WithRouting with a representative models map (a
+// mix of "default" and custom values) and asserts no worker's *routed*
+// model: field regresses to a bare Anthropic alias.
+func TestWithRouting_RoutedCatalogRejectsBareAlias(t *testing.T) {
+	agents := loadRealCatalog(t)
+	models := map[string]string{
+		"orchestrator": "claude-opus-4.8",
+		"explore":      "default",
+		"propose":      "gemini-5.4",
+		"spec":         "default",
+		"design":       "gemini-5.4",
+		"tasks":        "default",
+		"apply":        "gemini-5.4",
+		"verify":       "default",
+		"archive":      "gemini-5.4",
+	}
+
+	routed := agent.WithRouting(agents, models)
+	byName := indexByName(routed)
+
+	for _, phase := range allPhases {
+		a, ok := byName[phase]
+		if !ok {
+			t.Errorf("worker %q not found in routed catalog", phase)
+			continue
+		}
+		fm, err := agent.ParseFrontmatter(a.Content)
+		if err != nil {
+			t.Errorf("worker %q: frontmatter parse error: %v", phase, err)
+			continue
+		}
+		for _, alias := range anthropicAliases {
+			if strings.EqualFold(fm.Model, alias) {
+				t.Errorf("worker %q: routed model field contains Anthropic alias %q", phase, fm.Model)
+			}
+		}
+	}
+}
+
 // --- Helpers ---
 
 // loadRealCatalog loads agents from the real embedded catalog via catalog.LoadAgents.
