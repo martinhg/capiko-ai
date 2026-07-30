@@ -72,6 +72,11 @@ var gatherSyncInputs = func() (syncInputs, error) {
 
 	store, _ := state.DefaultStore() // nil-tolerant
 	in.store = store
+	if store != nil {
+		if st, err := store.Load(); err == nil {
+			in.agents = agent.WithRouting(in.agents, st.SDDModels)
+		}
+	}
 	bkp, _ := backup.DefaultStore() // nil-tolerant
 	in.bkp = bkp
 	return in, nil
