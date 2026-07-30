@@ -88,6 +88,72 @@ func parse(name, content string) (Agent, error) {
 	return Agent{Name: name, Description: m.Description, Content: content}, nil
 }
 
+// WithRouting returns a new slice with model: frontmatter injected, replaced,
+// or stripped per the models map. Keys are SDD phase names (e.g. "explore"),
+// matched by stripping the "capiko-sdd-" prefix from each agent's Name.
+// "default" or "" strips any existing model: line. Agents whose derived key
+// has no entry in models (including "coordinator", which is never an SDD
+// phase key) pass through with byte-identical Content. WithRouting is a pure
+// transform: it does not mutate agents or perform I/O.
+func WithRouting(agents []Agent, models map[string]string) []Agent {
+	out := make([]Agent, len(agents))
+	for i, a := range agents {
+		phase := strings.TrimPrefix(a.Name, "capiko-sdd-")
+		model, ok := models[phase]
+		if !ok {
+			out[i] = a
+			continue
+		}
+		out[i] = Agent{Name: a.Name, Description: a.Description, Content: routeModel(a.Content, model)}
+	}
+	return out
+}
+
+// routeModel rewrites the model: line in content's frontmatter. When model is
+// "default" or "", any existing model: line is removed. Otherwise the
+// existing model: line is replaced (or a new one inserted before the closing
+// --- delimiter) with the given value. All other frontmatter fields and the
+// body are left untouched. Content without a well-formed --- ... --- header
+// is returned unchanged.
+func routeModel(content, model string) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return content
+	}
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end == -1 {
+		return content
+	}
+
+	strip := model == "" || model == "default"
+	modelLine := "model: " + model
+
+	newLines := make([]string, 0, len(lines)+1)
+	newLines = append(newLines, lines[0])
+	found := false
+	for i := 1; i < end; i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "model:") {
+			found = true
+			if !strip {
+				newLines = append(newLines, modelLine)
+			}
+			continue
+		}
+		newLines = append(newLines, lines[i])
+	}
+	if !strip && !found {
+		newLines = append(newLines, modelLine)
+	}
+	newLines = append(newLines, lines[end:]...)
+	return strings.Join(newLines, "\n")
+}
+
 // Frontmatter is the parsed YAML header of a .agent.md file, exposing all
 // fields the tests and install logic need. It is exported so catalog-level
 // tests can validate field constraints without re-parsing.

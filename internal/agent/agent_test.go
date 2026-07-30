@@ -381,11 +381,11 @@ func TestWithRouting(t *testing.T) {
 			agents: []agent.Agent{
 				{Name: "capiko-sdd-coordinator", Content: "---\ndescription: \"coordinator\"\nagents: ['capiko-sdd-explore']\n---\nbody\n"},
 			},
-			// Convention derives phase key "coordinator" from the name, which is
-			// never a key in the models map (SDDModels only carries sdd.Phases
-			// entries, and "coordinator" is not one), so it must no-op even if a
-			// caller mistakenly includes it.
-			models: map[string]string{"coordinator": "claude-opus-4.8", "explore": "gemini-5.4"},
+			// Convention derives phase key "coordinator" from the name. In real
+			// use SDDModels only ever carries sdd.Phases entries, and
+			// "coordinator" is not one of them, so the map simply never has a
+			// "coordinator" key — no special-casing in WithRouting itself.
+			models: map[string]string{"explore": "gemini-5.4"},
 			wantContent: map[string]string{
 				"capiko-sdd-coordinator": "---\ndescription: \"coordinator\"\nagents: ['capiko-sdd-explore']\n---\nbody\n",
 			},
