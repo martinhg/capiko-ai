@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/martinhg/capiko-ai/internal/skill"
+	"github.com/martinhg/capiko-ai/internal/state"
 )
 
 // Entry is one indexed skill: its name, the frontmatter description (which
@@ -28,12 +29,14 @@ type Entry struct {
 }
 
 // Registry is the resolved index: the project label, every candidate source
-// directory that was scanned (whether or not it existed), and the entries found
-// across them, sorted by name then scope.
+// directory that was scanned (whether or not it existed), the entries found
+// across them (sorted by name then scope), and a content-based fingerprint
+// so caching layers can detect staleness on any edit, even same-size changes.
 type Registry struct {
-	Project string   `json:"project"`
-	Sources []string `json:"sources"`
-	Entries []Entry  `json:"entries"`
+	Project     string   `json:"project"`
+	Sources     []string `json:"sources"`
+	Entries     []Entry  `json:"entries"`
+	Fingerprint string   `json:"fingerprint"`
 }
 
 // ResolveOptions selects where to scan. Empty fields fall back to the process
@@ -76,13 +79,15 @@ func Resolve(opts ResolveOptions) (Registry, error) {
 	}
 
 	reg := Registry{Project: filepath.Base(cwd)}
+	var allContents []string
 	for _, s := range sources {
 		reg.Sources = append(reg.Sources, s.dir)
-		entries, err := scan(s)
+		entries, contents, err := scan(s)
 		if err != nil {
 			return Registry{}, err
 		}
 		reg.Entries = append(reg.Entries, entries...)
+		allContents = append(allContents, contents...)
 	}
 
 	sort.Slice(reg.Entries, func(i, j int) bool {
@@ -91,22 +96,34 @@ func Resolve(opts ResolveOptions) (Registry, error) {
 		}
 		return reg.Entries[i].Scope < reg.Entries[j].Scope
 	})
+
+	sort.Strings(allContents)
+	var combined string
+	for _, c := range allContents {
+		combined += c + "\x00"
+	}
+	if combined != "" {
+		reg.Fingerprint = state.Checksum(combined)
+	}
+
 	return reg, nil
 }
 
 // scan reads every skill under one source directory. A missing directory yields
 // no entries. Each skill is parsed independently and a malformed SKILL.md is
 // skipped, not fatal — the directory is user-controlled, so one bad third-party
-// skill must not break resolution of all the others.
-func scan(s source) ([]Entry, error) {
+// skill must not break resolution of all the others. It also returns the raw
+// SKILL.md contents (keyed by name) for fingerprinting.
+func scan(s source) ([]Entry, []string, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	var out []Entry
+	var contents []string
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -126,6 +143,7 @@ func scan(s source) ([]Entry, error) {
 			Scope:       s.scope,
 			Path:        skillPath,
 		})
+		contents = append(contents, e.Name()+"\x00"+string(data))
 	}
-	return out, nil
+	return out, contents, nil
 }
