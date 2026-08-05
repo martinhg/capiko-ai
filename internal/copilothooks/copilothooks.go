@@ -39,6 +39,13 @@ const (
 	MatcherBash = "bash"
 	// EventPreToolUse is the hook event name used as the Hooks map key.
 	EventPreToolUse = "preToolUse"
+	// EventSessionStart is the hook event name fired once at the start of a
+	// Copilot CLI session, used as the Hooks map key for the session
+	// verification hook (G-CC2).
+	EventSessionStart = "sessionStart"
+	// SessionCheckFile is the filename of the rendered session-verification
+	// hook file under copilot.Host.HooksDir.
+	SessionCheckFile = "capiko-sessioncheck.json"
 )
 
 // HookFile is the v1 Copilot CLI hook configuration file shape. Hooks is an

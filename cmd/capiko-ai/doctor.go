@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
@@ -53,7 +55,45 @@ var gatherDoctorInputs = func() doctor.Inputs {
 		in.EngramStale = drift.StaleEngram(host.MCPConfigPath, st)
 		in.HeadroomStale = drift.StaleHeadroom(host.MCPConfigPath, st)
 	}
+	if host != nil {
+		in.SessionVerification = readSessionVerification(host.ConfigDir)
+	}
 	return in
+}
+
+// readSessionVerification reads and parses <configDir>/.capiko-verified.json,
+// the report written by the sessionStart verification hook (G-CC2). It
+// returns nil on any error — file not found (hook has not run yet) or
+// unparseable (corrupt/partial write) — since the doctor check treats both
+// the same way: "no report to show".
+func readSessionVerification(configDir string) *doctor.SessionVerificationReport {
+	data, err := os.ReadFile(filepath.Join(configDir, ".capiko-verified.json"))
+	if err != nil {
+		return nil
+	}
+	var raw struct {
+		VerifiedAt   string `json:"verified_at"`
+		Skills       int    `json:"skills"`
+		Agents       int    `json:"agents"`
+		Hooks        int    `json:"hooks"`
+		MCPEngram    bool   `json:"mcp_engram"`
+		Instructions bool   `json:"instructions"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	verifiedAt, err := time.Parse(time.RFC3339, raw.VerifiedAt)
+	if err != nil {
+		return nil
+	}
+	return &doctor.SessionVerificationReport{
+		VerifiedAt:   verifiedAt,
+		Skills:       raw.Skills,
+		Agents:       raw.Agents,
+		Hooks:        raw.Hooks,
+		MCPEngram:    raw.MCPEngram,
+		Instructions: raw.Instructions,
+	}
 }
 
 // doctorCommand runs the read-only ecosystem health check. handled is false when

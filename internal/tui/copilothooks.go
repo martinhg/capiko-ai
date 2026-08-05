@@ -54,6 +54,20 @@ func applyCopilotHooks(host *copilot.Host, store *state.Store, bkp *backup.Store
 		}
 	}
 
+	// Session verification hook — always rendered when hooks are enabled.
+	scHf := copilothooks.RenderSessionCheck()
+	scData, err := copilothooks.Marshal(scHf)
+	if err != nil {
+		return err
+	}
+	scTarget := filepath.Join(host.HooksDir, copilothooks.SessionCheckFile)
+	scWant := state.Checksum(string(scData))
+	if copilothooks.HookFileChecksum(scTarget) != scWant {
+		if err := copilothooks.WriteHookFile(host.HooksDir, copilothooks.SessionCheckFile, scData); err != nil {
+			return err
+		}
+	}
+
 	rec.Checksum = copilothooks.CombinedChecksum(host.HooksDir)
 	if len(rec.Presets) == 0 {
 		rec.Presets = []string{"guardrails"}
@@ -76,6 +90,9 @@ func disableCopilotHooks(host *copilot.Host, store *state.Store, bkp *backup.Sto
 		return err
 	}
 	if err := copilothooks.RemoveHookFile(host.HooksDir, copilothooks.GuardrailsFile); err != nil {
+		return err
+	}
+	if err := copilothooks.RemoveHookFile(host.HooksDir, copilothooks.SessionCheckFile); err != nil {
 		return err
 	}
 	if store != nil {
