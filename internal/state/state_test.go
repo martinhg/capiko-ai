@@ -112,6 +112,21 @@ func TestSetSDDModels(t *testing.T) {
 	}
 }
 
+func TestSetSDDFallbackModels(t *testing.T) {
+	s := NewStore(t.TempDir())
+	models := map[string]string{"apply": "claude-sonnet-4.6", "verify": "gpt-5.2"}
+	if err := s.SetSDDFallbackModels(models); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.SDDFallbackModels["apply"] != "claude-sonnet-4.6" || st.SDDFallbackModels["verify"] != "gpt-5.2" {
+		t.Errorf("sdd fallback models = %v", st.SDDFallbackModels)
+	}
+}
+
 func TestSetStrictTDD(t *testing.T) {
 	s := NewStore(t.TempDir())
 	if err := s.SetStrictTDD(true); err != nil {

@@ -18,13 +18,14 @@ import (
 // applySDD injects the SDD orchestrator block (with the given per-phase model
 // and effort assignments) into Copilot's instructions file, backing the file up
 // only when it changes, then records the assignments in state. Shared by the
-// config screen and the post-sync re-apply.
-func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models, efforts map[string]string, strict bool) error {
+// config screen and the post-sync re-apply. fallback maps phase → fallback
+// model; nil/empty means no fallback configured.
+func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models, efforts map[string]string, strict bool, fallback map[string]string) error {
 	if host == nil {
 		return nil
 	}
 	path := filepath.Join(host.ConfigDir, "copilot-instructions.md")
-	content, changed, err := instructions.Render(path, sdd.MarkerStart, sdd.MarkerEnd, sdd.Render(models, efforts, strict))
+	content, changed, err := instructions.Render(path, sdd.MarkerStart, sdd.MarkerEnd, sdd.Render(models, efforts, strict, fallback))
 	if err != nil {
 		return err
 	}
@@ -45,7 +46,10 @@ func applySDD(host *copilot.Host, store *state.Store, bkp *backup.Store, models,
 		if err := store.SetSDDEfforts(efforts); err != nil {
 			return err
 		}
-		return store.SetStrictTDD(strict)
+		if err := store.SetStrictTDD(strict); err != nil {
+			return err
+		}
+		return store.SetSDDFallbackModels(fallback)
 	}
 	return nil
 }
@@ -61,8 +65,9 @@ type sddScreen struct {
 	inFlow    bool // reached from install flow → Apply continues to the selector
 	models    map[string]string
 	efforts   map[string]string
-	strict    bool // strict TDD for apply/verify
-	cursor    int  // 0..len-1 phases, len = Apply, len+1 = Back
+	strict    bool              // strict TDD for apply/verify
+	fallback  map[string]string // SDD phase → fallback model; no picker yet, round-trips through state
+	cursor    int               // 0..len-1 phases, len = Apply, len+1 = Back
 	editing   bool
 	editBuf   string
 	state     sddState
@@ -83,6 +88,7 @@ func newSDD(svc services, catalog []skill.Skill, installed map[string]bool, inFl
 	models := sdd.DefaultAssignments()
 	efforts := sdd.DefaultEfforts()
 	strict := false
+	var fallback map[string]string
 	if svc.state != nil {
 		if st, err := svc.state.Load(); err == nil {
 			for k, v := range st.SDDModels {
@@ -96,9 +102,10 @@ func newSDD(svc services, catalog []skill.Skill, installed map[string]bool, inFl
 				}
 			}
 			strict = st.StrictTDD
+			fallback = st.SDDFallbackModels
 		}
 	}
-	return &sddScreen{svc: svc, catalog: catalog, installed: installed, inFlow: inFlow, models: models, efforts: efforts, strict: strict}
+	return &sddScreen{svc: svc, catalog: catalog, installed: installed, inFlow: inFlow, models: models, efforts: efforts, strict: strict, fallback: fallback}
 }
 
 func (s *sddScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
@@ -220,9 +227,9 @@ func (s *sddScreen) cycleEffort(delta int) {
 }
 
 func (s *sddScreen) applyCmd() tea.Cmd {
-	host, store, bkp, models, efforts, strict := s.svc.host, s.svc.state, s.svc.backup, s.models, s.efforts, s.strict
+	host, store, bkp, models, efforts, strict, fallback := s.svc.host, s.svc.state, s.svc.backup, s.models, s.efforts, s.strict, s.fallback
 	return func() tea.Msg {
-		if err := applySDD(host, store, bkp, models, efforts, strict); err != nil {
+		if err := applySDD(host, store, bkp, models, efforts, strict, fallback); err != nil {
 			return sddAppliedMsg{err: err}
 		}
 		return sddAppliedMsg{err: applyTriggerRules(host, store, bkp, true)}

@@ -24,7 +24,7 @@ func TestRenderReflectsAssignments(t *testing.T) {
 		// the rest fall back to default
 	}, map[string]string{
 		"explore": "high", // override default low
-	}, false)
+	}, false, nil)
 	if strings.Contains(out, "Strict TDD") {
 		t.Error("strict TDD section should be absent when off")
 	}
@@ -45,7 +45,7 @@ func TestRenderReflectsAssignments(t *testing.T) {
 }
 
 func TestRenderTriageGate(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 
 	for _, want := range []string{
 		"When to use SDD (triage)",
@@ -65,7 +65,7 @@ func TestRenderTriageGate(t *testing.T) {
 }
 
 func TestRenderResultContract(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	for _, want := range []string{
 		"### Result contract",
 		"status",
@@ -83,7 +83,7 @@ func TestRenderResultContract(t *testing.T) {
 }
 
 func TestRenderExecutionMode(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	for _, want := range []string{
 		"### Execution mode",
 		"Automatic",
@@ -97,7 +97,7 @@ func TestRenderExecutionMode(t *testing.T) {
 }
 
 func TestRenderAutomaticModeGatekeeper(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	for _, want := range []string{
 		"### Automatic mode gatekeeper",
 		"Inline checks (all phases)",
@@ -120,7 +120,7 @@ func TestRenderAutomaticModeGatekeeper(t *testing.T) {
 }
 
 func TestRenderSkillResolution(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	for _, want := range []string{
 		"### Skill resolution",
 		"capiko-ai skill-registry",
@@ -133,7 +133,7 @@ func TestRenderSkillResolution(t *testing.T) {
 }
 
 func TestRenderDeliveryChainStrategy(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	for _, want := range []string{
 		"### Delivery & chain strategy",
 		// The four delivery strategies, asked once and cached.
@@ -155,7 +155,7 @@ func TestRenderDeliveryChainStrategy(t *testing.T) {
 }
 
 func TestRenderArtifactStore(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	for _, want := range []string{
 		"### Artifact store",
 		// The four modes, with hybrid as the default.
@@ -195,7 +195,7 @@ func TestDefaultEfforts(t *testing.T) {
 }
 
 func TestRenderEffortColumn(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	for _, want := range []string{
 		"| Phase | Model | Effort |",
 		"Reasoning effort:",
@@ -213,14 +213,14 @@ func TestRenderEffortColumn(t *testing.T) {
 }
 
 func TestRenderNoLifecycleGuardrails(t *testing.T) {
-	out := Render(nil, nil, false)
+	out := Render(nil, nil, false, nil)
 	if strings.Contains(out, "### Engram lifecycle guardrails") {
 		t.Error("lifecycle guardrails were deduplicated into memory.go — must not appear in SDD block")
 	}
 }
 
 func TestRenderStrictTDD(t *testing.T) {
-	out := Render(nil, nil, true)
+	out := Render(nil, nil, true, nil)
 	if !strings.Contains(out, "Strict TDD") || !strings.Contains(out, "failing test FIRST") {
 		t.Errorf("strict TDD section missing when on:\n%s", out)
 	}
@@ -232,14 +232,14 @@ func TestRenderStrictTDD(t *testing.T) {
 // `strict_tdd: true` token the reference files key off), not merely state the
 // rule. When off, that token must be absent so the worker takes the standard flow.
 func TestRenderStrictTDDForwarding(t *testing.T) {
-	on := Render(nil, nil, true)
+	on := Render(nil, nil, true, nil)
 	for _, want := range []string{"forward", "strict_tdd: true", "test command"} {
 		if !strings.Contains(on, want) {
 			t.Errorf("strict-TDD forwarding instruction missing %q when on:\n%s", want, on)
 		}
 	}
 
-	off := Render(nil, nil, false)
+	off := Render(nil, nil, false, nil)
 	if strings.Contains(off, "strict_tdd: true") {
 		t.Error("forwarding token strict_tdd: true must not appear when strict TDD is off")
 	}
@@ -249,11 +249,91 @@ func TestRenderIgnoresUnknownAndEmpty(t *testing.T) {
 	out := Render(map[string]string{
 		"orchestrator": "", // empty → default
 		"bogus-phase":  "x",
-	}, nil, false)
+	}, nil, false, nil)
 	if !strings.Contains(out, "| orchestrator | default | high |") {
 		t.Error("empty assignment should fall back to default")
 	}
 	if strings.Contains(out, "bogus-phase") {
 		t.Error("unknown phase should be ignored")
+	}
+}
+
+// TestRenderModelFallbackOmittedWhenEmpty pins NFR-1: the fallback section must
+// be entirely absent — not merely empty — for every shape of "no fallback
+// configured" (nil, empty map, or a map whose only value is empty/whitespace).
+func TestRenderModelFallbackOmittedWhenEmpty(t *testing.T) {
+	for _, fb := range []map[string]string{nil, {}, {"apply": ""}} {
+		out := Render(nil, nil, false, fb)
+		if strings.Contains(out, "Model fallback on exhaustion") {
+			t.Errorf("fallback section should be absent for %v", fb)
+		}
+	}
+}
+
+// TestRenderIgnoresUnknownFallbackPhase mirrors TestRenderIgnoresUnknownAndEmpty:
+// unknown phase keys are silently dropped, and an empty value does not count as
+// "configured" (A2/A3 in the spec — unlike normalize, missing phases stay absent
+// rather than being filled with a default).
+func TestRenderIgnoresUnknownFallbackPhase(t *testing.T) {
+	out := Render(map[string]string{"apply": "claude-opus-4.8"}, nil, false, map[string]string{
+		"apply":       "claude-sonnet-4.6",
+		"bogus-phase": "x",
+		"spec":        "",
+	})
+	if !strings.Contains(out, "| apply | claude-opus-4.8 | claude-sonnet-4.6 |") {
+		t.Error("configured fallback for a known phase should render")
+	}
+	if strings.Contains(out, "bogus-phase") {
+		t.Error("unknown fallback phase should be ignored")
+	}
+}
+
+// TestRenderModelFallback pins REQ-6 through REQ-9: the fallback table, all
+// seven detection heuristics, and the retry/terminal rule labels.
+func TestRenderModelFallback(t *testing.T) {
+	out := Render(map[string]string{"apply": "claude-opus-4.8"}, nil, false, map[string]string{
+		"apply": "claude-sonnet-4.6", "verify": "gpt-5.2",
+	})
+	for _, want := range []string{
+		"### Model fallback on exhaustion",
+		"| apply | claude-opus-4.8 | claude-sonnet-4.6 |",
+		"| verify | default | gpt-5.2 |",
+		"rate limit", "quota exceeded", "429", "resource_exhausted",
+		"insufficient_quota", "overloaded", "capacity",
+		"Retry rule", "Terminal rule", "Forwarding",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("fallback section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
+// TestRenderModelFallbackForwarding pins REQ-10: a machine-parseable
+// `fallback_model:` token must accompany the delegation when a fallback is
+// configured, and must be entirely absent when it isn't — mirroring
+// TestRenderStrictTDDForwarding's on/off contract.
+func TestRenderModelFallbackForwarding(t *testing.T) {
+	on := Render(nil, nil, false, map[string]string{"apply": "claude-sonnet-4.6"})
+	for _, want := range []string{"Forwarding", "fallback_model:"} {
+		if !strings.Contains(on, want) {
+			t.Errorf("fallback forwarding missing %q when on:\n%s", want, on)
+		}
+	}
+	off := Render(nil, nil, false, nil)
+	if strings.Contains(off, "fallback_model:") {
+		t.Error("fallback_model token must not appear when no fallback is configured")
+	}
+}
+
+// TestRenderModelFallbackExcludesContextLength pins REQ-7: the exclusion of
+// "context length exceeded" from the exhaustion heuristics must appear as an
+// explicit negative instruction, not merely be absent from the pattern list.
+func TestRenderModelFallbackExcludesContextLength(t *testing.T) {
+	out := Render(nil, nil, false, map[string]string{"apply": "claude-sonnet-4.6"})
+	if !strings.Contains(out, "context length exceeded") {
+		t.Error("fallback section should mention context-length exclusion")
+	}
+	if !strings.Contains(out, "Do NOT treat") {
+		t.Error("context-length exclusion should be an explicit negative instruction, not implied")
 	}
 }

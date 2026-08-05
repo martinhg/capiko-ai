@@ -95,10 +95,30 @@ func normalizeEfforts(e map[string]string) map[string]string {
 	return out
 }
 
+// normalizeFallback returns a phase→fallback-model map containing only
+// entries whose phase is known (in Phases) and whose value is non-empty
+// after trimming. Unlike normalize/normalizeEfforts, missing phases are
+// NOT filled with a default — an unconfigured phase stays absent entirely,
+// so callers can gate on "at least one configured" and iterate a sparse map.
+func normalizeFallback(fb map[string]string) map[string]string {
+	out := make(map[string]string, len(fb))
+	known := make(map[string]bool, len(Phases))
+	for _, p := range Phases {
+		known[p] = true
+	}
+	for k, v := range fb {
+		if known[k] && strings.TrimSpace(v) != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // Render builds the orchestrator instruction block for the given assignments.
 // When strictTDD is true, the block requires the apply/verify phases to follow
-// strict Test-Driven Development.
-func Render(assignments map[string]string, efforts map[string]string, strictTDD bool) string {
+// strict Test-Driven Development. fallback maps phase → fallback model; when no
+// phase has a configured fallback, the fallback section is omitted entirely.
+func Render(assignments map[string]string, efforts map[string]string, strictTDD bool, fallback map[string]string) string {
 	a := normalize(assignments)
 	e := normalizeEfforts(efforts)
 
@@ -189,6 +209,25 @@ func Render(assignments map[string]string, efforts map[string]string, strictTDD 
 		b.WriteString("\n### Strict TDD (active)\n\n")
 		b.WriteString("The apply and verify phases MUST follow strict Test-Driven Development: write a failing test FIRST, run it to see it fail, then write the minimal code to pass it, then refactor. Do not write any implementation before a failing test exists.\n")
 		b.WriteString("\nForward this requirement structurally: when you delegate the apply or verify phase, you MUST forward `strict_tdd: true` and the project's test command in the sub-agent handoff. The worker keys off that forwarded signal to load its strict-TDD protocol — stating the rule here is not enough, the flag has to travel with the delegation.\n")
+	}
+
+	if fb := normalizeFallback(fallback); len(fb) > 0 {
+		b.WriteString("\n### Model fallback on exhaustion\n\n")
+		b.WriteString("| Phase | Primary | Fallback |\n| --- | --- | --- |\n")
+		for _, p := range Phases {
+			if v, ok := fb[p]; ok {
+				fmt.Fprintf(&b, "| %s | %s | %s |\n", p, a[p], v)
+			}
+		}
+		b.WriteString("\n")
+
+		b.WriteString("**Detection**: treat the sub-agent result as exhaustion when the error text from an error/failure Task-tool result contains any of these (case-insensitive): `rate limit`, `quota exceeded`, `429`, `resource_exhausted`, `insufficient_quota`, `overloaded`, `capacity`. Do NOT treat `context length exceeded` as exhaustion — that is a per-request token limit, not a quota problem, and switching models does not fix it.\n\n")
+
+		b.WriteString("**Retry rule**: on detecting exhaustion for a phase with a configured fallback, retry that phase ONCE with the fallback model. If the Task tool accepts a `model` parameter at call time, pass the fallback model directly. If the Task tool does not accept a call-time model parameter (model is read-only from the agent file's frontmatter), report the exhaustion to the user with the intended fallback model and stop — never rewrite `.agent.md` files at runtime. This is a hard cap of one retry; there is no chained or rotating fallback list in this slice.\n\n")
+
+		b.WriteString("**Terminal rule**: stop the pipeline and report to the user when either (1) no fallback is configured for the exhausted phase, or (2) the fallback retry also fails — in case (2), report BOTH the primary and fallback failures, not just the latest.\n\n")
+
+		b.WriteString("**Forwarding**: when delegating a phase that has a configured fallback, include `fallback_model: <model>` as a machine-parseable line in the sub-agent handoff, alongside the existing model/effort forwarding.\n")
 	}
 
 	return b.String()

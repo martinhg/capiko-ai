@@ -217,6 +217,53 @@ func TestSDDEffortPersistsOnApply(t *testing.T) {
 	}
 }
 
+// TestSDDFallbackAppliesAndPersists pins REQ-11: applySDD threads the
+// fallback map through to sdd.Render (rendered into the instructions file)
+// AND to store.SetSDDFallbackModels (so sync can re-apply it later). There is
+// no TUI picker for fallback yet (out of scope for this slice), so the
+// screen's fallback field is set directly, mirroring how a future picker
+// would populate it.
+func TestSDDFallbackAppliesAndPersists(t *testing.T) {
+	s, svc, path := newSDDT(t, false)
+	s.fallback = map[string]string{"apply": "claude-sonnet-4.6"}
+	s.cursor = len(sdd.Phases) // Apply row
+
+	_, cmd := s.Update(key("enter"))
+	applied, ok := cmd().(sddAppliedMsg)
+	if !ok || applied.err != nil {
+		t.Fatalf("apply failed: %+v", applied)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(data), "Model fallback on exhaustion") {
+		t.Fatalf("fallback section not written: %v / %q", err, data)
+	}
+
+	st, _ := svc.state.Load()
+	if st.SDDFallbackModels["apply"] != "claude-sonnet-4.6" {
+		t.Errorf("state SDD fallback models = %v", st.SDDFallbackModels)
+	}
+}
+
+// TestSDDFallbackLoadsFromState pins the read half of REQ-11's round-trip:
+// newSDD must load a previously persisted fallback map into the screen so a
+// subsequent sync re-apply (or a future picker) sees the current assignment.
+func TestSDDFallbackLoadsFromState(t *testing.T) {
+	cfgDir := t.TempDir()
+	svc := services{
+		host:   &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")},
+		state:  state.NewStore(t.TempDir()),
+		backup: backup.NewStore(t.TempDir()),
+	}
+	if err := svc.state.SetSDDFallbackModels(map[string]string{"verify": "gpt-5.2"}); err != nil {
+		t.Fatal(err)
+	}
+	s := newSDD(svc, testCatalog(), map[string]bool{}, false).(*sddScreen)
+	if s.fallback["verify"] != "gpt-5.2" {
+		t.Errorf("fallback not loaded from state: %v", s.fallback)
+	}
+}
+
 func TestSDDBackGoesToMenu(t *testing.T) {
 	s, _, _ := newSDDT(t, false)
 	_, cmd := s.Update(key("esc"))
