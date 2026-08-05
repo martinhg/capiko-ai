@@ -32,6 +32,9 @@ func main() {
 	// POSIX and PowerShell install scripts can share one binary contract.
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "help", "--help", "-h":
+			usage(os.Stdout)
+			return
 		case "version", "-v", "--version":
 			fmt.Println("capiko-ai", tui.Version)
 			fmt.Println("targets GitHub Copilot CLI", versions.CopilotCLI)
@@ -101,7 +104,27 @@ func main() {
 				os.Exit(exitCode)
 			}
 			return
+		default:
+			// Unknown subcommand: error out instead of falling through to the
+			// TUI, which would otherwise launch on a typo like `capiko-ai
+			// instal`.
+			fmt.Fprintf(os.Stderr, "capiko-ai: unknown command %q\n", os.Args[1])
+			if s := suggest(os.Args[1]); s != "" {
+				fmt.Fprintf(os.Stderr, "\nDid you mean: capiko-ai %s\n", s)
+			}
+			fmt.Fprintln(os.Stderr)
+			usage(os.Stderr)
+			os.Exit(1)
 		}
+	}
+
+	// No subcommand: normally launches the TUI. When stdout is not a
+	// terminal (piped, redirected, or running in CI), Bubbletea would render
+	// garbage escape sequences instead of a screen, so print help and exit
+	// cleanly.
+	if !isTerminal(os.Stdout) {
+		usage(os.Stdout)
+		return
 	}
 
 	cat, err := catalog.Load()
