@@ -41,6 +41,17 @@ Milestone save (advisory):
 
 - There is no timer. Treat each completed unit of work — a green test suite, a merged change, a resolved decision — as a save point, so progress survives a lost session.
 
-Lifecycle-aware reads:
+Lifecycle guardrails:
 
-- Trust memories marked active. Treat needs_review memories as stale context, not fact: surface them and verify against the current code before relying on them.`
+Engram observations may carry lifecycle state (active, needs_review). These rules are forward-compatible — a no-op on versions without lifecycle support.
+
+Reading:
+
+- Prefer mem_review for lifecycle-aware queries when available. Fall back to mem_context / mem_search on older versions — absence of lifecycle fields means the observation is implicitly active.
+- Treat needs_review memories as stale context: surface them to the user and verify against current code before relying on them.
+
+Writing:
+
+- Never mark an observation as reviewed automatically — only the user may confirm a needs_review observation.
+- When saving (mem_save), do not set lifecycle fields — let engram assign the default (active).
+- When updating (mem_update), preserve the current lifecycle state unless the user explicitly asks to change it.`

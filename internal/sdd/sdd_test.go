@@ -212,22 +212,10 @@ func TestRenderEffortColumn(t *testing.T) {
 	}
 }
 
-func TestRenderEngramLifecycleGuardrails(t *testing.T) {
+func TestRenderNoLifecycleGuardrails(t *testing.T) {
 	out := Render(nil, nil, false)
-	for _, want := range []string{
-		"### Engram lifecycle guardrails",
-		"needs_review",
-		"mem_review",
-		"forward-compatible",
-		"Never mark an observation as `reviewed` automatically",
-		"mem_context",
-		"mem_search",
-		"mem_save",
-		"mem_update",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("engram lifecycle guardrails section missing %q\n---\n%s", want, out)
-		}
+	if strings.Contains(out, "### Engram lifecycle guardrails") {
+		t.Error("lifecycle guardrails were deduplicated into memory.go — must not appear in SDD block")
 	}
 }
 

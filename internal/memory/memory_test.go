@@ -51,9 +51,14 @@ func TestRenderCoversTriggers(t *testing.T) {
 	}
 }
 
-func TestRenderLifecycleAware(t *testing.T) {
+func TestRenderLifecycleGuardrails(t *testing.T) {
 	block := strings.ToLower(Render())
-	for _, want := range []string{"active", "needs_review"} {
+	for _, want := range []string{
+		"active", "needs_review",
+		"mem_review", "mem_context", "mem_save", "mem_update",
+		"never mark an observation as reviewed automatically",
+		"forward-compatible",
+	} {
 		if !strings.Contains(block, want) {
 			t.Errorf("memory block missing lifecycle keyword %q", want)
 		}

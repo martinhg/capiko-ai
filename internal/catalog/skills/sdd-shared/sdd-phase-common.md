@@ -98,24 +98,6 @@ process noise.
 
 ## G. Engram Lifecycle Guardrails
 
-Engram observations may carry lifecycle state (`active`, `needs_review`). These
-rules are forward-compatible: they are a no-op on engram versions without
-lifecycle support, and activate automatically when the server exposes it.
-
-**Reading memories:**
-
-- Prefer `mem_review` for lifecycle-aware queries when the tool is available.
-- Fall back to `mem_context` / `mem_search` on older engram versions. The
-  absence of lifecycle fields means the observation is implicitly `active`.
-- When an observation is `needs_review`, flag it to the user before acting on
-  it. Note that it may be outdated and prefer corroborating evidence from the
-  codebase or git history.
-
-**Writing lifecycle state:**
-
-- Never mark an observation as `reviewed` automatically. Only the user may
-  confirm that a `needs_review` observation is still valid.
-- When saving new observations (`mem_save`), do not set lifecycle fields — let
-  engram assign the default (`active`).
-- When updating (`mem_update`), preserve the current lifecycle state unless the
-  user explicitly asks to change it.
+Follow the engram lifecycle guardrails from the Memory protocol section in your
+instructions — they cover reading (active vs needs_review) and writing (never
+auto-mark reviewed, preserve state on update) rules. Do not duplicate them here.
