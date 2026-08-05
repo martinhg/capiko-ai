@@ -112,6 +112,80 @@ func TestResolveMissingDirsIsNotAnError(t *testing.T) {
 	}
 }
 
+func TestResolveFingerprintChangesOnSameSizeEdit(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	userSkills := filepath.Join(home, ".copilot", "skills")
+
+	writeSkill(t, userSkills, "demo", "AAAA skill. Trigger: x")
+
+	reg1, err := Resolve(ResolveOptions{Cwd: cwd, Home: home})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if reg1.Fingerprint == "" {
+		t.Fatal("expected non-empty fingerprint")
+	}
+
+	// Edit the SKILL.md to same-size content (swap AAAA → BBBB, same byte count).
+	skillFile := filepath.Join(userSkills, "demo", "SKILL.md")
+	data, err := os.ReadFile(skillFile)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	edited := make([]byte, len(data))
+	copy(edited, data)
+	for i := range edited {
+		if edited[i] == 'A' {
+			edited[i] = 'B'
+		}
+	}
+	if len(edited) != len(data) {
+		t.Fatal("edited content must be same size")
+	}
+	if err := os.WriteFile(skillFile, edited, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	reg2, err := Resolve(ResolveOptions{Cwd: cwd, Home: home})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if reg1.Fingerprint == reg2.Fingerprint {
+		t.Error("fingerprint must change on same-size content edit")
+	}
+}
+
+func TestResolveFingerprintStableOnNoChange(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	writeSkill(t, filepath.Join(home, ".copilot", "skills"), "stable", "Stable skill")
+
+	reg1, err := Resolve(ResolveOptions{Cwd: cwd, Home: home})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	reg2, err := Resolve(ResolveOptions{Cwd: cwd, Home: home})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if reg1.Fingerprint != reg2.Fingerprint {
+		t.Errorf("fingerprint must be stable: %q != %q", reg1.Fingerprint, reg2.Fingerprint)
+	}
+}
+
+func TestResolveFingerprintEmptyWhenNoSkills(t *testing.T) {
+	home := t.TempDir()
+	cwd := t.TempDir()
+	reg, err := Resolve(ResolveOptions{Cwd: cwd, Home: home})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if reg.Fingerprint != "" {
+		t.Errorf("expected empty fingerprint with no skills, got %q", reg.Fingerprint)
+	}
+}
+
 func TestResolveListsSourcesScanned(t *testing.T) {
 	home := t.TempDir()
 	cwd := t.TempDir()
