@@ -10,6 +10,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilothooks"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headroom"
+	"github.com/martinhg/capiko-ai/internal/integrity"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -123,6 +124,51 @@ func TestStaleCopilotHooks(t *testing.T) {
 	}
 	if !StaleCopilotHooks(hooksDir, &state.State{CopilotHooks: rec}) {
 		t.Error("a missing file while enabled should be stale")
+	}
+}
+
+// TestStaleIntegrity covers unmanaged/disabled -> false, a matching
+// combined checksum -> false, and a changed or missing protected file -> true.
+func TestStaleIntegrity(t *testing.T) {
+	if StaleIntegrity(nil) {
+		t.Error("nil state should not be stale")
+	}
+	if StaleIntegrity(&state.State{}) {
+		t.Error("unmanaged integrity should not be stale")
+	}
+	if StaleIntegrity(&state.State{Integrity: &state.IntegrityRecord{Enabled: false}}) {
+		t.Error("disabled integrity should not be stale")
+	}
+
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(a, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	checksums, combined := integrity.Manifest([]string{a})
+	rec := &state.IntegrityRecord{
+		Enabled:   true,
+		Files:     []string{a},
+		Checksums: checksums,
+		Checksum:  combined,
+	}
+	if StaleIntegrity(&state.State{Integrity: rec}) {
+		t.Error("a matching manifest should not be stale")
+	}
+
+	if err := os.WriteFile(a, []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !StaleIntegrity(&state.State{Integrity: rec}) {
+		t.Error("a changed protected file should be stale")
+	}
+
+	if err := os.Remove(a); err != nil {
+		t.Fatal(err)
+	}
+	if !StaleIntegrity(&state.State{Integrity: rec}) {
+		t.Error("a missing protected file should be stale")
 	}
 }
 

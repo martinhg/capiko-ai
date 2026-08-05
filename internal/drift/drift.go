@@ -9,6 +9,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilothooks"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headroom"
+	"github.com/martinhg/capiko-ai/internal/integrity"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -55,6 +56,18 @@ func StaleCopilotHooks(hooksDir string, st *state.State) bool {
 		return false
 	}
 	return copilothooks.CombinedChecksum(hooksDir) != st.CopilotHooks.Checksum
+}
+
+// StaleIntegrity reports whether any protected-surface file has fallen behind
+// its recorded checksum: changed content, deleted, or newly created. It returns
+// false when integrity is unmanaged or disabled. Mirrors StaleCopilotHooks;
+// the comparison value is integrity.CombinedChecksum — the same function the
+// applier uses to compute the stored checksum, so the two can never diverge.
+func StaleIntegrity(st *state.State) bool {
+	if st == nil || st.Integrity == nil || !st.Integrity.Enabled {
+		return false
+	}
+	return integrity.CombinedChecksum(st.Integrity.Files) != st.Integrity.Checksum
 }
 
 // StaleAgents returns the names of catalog agents that are either missing from
