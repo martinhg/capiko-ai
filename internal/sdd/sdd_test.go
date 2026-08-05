@@ -269,3 +269,21 @@ func TestRenderModelFallbackOmittedWhenEmpty(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderIgnoresUnknownFallbackPhase mirrors TestRenderIgnoresUnknownAndEmpty:
+// unknown phase keys are silently dropped, and an empty value does not count as
+// "configured" (A2/A3 in the spec — unlike normalize, missing phases stay absent
+// rather than being filled with a default).
+func TestRenderIgnoresUnknownFallbackPhase(t *testing.T) {
+	out := Render(map[string]string{"apply": "claude-opus-4.8"}, nil, false, map[string]string{
+		"apply":       "claude-sonnet-4.6",
+		"bogus-phase": "x",
+		"spec":        "",
+	})
+	if !strings.Contains(out, "| apply | claude-opus-4.8 | claude-sonnet-4.6 |") {
+		t.Error("configured fallback for a known phase should render")
+	}
+	if strings.Contains(out, "bogus-phase") {
+		t.Error("unknown fallback phase should be ignored")
+	}
+}

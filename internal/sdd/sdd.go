@@ -95,6 +95,25 @@ func normalizeEfforts(e map[string]string) map[string]string {
 	return out
 }
 
+// normalizeFallback returns a phase→fallback-model map containing only
+// entries whose phase is known (in Phases) and whose value is non-empty
+// after trimming. Unlike normalize/normalizeEfforts, missing phases are
+// NOT filled with a default — an unconfigured phase stays absent entirely,
+// so callers can gate on "at least one configured" and iterate a sparse map.
+func normalizeFallback(fb map[string]string) map[string]string {
+	out := make(map[string]string, len(fb))
+	known := make(map[string]bool, len(Phases))
+	for _, p := range Phases {
+		known[p] = true
+	}
+	for k, v := range fb {
+		if known[k] && strings.TrimSpace(v) != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // Render builds the orchestrator instruction block for the given assignments.
 // When strictTDD is true, the block requires the apply/verify phases to follow
 // strict Test-Driven Development. fallback maps phase → fallback model; when no
@@ -190,6 +209,17 @@ func Render(assignments map[string]string, efforts map[string]string, strictTDD 
 		b.WriteString("\n### Strict TDD (active)\n\n")
 		b.WriteString("The apply and verify phases MUST follow strict Test-Driven Development: write a failing test FIRST, run it to see it fail, then write the minimal code to pass it, then refactor. Do not write any implementation before a failing test exists.\n")
 		b.WriteString("\nForward this requirement structurally: when you delegate the apply or verify phase, you MUST forward `strict_tdd: true` and the project's test command in the sub-agent handoff. The worker keys off that forwarded signal to load its strict-TDD protocol — stating the rule here is not enough, the flag has to travel with the delegation.\n")
+	}
+
+	if fb := normalizeFallback(fallback); len(fb) > 0 {
+		b.WriteString("\n### Model fallback on exhaustion\n\n")
+		b.WriteString("| Phase | Primary | Fallback |\n| --- | --- | --- |\n")
+		for _, p := range Phases {
+			if v, ok := fb[p]; ok {
+				fmt.Fprintf(&b, "| %s | %s | %s |\n", p, a[p], v)
+			}
+		}
+		b.WriteString("\n")
 	}
 
 	return b.String()
