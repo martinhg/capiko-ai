@@ -287,3 +287,53 @@ func TestRenderIgnoresUnknownFallbackPhase(t *testing.T) {
 		t.Error("unknown fallback phase should be ignored")
 	}
 }
+
+// TestRenderModelFallback pins REQ-6 through REQ-9: the fallback table, all
+// seven detection heuristics, and the retry/terminal rule labels.
+func TestRenderModelFallback(t *testing.T) {
+	out := Render(map[string]string{"apply": "claude-opus-4.8"}, nil, false, map[string]string{
+		"apply": "claude-sonnet-4.6", "verify": "gpt-5.2",
+	})
+	for _, want := range []string{
+		"### Model fallback on exhaustion",
+		"| apply | claude-opus-4.8 | claude-sonnet-4.6 |",
+		"| verify | default | gpt-5.2 |",
+		"rate limit", "quota exceeded", "429", "resource_exhausted",
+		"insufficient_quota", "overloaded", "capacity",
+		"Retry rule", "Terminal rule", "Forwarding",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("fallback section missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
+// TestRenderModelFallbackForwarding pins REQ-10: a machine-parseable
+// `fallback_model:` token must accompany the delegation when a fallback is
+// configured, and must be entirely absent when it isn't — mirroring
+// TestRenderStrictTDDForwarding's on/off contract.
+func TestRenderModelFallbackForwarding(t *testing.T) {
+	on := Render(nil, nil, false, map[string]string{"apply": "claude-sonnet-4.6"})
+	for _, want := range []string{"Forwarding", "fallback_model:"} {
+		if !strings.Contains(on, want) {
+			t.Errorf("fallback forwarding missing %q when on:\n%s", want, on)
+		}
+	}
+	off := Render(nil, nil, false, nil)
+	if strings.Contains(off, "fallback_model:") {
+		t.Error("fallback_model token must not appear when no fallback is configured")
+	}
+}
+
+// TestRenderModelFallbackExcludesContextLength pins REQ-7: the exclusion of
+// "context length exceeded" from the exhaustion heuristics must appear as an
+// explicit negative instruction, not merely be absent from the pattern list.
+func TestRenderModelFallbackExcludesContextLength(t *testing.T) {
+	out := Render(nil, nil, false, map[string]string{"apply": "claude-sonnet-4.6"})
+	if !strings.Contains(out, "context length exceeded") {
+		t.Error("fallback section should mention context-length exclusion")
+	}
+	if !strings.Contains(out, "Do NOT treat") {
+		t.Error("context-length exclusion should be an explicit negative instruction, not implied")
+	}
+}

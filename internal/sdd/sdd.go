@@ -220,6 +220,14 @@ func Render(assignments map[string]string, efforts map[string]string, strictTDD 
 			}
 		}
 		b.WriteString("\n")
+
+		b.WriteString("**Detection**: treat the sub-agent result as exhaustion when the error text from an error/failure Task-tool result contains any of these (case-insensitive): `rate limit`, `quota exceeded`, `429`, `resource_exhausted`, `insufficient_quota`, `overloaded`, `capacity`. Do NOT treat `context length exceeded` as exhaustion — that is a per-request token limit, not a quota problem, and switching models does not fix it.\n\n")
+
+		b.WriteString("**Retry rule**: on detecting exhaustion for a phase with a configured fallback, retry that phase ONCE with the fallback model. If the Task tool accepts a `model` parameter at call time, pass the fallback model directly. If the Task tool does not accept a call-time model parameter (model is read-only from the agent file's frontmatter), report the exhaustion to the user with the intended fallback model and stop — never rewrite `.agent.md` files at runtime. This is a hard cap of one retry; there is no chained or rotating fallback list in this slice.\n\n")
+
+		b.WriteString("**Terminal rule**: stop the pipeline and report to the user when either (1) no fallback is configured for the exhausted phase, or (2) the fallback retry also fails — in case (2), report BOTH the primary and fallback failures, not just the latest.\n\n")
+
+		b.WriteString("**Forwarding**: when delegating a phase that has a configured fallback, include `fallback_model: <model>` as a machine-parseable line in the sub-agent handoff, alongside the existing model/effort forwarding.\n")
 	}
 
 	return b.String()
