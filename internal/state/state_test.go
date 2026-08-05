@@ -636,3 +636,95 @@ func TestLoadCopilotHooksBackwardCompat(t *testing.T) {
 		t.Errorf("CopilotHooks should be nil for a state.json predating this field, got %+v", st.CopilotHooks)
 	}
 }
+
+func TestSetIntegrity_RoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := &IntegrityRecord{
+		Enabled:   true,
+		Files:     []string{"/a/b.txt", "/a/c.txt"},
+		Checksums: map[string]string{"/a/b.txt": "sum-b", "/a/c.txt": "sum-c"},
+		Checksum:  "combined-sum",
+	}
+	if err := s.SetIntegrity(rec); err != nil {
+		t.Fatalf("SetIntegrity: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.Integrity == nil {
+		t.Fatal("Integrity should be set after SetIntegrity")
+	}
+	if !st.Integrity.Enabled {
+		t.Error("Enabled should be true")
+	}
+	if len(st.Integrity.Files) != 2 || st.Integrity.Files[0] != "/a/b.txt" || st.Integrity.Files[1] != "/a/c.txt" {
+		t.Errorf("Files = %v, want [/a/b.txt /a/c.txt]", st.Integrity.Files)
+	}
+	if st.Integrity.Checksums["/a/b.txt"] != "sum-b" || st.Integrity.Checksums["/a/c.txt"] != "sum-c" {
+		t.Errorf("Checksums = %v, want map with sum-b/sum-c", st.Integrity.Checksums)
+	}
+	if st.Integrity.Checksum != "combined-sum" {
+		t.Errorf("Checksum = %q, want combined-sum", st.Integrity.Checksum)
+	}
+}
+
+func TestSetIntegrity_NilClears(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetIntegrity(&IntegrityRecord{Enabled: true, Files: []string{"/a/b.txt"}}); err != nil {
+		t.Fatalf("SetIntegrity seed: %v", err)
+	}
+	if err := s.SetIntegrity(nil); err != nil {
+		t.Fatalf("SetIntegrity nil: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.Integrity != nil {
+		t.Errorf("Integrity should be nil after clear, got %+v", st.Integrity)
+	}
+}
+
+func TestSetIntegrity_UpdatedAt(t *testing.T) {
+	s := NewStore(t.TempDir())
+	before := time.Now().UTC()
+	if err := s.SetIntegrity(&IntegrityRecord{Enabled: true, Files: []string{"/a/b.txt"}}); err != nil {
+		t.Fatalf("SetIntegrity: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.UpdatedAt.Before(before) {
+		t.Errorf("UpdatedAt %v should be >= %v", st.UpdatedAt, before)
+	}
+}
+
+func TestIntegrityOmittedWhenNil(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.Apply("1.0.0", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(data, []byte("integrity")) {
+		t.Errorf("state without integrity should omit the key, got:\n%s", data)
+	}
+}
+
+func TestLoadIntegrityBackwardCompat(t *testing.T) {
+	// A state.json written before this field existed must still load cleanly,
+	// with Integrity left nil (unmanaged).
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(dir)
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.Integrity != nil {
+		t.Errorf("Integrity should be nil for a state.json predating this field, got %+v", st.Integrity)
+	}
+}

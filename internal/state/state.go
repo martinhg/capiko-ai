@@ -54,6 +54,10 @@ type State struct {
 	// unmanaged. When set, sync re-applies the guardrails hook file at the
 	// stored posture, mirroring Headroom/TeamSync.
 	CopilotHooks *CopilotHooksRecord `json:"copilot_hooks,omitempty"`
+	// Integrity records the managed protected-surface integrity manifest; nil =
+	// unmanaged. When set, drift detection re-hashes the declared files and
+	// compares against the recorded checksums.
+	Integrity *IntegrityRecord `json:"integrity,omitempty"`
 	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
 	// means "never checked" — the next launch will always call the API. The
 	// timestamp is advanced only on a successful check, so failures don't
@@ -120,6 +124,16 @@ type CopilotHooksRecord struct {
 	Posture  string   `json:"posture,omitempty"`  // off|warn|strict — drives RenderGuardrails
 	Presets  []string `json:"presets,omitempty"`  // active preset ids, e.g. ["guardrails"]
 	Checksum string   `json:"checksum,omitempty"` // CombinedChecksum of capiko-*.json
+}
+
+// IntegrityRecord is the managed protected-surface integrity manifest. capiko
+// snapshots the declared files and records per-file + combined SHA-256
+// checksums; drift detection re-hashes and compares. nil = unmanaged.
+type IntegrityRecord struct {
+	Enabled   bool              `json:"enabled"`
+	Files     []string          `json:"files"`               // protected file paths (absolute)
+	Checksums map[string]string `json:"checksums,omitempty"` // path → SHA-256
+	Checksum  string            `json:"checksum,omitempty"`  // combined SHA-256
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -406,6 +420,17 @@ func (s *Store) SetCopilotHooks(rec *CopilotHooksRecord) error {
 		return err
 	}
 	st.CopilotHooks = rec
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetIntegrity records the managed integrity manifest (nil = unmanaged).
+func (s *Store) SetIntegrity(rec *IntegrityRecord) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.Integrity = rec
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
