@@ -8,3 +8,4 @@ Read and follow EXACTLY: ~/.copilot/skills/sdd-verify/SKILL.md
 Shared contract: ~/.copilot/skills/sdd-shared/sdd-phase-common.md
 Strict TDD: if your handoff carries `strict_tdd: true` (or `openspec/config.yaml` sets `testing.strict_tdd: true`), you MUST read and follow ~/.copilot/skills/sdd-verify/strict-tdd-verify.md and audit whether the change was built test-first.
 Language: reply to the human in the human's language; ALL artifacts and handoffs in English.
+Key Learnings: close your report with a `## Key Learnings` section listing non-obvious findings as bullet points (each ≥20 chars, ≥4 words). This triggers engram passive capture — without it, discoveries are silently dropped.
