@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/catalog"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/doctor"
@@ -45,6 +46,7 @@ var gatherDoctorInputs = func() doctor.Inputs {
 		in.Catalog = cat
 	}
 	if agents, err := catalog.LoadAgents(); err == nil {
+		agents = agent.WithRouting(agents, st.SDDModels)
 		in.AgentDrift = drift.StaleAgents(agents, st)
 	}
 	if host != nil {

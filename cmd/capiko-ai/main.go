@@ -126,6 +126,15 @@ func main() {
 		fmt.Fprintln(os.Stderr, "capiko-ai: warning: backups disabled:", err)
 	}
 
+	// Route each SDD worker agent's model: frontmatter per the user's
+	// configured SDDModels before agentCat reaches postUpgradeSync or the TUI,
+	// so installed files and drift checks stay consistent (see agent.WithRouting).
+	if store != nil {
+		if st, err := store.Load(); err == nil {
+			agentCat = agent.WithRouting(agentCat, st.SDDModels)
+		}
+	}
+
 	// Post-upgrade sync: the previous process upgraded the binary and re-exec'd
 	// with this flag set, so this (new) binary syncs skills with its new catalog
 	// before the menu opens. Done here, not inside the TUI, so it runs with the
