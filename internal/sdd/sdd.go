@@ -97,8 +97,9 @@ func normalizeEfforts(e map[string]string) map[string]string {
 
 // Render builds the orchestrator instruction block for the given assignments.
 // When strictTDD is true, the block requires the apply/verify phases to follow
-// strict Test-Driven Development.
-func Render(assignments map[string]string, efforts map[string]string, strictTDD bool) string {
+// strict Test-Driven Development. fallback maps phase → fallback model; when no
+// phase has a configured fallback, the fallback section is omitted entirely.
+func Render(assignments map[string]string, efforts map[string]string, strictTDD bool, fallback map[string]string) string {
 	a := normalize(assignments)
 	e := normalizeEfforts(efforts)
 
