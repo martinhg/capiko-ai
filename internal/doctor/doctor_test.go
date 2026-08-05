@@ -425,6 +425,61 @@ func TestEvaluateUpdateCheckReportsLastTime(t *testing.T) {
 	}
 }
 
+func TestSessionVerificationCheck(t *testing.T) {
+	verifiedAt := time.Date(2026, 8, 4, 10, 0, 0, 0, time.UTC)
+	hooksEnabled := &state.State{Version: "1.2.1", CopilotHooks: &state.CopilotHooksRecord{Enabled: true, Posture: "warn"}}
+
+	tests := []struct {
+		name   string
+		in     Inputs
+		status Status
+	}{
+		{
+			name:   "hooks not enabled",
+			in:     Inputs{Env: healthyEnv(), CopilotHost: &copilot.Host{ConfigDir: "/home/u/.copilot"}, State: &state.State{Version: "1.2.1"}},
+			status: Pass,
+		},
+		{
+			name:   "hooks enabled, no verification report",
+			in:     Inputs{Env: healthyEnv(), CopilotHost: &copilot.Host{ConfigDir: "/home/u/.copilot"}, State: hooksEnabled},
+			status: Warn,
+		},
+		{
+			name: "hooks enabled, verification present with engram",
+			in: Inputs{
+				Env: healthyEnv(), CopilotHost: &copilot.Host{ConfigDir: "/home/u/.copilot"}, State: hooksEnabled,
+				SessionVerification: &SessionVerificationReport{
+					VerifiedAt: verifiedAt, Skills: 5, Agents: 3, Hooks: 2, MCPEngram: true, Instructions: true,
+				},
+			},
+			status: Pass,
+		},
+		{
+			name: "hooks enabled, verification present without engram",
+			in: Inputs{
+				Env: healthyEnv(), CopilotHost: &copilot.Host{ConfigDir: "/home/u/.copilot"}, State: hooksEnabled,
+				SessionVerification: &SessionVerificationReport{
+					VerifiedAt: verifiedAt, Skills: 5, Agents: 3, Hooks: 2, MCPEngram: false, Instructions: true,
+				},
+			},
+			status: Warn,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Evaluate(tc.in)
+			c := find(t, r, "Session verification")
+			if c.Status != tc.status {
+				t.Errorf("Session verification: want %v, got %v (%s)", tc.status, c.Status, c.Detail)
+			}
+			if tc.status == Warn && c.Remedy == "" {
+				t.Error("a Warn session verification check should carry a remedy")
+			}
+		})
+	}
+}
+
 // errString is a tiny error helper so tests don't import errors for one literal.
 type errString string
 

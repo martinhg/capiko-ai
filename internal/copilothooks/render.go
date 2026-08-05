@@ -130,6 +130,80 @@ func renderBashScript(decision string) string {
 	return script
 }
 
+// RenderSessionCheck renders the v1 session-verification hook file (G-CC2).
+// Unlike RenderGuardrails it takes no posture: the verification hook is
+// always the same script whenever hooks are enabled at all, and it never
+// blocks — it only writes a report of what it found. The hook fires on
+// EventSessionStart (once per Copilot CLI session) and counts capiko-owned
+// files under the resolved Copilot config dir, writing the result to
+// <config_dir>/.capiko-verified.json for `capiko-ai doctor` to read.
+func RenderSessionCheck() HookFile {
+	return HookFile{
+		Version: SchemaVersion,
+		Hooks: map[string][]Hook{
+			EventSessionStart: {{
+				Type:       "command",
+				Matcher:    "", // sessionStart is a session-level event, not tool-scoped
+				Bash:       renderSessionCheckBashScript(),
+				PowerShell: renderSessionCheckPowerShellScript(),
+				TimeoutSec: TimeoutSeconds,
+			}},
+		},
+	}
+}
+
+// renderSessionCheckBashScript builds the verification script executed via
+// the bash tool. It resolves the Copilot config dir, counts capiko-owned
+// skills/agents/hooks files, checks the MCP config and instructions file for
+// capiko wiring, and writes a JSON report. It always exits 0 (REQ:
+// verification is non-blocking — a failed check here must never break a
+// Copilot session).
+func renderSessionCheckBashScript() string {
+	return `config_dir="${COPILOT_HOME:-$HOME/.copilot}"
+skills=$(find "$config_dir/skills" -maxdepth 1 -name 'capiko-*.md' 2>/dev/null | wc -l | tr -d ' ')
+agents=$(find "$config_dir/agents" -maxdepth 1 -name 'capiko-sdd-*.agent.md' 2>/dev/null | wc -l | tr -d ' ')
+hooks=$(find "$config_dir/hooks" -maxdepth 1 -name 'capiko-*.json' 2>/dev/null | wc -l | tr -d ' ')
+mcp_ok=false
+if [ -f "$config_dir/mcp-config.json" ] && grep -q '"engram"' "$config_dir/mcp-config.json" 2>/dev/null; then mcp_ok=true; fi
+instructions_ok=false
+if [ -f "$config_dir/copilot-instructions.md" ] && grep -q 'capiko:' "$config_dir/copilot-instructions.md" 2>/dev/null; then instructions_ok=true; fi
+printf '{"verified_at":"%s","skills":%d,"agents":%d,"hooks":%d,"mcp_engram":%s,"instructions":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$skills" "$agents" "$hooks" "$mcp_ok" "$instructions_ok" > "$config_dir/.capiko-verified.json"
+exit 0
+`
+}
+
+// renderSessionCheckPowerShellScript is the PowerShell-syntax equivalent of
+// renderSessionCheckBashScript (ADR-5): same resolution, same counts, same
+// report shape, same non-blocking exit 0.
+func renderSessionCheckPowerShellScript() string {
+	return `$configDir = if ($env:COPILOT_HOME) { $env:COPILOT_HOME } else { Join-Path $env:USERPROFILE ".copilot" }
+$skills = (Get-ChildItem -Path (Join-Path $configDir "skills") -Filter "capiko-*.md" -File -ErrorAction SilentlyContinue).Count
+$agents = (Get-ChildItem -Path (Join-Path $configDir "agents") -Filter "capiko-sdd-*.agent.md" -File -ErrorAction SilentlyContinue).Count
+$hooks = (Get-ChildItem -Path (Join-Path $configDir "hooks") -Filter "capiko-*.json" -File -ErrorAction SilentlyContinue).Count
+$mcpOk = $false
+$mcpConfigPath = Join-Path $configDir "mcp-config.json"
+if (Test-Path $mcpConfigPath) {
+  if (Select-String -Path $mcpConfigPath -Pattern '"engram"' -Quiet -ErrorAction SilentlyContinue) { $mcpOk = $true }
+}
+$instructionsOk = $false
+$instructionsPath = Join-Path $configDir "copilot-instructions.md"
+if (Test-Path $instructionsPath) {
+  if (Select-String -Path $instructionsPath -Pattern 'capiko:' -Quiet -ErrorAction SilentlyContinue) { $instructionsOk = $true }
+}
+$verifiedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+$report = [ordered]@{
+  verified_at = $verifiedAt
+  skills = $skills
+  agents = $agents
+  hooks = $hooks
+  mcp_engram = $mcpOk
+  instructions = $instructionsOk
+}
+($report | ConvertTo-Json -Compress) | Set-Content -Path (Join-Path $configDir ".capiko-verified.json")
+exit 0
+`
+}
+
 // renderPowerShellScript is the PowerShell-syntax equivalent of
 // renderBashScript, implementing the same four patterns and the same
 // permissionDecision contract (REQ-5.2). It is always rendered alongside the

@@ -111,6 +111,21 @@ type Inputs struct {
 	// declared depends_on edges so Evaluate can flag installed skills whose
 	// dependencies are not also installed.
 	Catalog []skill.Skill
+
+	// SessionVerification is the parsed content of <configDir>/.capiko-verified.json,
+	// written by the sessionStart verification hook. nil = file not found or unparseable.
+	SessionVerification *SessionVerificationReport
+}
+
+// SessionVerificationReport is the parsed report written by the sessionStart
+// verification hook (G-CC2) to <configDir>/.capiko-verified.json.
+type SessionVerificationReport struct {
+	VerifiedAt   time.Time
+	Skills       int
+	Agents       int
+	Hooks        int
+	MCPEngram    bool
+	Instructions bool
 }
 
 // requiredDeps are the prerequisites capiko cannot work without; each gets its
@@ -202,7 +217,61 @@ func Evaluate(in Inputs) Report {
 	// compression but never installs it. Warns only when wired yet the CLI is gone.
 	r.Checks = append(r.Checks, headroomCheck(in))
 
+	// Session verification (G-CC2): the sessionStart Copilot hook writes a
+	// report of what it found on disk each session; this check surfaces
+	// whether that report exists and what it says.
+	r.Checks = append(r.Checks, sessionVerificationCheck(in))
+
 	return r
+}
+
+// sessionVerificationCheck reports on the sessionStart hook's verification
+// report (G-CC2). It is only meaningful when capiko has enabled managed
+// Copilot hooks at all — the hook that writes the report is itself part of
+// that wiring. A managed-but-absent report means the hook has not run yet
+// (no Copilot session started since hooks were enabled); that is informational,
+// not a failure, since it self-heals on the next session start.
+func sessionVerificationCheck(in Inputs) Check {
+	managed := in.State != nil && in.State.CopilotHooks != nil && in.State.CopilotHooks.Enabled
+	if !managed {
+		return Check{Name: "Session verification", Status: Pass, Detail: "n/a (hooks not enabled)"}
+	}
+	rep := in.SessionVerification
+	if rep == nil {
+		return Check{
+			Name: "Session verification", Status: Warn,
+			Detail: "session verification hook has not run yet — start a Copilot session to verify",
+			Remedy: "open a Copilot session; the sessionStart hook will write a verification report",
+		}
+	}
+	if !rep.MCPEngram {
+		return Check{
+			Name: "Session verification", Status: Warn,
+			Detail: sessionVerificationDetail(in, rep),
+			Remedy: "run Sync in capiko-ai to re-apply the engram wiring",
+		}
+	}
+	return Check{Name: "Session verification", Status: Pass, Detail: sessionVerificationDetail(in, rep)}
+}
+
+// sessionVerificationDetail renders the parsed report as a single detail
+// line, including a relative "verified X ago" suffix when Now is set.
+func sessionVerificationDetail(in Inputs, rep *SessionVerificationReport) string {
+	detail := fmt.Sprintf("%d skills, %d agents, %d hooks, engram: %s, instructions: %s",
+		rep.Skills, rep.Agents, rep.Hooks, yesNo(rep.MCPEngram), yesNo(rep.Instructions))
+	if !in.Now.IsZero() && !rep.VerifiedAt.IsZero() {
+		ago := in.Now.Sub(rep.VerifiedAt).Round(time.Minute)
+		detail += fmt.Sprintf(" (verified %s ago)", ago)
+	}
+	return detail
+}
+
+// yesNo renders a bool as "yes"/"no" for compact detail lines.
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
 
 // headroomCheck reports the state of the optional headroom context-compression

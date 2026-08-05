@@ -3,7 +3,9 @@ package copilothooks_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -190,6 +192,87 @@ func TestRenderGuardrails_PowerShellParity(t *testing.T) {
 		if wantCount != len(reasons) {
 			t.Errorf("posture %s: PowerShell script has %d decision occurrences, want %d", pd.posture, wantCount, len(reasons))
 		}
+	}
+}
+
+func TestRenderSessionCheck(t *testing.T) {
+	hf := copilothooks.RenderSessionCheck()
+
+	if hf.Version != copilothooks.SchemaVersion {
+		t.Errorf("Version = %d, want %d", hf.Version, copilothooks.SchemaVersion)
+	}
+	hooks, ok := hf.Hooks[copilothooks.EventSessionStart]
+	if !ok || len(hooks) != 1 {
+		t.Fatalf("Hooks[%s] = %v, want exactly one entry", copilothooks.EventSessionStart, hooks)
+	}
+	h := hooks[0]
+	if h.Type != "command" {
+		t.Errorf("Type = %q, want command", h.Type)
+	}
+	if h.Matcher != "" {
+		t.Errorf("Matcher = %q, want empty (sessionStart has no tool to match)", h.Matcher)
+	}
+	if h.TimeoutSec != copilothooks.TimeoutSeconds {
+		t.Errorf("TimeoutSec = %d, want %d", h.TimeoutSec, copilothooks.TimeoutSeconds)
+	}
+
+	for _, marker := range []string{"COPILOT_HOME", ".capiko-verified.json", "capiko-"} {
+		if !strings.Contains(h.Bash, marker) {
+			t.Errorf("Bash script missing marker %q", marker)
+		}
+	}
+	for _, marker := range []string{"COPILOT_HOME", ".capiko-verified.json"} {
+		if !strings.Contains(h.PowerShell, marker) {
+			t.Errorf("PowerShell script missing marker %q", marker)
+		}
+	}
+
+	data, err := copilothooks.Marshal(hf)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var round copilothooks.HookFile
+	if err := json.Unmarshal(data, &round); err != nil {
+		t.Fatalf("Marshal output is not valid JSON: %v", err)
+	}
+}
+
+// TestRenderSessionCheck_BashRunsCleanly executes the rendered bash script
+// end to end against a temp COPILOT_HOME, verifying it always exits 0
+// (non-blocking, per spec) and writes a parseable .capiko-verified.json.
+func TestRenderSessionCheck_BashRunsCleanly(t *testing.T) {
+	tmp := t.TempDir()
+	hf := copilothooks.RenderSessionCheck()
+	script := hf.Hooks[copilothooks.EventSessionStart][0].Bash
+
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Env = append(os.Environ(), "COPILOT_HOME="+tmp)
+	var errOut bytes.Buffer
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("run session check script: %v\nstderr: %s", err, errOut.String())
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, ".capiko-verified.json"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	var report struct {
+		VerifiedAt   string `json:"verified_at"`
+		Skills       int    `json:"skills"`
+		Agents       int    `json:"agents"`
+		Hooks        int    `json:"hooks"`
+		MCPEngram    bool   `json:"mcp_engram"`
+		Instructions bool   `json:"instructions"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("unmarshal report: %v\ndata: %s", err, data)
+	}
+	if report.VerifiedAt == "" {
+		t.Error("report.VerifiedAt is empty")
+	}
+	if report.MCPEngram || report.Instructions {
+		t.Errorf("empty config dir: want mcp_engram/instructions false, got %+v", report)
 	}
 }
 
