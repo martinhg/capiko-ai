@@ -99,6 +99,10 @@ type Inputs struct {
 	// versions.Engram). It drives the "Engram version" advisory; "" disables it.
 	RecommendedEngram string
 
+	// TargetCopilotCLI is the Copilot CLI version capiko targets (from
+	// versions.CopilotCLI). It drives the version-skew advisory; "" disables it.
+	TargetCopilotCLI string
+
 	// HeadroomDetected is whether the headroom context-compression CLI is on PATH
 	// (from headroom.Detected()). Informational: capiko can wire it, but never
 	// installs it.
@@ -166,6 +170,13 @@ func Evaluate(in Inputs) Report {
 			r.add("Copilot config", Warn, "Copilot is installed but not initialized (~/.copilot missing)",
 				"run `copilot` once and sign in, then re-run `capiko-ai doctor`")
 		}
+	}
+
+	// Copilot CLI version: compares the installed binary against the version
+	// capiko is tested against. Only emitted when copilot is found and a target
+	// is set.
+	if c, ok := copilotVersionCheck(in); ok {
+		r.Checks = append(r.Checks, c)
 	}
 
 	// State file.
@@ -391,6 +402,40 @@ func engramVersionCheck(in Inputs) (Check, bool) {
 		detail += " (recommended " + in.RecommendedEngram + ")"
 	}
 	return Check{Name: "Engram version", Status: Pass, Detail: detail}, true
+}
+
+// copilotVersionCheck reports whether the installed Copilot CLI is behind
+// the version capiko targets. Only emitted when the copilot binary is found
+// and a target is set. A version skew is a Warn, not Fail: capiko may still
+// work, but the config/schema contract is version-specific and could silently
+// diverge. Mirrors engramVersionCheck.
+func copilotVersionCheck(in Inputs) (Check, bool) {
+	if in.TargetCopilotCLI == "" {
+		return Check{}, false
+	}
+	dep, ok := findDep(in.Env, "copilot")
+	if !ok || !dep.Found {
+		return Check{}, false // already covered by the required-dep check
+	}
+	if dep.Version == "" {
+		return Check{
+			Name:   "Copilot CLI version",
+			Status: Warn,
+			Detail: "copilot found but version could not be parsed",
+			Remedy: "run `copilot --version` manually; capiko targets " + in.TargetCopilotCLI,
+		}, true
+	}
+	if dep.Version != in.TargetCopilotCLI {
+		status := Warn
+		detail := fmt.Sprintf("copilot %s differs from the targeted %s", dep.Version, in.TargetCopilotCLI)
+		remedy := fmt.Sprintf("capiko is tested against Copilot CLI %s; your version may work but the config contract could differ", in.TargetCopilotCLI)
+		return Check{Name: "Copilot CLI version", Status: status, Detail: detail, Remedy: remedy}, true
+	}
+	return Check{
+		Name:   "Copilot CLI version",
+		Status: Pass,
+		Detail: fmt.Sprintf("copilot %s matches the targeted version", dep.Version),
+	}, true
 }
 
 // versionLabel renders a possibly-empty version string for display.

@@ -26,6 +26,7 @@ var gatherDoctorInputs = func() doctor.Inputs {
 		Env:               sysinfo.Detect(),
 		Now:               time.Now(),
 		RecommendedEngram: versions.Engram,
+		TargetCopilotCLI:  versions.CopilotCLI,
 		HeadroomDetected:  headroom.Detected(),
 	}
 

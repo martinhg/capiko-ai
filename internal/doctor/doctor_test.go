@@ -484,3 +484,86 @@ func TestSessionVerificationCheck(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestCopilotVersionSkew_MatchIsPass(t *testing.T) {
+	in := Inputs{
+		Env:              healthyEnv(),
+		CopilotHost:      &copilot.Host{ConfigDir: "/home/u/.copilot"},
+		TargetCopilotCLI: "0.0.1", // matches healthyEnv's copilot version
+	}
+	r := Evaluate(in)
+	c := find(t, r, "Copilot CLI version")
+	if c.Status != Pass {
+		t.Errorf("matching version: want Pass, got %v (%s)", c.Status, c.Detail)
+	}
+}
+
+func TestCopilotVersionSkew_DiffWarns(t *testing.T) {
+	in := Inputs{
+		Env:              healthyEnv(),
+		CopilotHost:      &copilot.Host{ConfigDir: "/home/u/.copilot"},
+		TargetCopilotCLI: "1.0.60",
+	}
+	r := Evaluate(in)
+	c := find(t, r, "Copilot CLI version")
+	if c.Status != Warn {
+		t.Errorf("version skew: want Warn, got %v (%s)", c.Status, c.Detail)
+	}
+	if !strings.Contains(c.Detail, "0.0.1") || !strings.Contains(c.Detail, "1.0.60") {
+		t.Errorf("detail should mention both versions, got %q", c.Detail)
+	}
+}
+
+func TestCopilotVersionSkew_SkippedWhenNoTarget(t *testing.T) {
+	in := Inputs{
+		Env:         healthyEnv(),
+		CopilotHost: &copilot.Host{ConfigDir: "/home/u/.copilot"},
+	}
+	r := Evaluate(in)
+	for _, c := range r.Checks {
+		if c.Name == "Copilot CLI version" {
+			t.Error("version check should not appear when TargetCopilotCLI is empty")
+		}
+	}
+}
+
+func TestCopilotVersionSkew_SkippedWhenCopilotMissing(t *testing.T) {
+	env := healthyEnv()
+	// Remove copilot from deps
+	var filtered []sysinfo.Dependency
+	for _, d := range env.Dependencies {
+		if d.Name != "copilot" {
+			filtered = append(filtered, d)
+		}
+	}
+	env.Dependencies = filtered
+	in := Inputs{
+		Env:              env,
+		TargetCopilotCLI: "1.0.60",
+	}
+	r := Evaluate(in)
+	for _, c := range r.Checks {
+		if c.Name == "Copilot CLI version" {
+			t.Error("version check should not appear when copilot is not found")
+		}
+	}
+}
+
+func TestCopilotVersionSkew_UnparseableVersionWarns(t *testing.T) {
+	env := healthyEnv()
+	for i, d := range env.Dependencies {
+		if d.Name == "copilot" {
+			env.Dependencies[i].Version = ""
+		}
+	}
+	in := Inputs{
+		Env:              env,
+		CopilotHost:      &copilot.Host{ConfigDir: "/home/u/.copilot"},
+		TargetCopilotCLI: "1.0.60",
+	}
+	r := Evaluate(in)
+	c := find(t, r, "Copilot CLI version")
+	if c.Status != Warn {
+		t.Errorf("unparseable version: want Warn, got %v", c.Status)
+	}
+}
