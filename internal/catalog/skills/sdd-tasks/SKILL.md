@@ -15,7 +15,7 @@ delegated this phase to you. Do the work below; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–G before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
@@ -86,8 +86,3 @@ Order phases so each depends only on earlier ones:
 5. **Cleanup** (if needed) — docs, remove dead code, polish.
 
 Keep the artifact tight: each task is 1–2 lines in checklist form, not prose.
-
-## Language
-
-SDD artifacts are written in English regardless of the conversation language,
-unless the user explicitly requests another language.
