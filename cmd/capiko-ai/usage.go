@@ -11,6 +11,7 @@ import (
 // commands is the canonical list of subcommands for usage and did-you-mean.
 // Keep sorted. Each entry is name → one-line description.
 var commands = map[string]string{
+	"backup":         "List or restore skill backups",
 	"doctor":         "Run ecosystem health checks",
 	"help":           "Show this help message",
 	"install":        "Install all catalog skills and agents",
