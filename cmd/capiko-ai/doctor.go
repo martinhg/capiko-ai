@@ -58,6 +58,9 @@ var gatherDoctorInputs = func() doctor.Inputs {
 	}
 	if host != nil {
 		in.SessionVerification = readSessionVerification(host.ConfigDir)
+		if data, err := os.ReadFile(filepath.Join(host.ConfigDir, "copilot-instructions.md")); err == nil {
+			in.InstructionsContent = string(data)
+		}
 	}
 	return in
 }

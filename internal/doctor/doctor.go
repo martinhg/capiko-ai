@@ -119,6 +119,10 @@ type Inputs struct {
 	// SessionVerification is the parsed content of <configDir>/.capiko-verified.json,
 	// written by the sessionStart verification hook. nil = file not found or unparseable.
 	SessionVerification *SessionVerificationReport
+
+	// InstructionsContent is the raw content of copilot-instructions.md.
+	// Empty string means the file does not exist or is unreadable.
+	InstructionsContent string
 }
 
 // SessionVerificationReport is the parsed report written by the sessionStart
@@ -232,6 +236,10 @@ func Evaluate(in Inputs) Report {
 	// report of what it found on disk each session; this check surfaces
 	// whether that report exists and what it says.
 	r.Checks = append(r.Checks, sessionVerificationCheck(in))
+
+	// Instruction budget (F-AI2): measures capiko's managed blocks inside
+	// copilot-instructions.md and warns when the total exceeds a threshold.
+	r.Checks = append(r.Checks, instructionBudgetCheck(in))
 
 	return r
 }
@@ -444,6 +452,84 @@ func versionLabel(v string) string {
 		return "(version unknown)"
 	}
 	return v
+}
+
+// managedBlock is a capiko-managed section inside copilot-instructions.md.
+type managedBlock struct {
+	name  string
+	start string
+	end   string
+}
+
+var managedBlocks = []managedBlock{
+	{"persona", "<!-- capiko:persona:start -->", "<!-- capiko:persona:end -->"},
+	{"sdd", "<!-- capiko:sdd:start -->", "<!-- capiko:sdd:end -->"},
+	{"efficiency", "<!-- capiko:efficiency:start -->", "<!-- capiko:efficiency:end -->"},
+	{"headroom", "<!-- capiko:headroom:start -->", "<!-- capiko:headroom:end -->"},
+	{"memory", "<!-- capiko:memory:start -->", "<!-- capiko:memory:end -->"},
+	{"trigger", "<!-- capiko:trigger:start -->", "<!-- capiko:trigger:end -->"},
+	{"review", "<!-- capiko:review:start -->", "<!-- capiko:review:end -->"},
+}
+
+// InstructionBudgetWarnBytes is the threshold above which the instruction
+// budget check emits a warning. ~32 KB ≈ ~8k tokens — a meaningful fraction
+// of Copilot's context window.
+const InstructionBudgetWarnBytes = 32 * 1024
+
+// instructionBudgetCheck measures capiko's managed blocks inside
+// copilot-instructions.md and warns when the total exceeds a threshold.
+func instructionBudgetCheck(in Inputs) Check {
+	content := in.InstructionsContent
+	if content == "" {
+		return Check{
+			Name:   "Instruction budget",
+			Status: Pass,
+			Detail: "no instructions file found",
+		}
+	}
+
+	total := len(content)
+	var parts []string
+	var managed int
+	for _, b := range managedBlocks {
+		si := strings.Index(content, b.start)
+		ei := strings.Index(content, b.end)
+		if si < 0 || ei <= si {
+			continue
+		}
+		size := ei + len(b.end) - si
+		managed += size
+		parts = append(parts, fmt.Sprintf("%s %s", b.name, humanSize(size)))
+	}
+
+	unmanaged := total - managed
+	detail := fmt.Sprintf("total %s", humanSize(total))
+	if len(parts) > 0 {
+		detail += fmt.Sprintf(" (managed: %s — %s", humanSize(managed), strings.Join(parts, ", "))
+		if unmanaged > 0 {
+			detail += fmt.Sprintf("; user content %s", humanSize(unmanaged))
+		}
+		detail += ")"
+	}
+
+	if total > InstructionBudgetWarnBytes {
+		return Check{
+			Name:   "Instruction budget",
+			Status: Warn,
+			Detail: detail,
+			Remedy: fmt.Sprintf("instructions file exceeds %s; consider disabling unused blocks in capiko-ai", humanSize(InstructionBudgetWarnBytes)),
+		}
+	}
+	return Check{Name: "Instruction budget", Status: Pass, Detail: detail}
+}
+
+func humanSize(b int) string {
+	switch {
+	case b >= 1024:
+		return fmt.Sprintf("%.1f KB", float64(b)/1024)
+	default:
+		return fmt.Sprintf("%d B", b)
+	}
 }
 
 // updateCheck reports the last successful GitHub release check. A nil state or
