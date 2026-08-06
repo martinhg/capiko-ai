@@ -4,18 +4,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/skill"
 )
 
-// TestLoadAgents_ReturnsNine exercises the embedded agents catalog at test
+// jdJudgeNames is the canonical list of the two blind Judgment-Day judges.
+var jdJudgeNames = []string{"capiko-jd-judge-a", "capiko-jd-judge-b"}
+
+// TestLoadAgents_ReturnsTwelve exercises the embedded agents catalog at test
 // time so any authoring error is caught before the binary ships.
-func TestLoadAgents_ReturnsNine(t *testing.T) {
+func TestLoadAgents_ReturnsTwelve(t *testing.T) {
 	agents, err := LoadAgents()
 	if err != nil {
 		t.Fatalf("LoadAgents error: %v", err)
 	}
-	if len(agents) != 9 {
-		t.Fatalf("expected 9 agents from embedded catalog, got %d", len(agents))
+	if len(agents) != 12 {
+		t.Fatalf("expected 12 agents from embedded catalog, got %d", len(agents))
 	}
 	for _, a := range agents {
 		if a.Name == "" {
@@ -26,6 +30,120 @@ func TestLoadAgents_ReturnsNine(t *testing.T) {
 		}
 		if a.Content == "" {
 			t.Errorf("agent %q has empty content", a.Name)
+		}
+	}
+}
+
+// TestJDJudges_NoEditTool pins the Judgment-Day judge agent shape: judges are
+// blind adversarial reviewers that must never modify code, so their `tools:`
+// list must contain read/search/execute but never edit.
+func TestJDJudges_NoEditTool(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	byName := map[string]agent.Agent{}
+	for _, a := range agents {
+		byName[a.Name] = a
+	}
+
+	for _, name := range jdJudgeNames {
+		a, ok := byName[name]
+		if !ok {
+			t.Errorf("judge %q not found in catalog", name)
+			continue
+		}
+		fm, err := agent.ParseFrontmatter(a.Content)
+		if err != nil {
+			t.Errorf("judge %q: frontmatter parse error: %v", name, err)
+			continue
+		}
+		if fm.UserInvocable {
+			t.Errorf("judge %q: user-invocable must be false", name)
+		}
+		toolSet := map[string]bool{}
+		for _, tool := range fm.Tools {
+			toolSet[tool] = true
+		}
+		for _, want := range []string{"read", "search", "execute"} {
+			if !toolSet[want] {
+				t.Errorf("judge %q: tools must include %q, got %v", name, want, fm.Tools)
+			}
+		}
+		if toolSet["edit"] {
+			t.Errorf("judge %q: tools must NOT include edit, got %v", name, fm.Tools)
+		}
+	}
+}
+
+// TestJDFixAgent_ScopedToConfirmedIssues pins the fix agent's write access and
+// its scope: it MUST declare edit (it needs write access to fix code) and its
+// body MUST restrict fixes to issues both judges jointly confirmed, never
+// open-ended changes.
+func TestJDFixAgent_ScopedToConfirmedIssues(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	var fix *agent.Agent
+	for i := range agents {
+		if agents[i].Name == "capiko-jd-fix-agent" {
+			fix = &agents[i]
+			break
+		}
+	}
+	if fix == nil {
+		t.Fatal("capiko-jd-fix-agent not found in catalog")
+	}
+
+	fm, err := agent.ParseFrontmatter(fix.Content)
+	if err != nil {
+		t.Fatalf("capiko-jd-fix-agent: frontmatter parse error: %v", err)
+	}
+	if fm.UserInvocable {
+		t.Error("capiko-jd-fix-agent: user-invocable must be false")
+	}
+	toolSet := map[string]bool{}
+	for _, tool := range fm.Tools {
+		toolSet[tool] = true
+	}
+	for _, want := range []string{"read", "edit", "search", "execute"} {
+		if !toolSet[want] {
+			t.Errorf("capiko-jd-fix-agent: tools must include %q, got %v", want, fm.Tools)
+		}
+	}
+	if !strings.Contains(fix.Content, "confirmed") {
+		t.Error("capiko-jd-fix-agent body must restrict edits to jointly-confirmed issues")
+	}
+}
+
+// TestCoordinator_JudgmentDayProtocol pins the coordinator's ownership of JD
+// routing: the body must describe the protocol, launch both judges before a
+// PR, and delegate only jointly-confirmed findings to the fix agent.
+func TestCoordinator_JudgmentDayProtocol(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	var coord string
+	for _, a := range agents {
+		if a.Name == "capiko-sdd-coordinator" {
+			coord = a.Content
+			break
+		}
+	}
+	if coord == "" {
+		t.Fatal("capiko-sdd-coordinator not found in catalog")
+	}
+	for _, want := range []string{
+		"Judgment-Day Protocol",
+		"capiko-jd-judge-a",
+		"capiko-jd-judge-b",
+		"capiko-jd-fix-agent",
+		"confirmed",
+	} {
+		if !strings.Contains(coord, want) {
+			t.Errorf("coordinator body must contain %q", want)
 		}
 	}
 }

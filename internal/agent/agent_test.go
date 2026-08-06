@@ -13,14 +13,14 @@ import (
 
 // --- Phase 1.1: Domain type tests ---
 
-func TestLoadCatalog_ReturnsNineAgents(t *testing.T) {
+func TestLoadCatalog_ReturnsTwelveAgents(t *testing.T) {
 	fsys := makeValidCatalog(t)
 	agents, err := agent.LoadCatalog(fsys)
 	if err != nil {
 		t.Fatalf("LoadCatalog error: %v", err)
 	}
-	if len(agents) != 9 {
-		t.Fatalf("expected 9 agents, got %d", len(agents))
+	if len(agents) != 12 {
+		t.Fatalf("expected 12 agents, got %d", len(agents))
 	}
 }
 
@@ -136,6 +136,13 @@ var allPhases = []string{
 	"capiko-sdd-archive",
 }
 
+// jdAgents is the canonical list of the 3 Judgment-Day agent names.
+var jdAgents = []string{
+	"capiko-jd-judge-a",
+	"capiko-jd-judge-b",
+	"capiko-jd-fix-agent",
+}
+
 // allowedTools is the complete set of valid Copilot tool aliases.
 var allowedTools = map[string]bool{
 	"read": true, "edit": true, "search": true, "execute": true, "agent": true,
@@ -208,23 +215,24 @@ func TestCatalog_CoordinatorAllowlist(t *testing.T) {
 		t.Fatalf("coordinator frontmatter parse error: %v", err)
 	}
 
-	if len(fm.Agents) != len(allPhases) {
-		t.Errorf("coordinator agents allowlist: got %d entries, want %d", len(fm.Agents), len(allPhases))
+	wantAgents := append(append([]string{}, allPhases...), jdAgents...)
+	if len(fm.Agents) != len(wantAgents) {
+		t.Errorf("coordinator agents allowlist: got %d entries, want %d", len(fm.Agents), len(wantAgents))
 	}
 	allowlist := make(map[string]bool, len(fm.Agents))
 	for _, n := range fm.Agents {
 		allowlist[n] = true
 	}
-	for _, phase := range allPhases {
-		if !allowlist[phase] {
-			t.Errorf("coordinator agents allowlist missing %q", phase)
+	for _, want := range wantAgents {
+		if !allowlist[want] {
+			t.Errorf("coordinator agents allowlist missing %q", want)
 		}
 	}
-	// No extras beyond the 8 workers.
+	// No extras beyond the 8 workers and 3 JD agents.
 	for _, n := range fm.Agents {
 		found := false
-		for _, phase := range allPhases {
-			if n == phase {
+		for _, want := range wantAgents {
+			if n == want {
 				found = true
 				break
 			}
@@ -539,10 +547,11 @@ func indexByName(agents []agent.Agent) map[string]agent.Agent {
 	return m
 }
 
-// makeValidCatalog returns an fstest.MapFS with 9 minimal valid .agent.md files.
+// makeValidCatalog returns an fstest.MapFS with 12 minimal valid .agent.md files.
 func makeValidCatalog(t *testing.T) fs.FS {
 	t.Helper()
 	names := append(append([]string{}, allPhases...), "capiko-sdd-coordinator")
+	names = append(names, jdAgents...)
 	fsys := fstest.MapFS{}
 	for _, name := range names {
 		fsys[name+".agent.md"] = &fstest.MapFile{
