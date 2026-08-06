@@ -19,8 +19,9 @@ re-derive state, paths, or edit scope from loose prose:
   orchestrator and each phase executor (schema, dependency states, edit-scope
   guard).
 - `sdd-phase-common.md` — the boilerplate every SDD phase agent shares: the
-  executor boundary (gate), artifact retrieval/persistence, the return envelope,
-  and the review-workload guard.
+  gate protocol (orchestrator routing + executor boundary), skill loading,
+  artifact retrieval/persistence, the return envelope, and the review-workload
+  guard.
 
 ## Not Invokable
 

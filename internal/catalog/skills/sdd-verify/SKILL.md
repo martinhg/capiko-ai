@@ -15,17 +15,8 @@ delegated this phase to you. Review independently; do not delegate.
 
 ## Gate
 
-**Orchestrator**: if this skill is loaded in your context, do NOT run the phase
-inline — DELEGATE it to a fresh sub-agent, passing the change name and artifact
-paths. Before delegating, run `capiko-ai sdd-status --cwd <repo> --json` to resolve
-the active change and route by its `nextRecommended` (fall back to
-`~/.copilot/skills/sdd-shared/sdd-status-contract.md` when the binary is
-unavailable). Running phase work yourself is an orchestration error.
-
-**Executor sub-agent**: before the work below, read
-`~/.copilot/skills/sdd-shared/sdd-phase-common.md` (executor boundary, artifact
-retrieval/persistence over the OpenSpec store, the return envelope, and the
-review-workload guard). Run this phase yourself; do not re-delegate.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–G before work.
+Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
 

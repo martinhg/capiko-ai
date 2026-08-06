@@ -3,13 +3,18 @@
 Boilerplate shared by every SDD phase skill. Sub-agents MUST load this alongside
 their phase-specific `SKILL.md`.
 
-## A. Executor Boundary (Gate)
+## A. Gate Protocol
 
-Every SDD phase agent is an **EXECUTOR**, not an orchestrator. Do the phase work
-yourself. Do NOT launch sub-agents, do NOT delegate or bounce work back, and do
-NOT call orchestration tools. Stop and report a blocker only when your phase skill
-explicitly says to. If you were handed a phase, you run its body — you do not
-re-plan or hand it to someone else.
+**Orchestrator**: if a phase skill is loaded in your context, do NOT run the
+phase inline — DELEGATE to a fresh sub-agent with the change name and artifact
+paths. Before delegating, run `capiko-ai sdd-status --cwd <repo> --json` to
+route by `nextRecommended` (fall back to `sdd-status-contract.md` when the
+binary is unavailable). Running a phase yourself is an orchestration error.
+
+**Executor**: you are the sub-agent the orchestrator launched. Run the phase
+body yourself — do NOT launch further sub-agents, delegate, or bounce work
+back. Do NOT call orchestration tools. Stop and report a blocker only when
+the phase skill explicitly says to.
 
 ## B. Skill Loading
 
