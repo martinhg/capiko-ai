@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,12 @@ func readSkill(t *testing.T, skillsDir, name string) string {
 // A standalone file is snapshotted and restored to its original path.
 func TestCreateFilesAndRestore(t *testing.T) {
 	store := NewStore(t.TempDir())
-	target := filepath.Join(t.TempDir(), "copilot-instructions.md")
+	configDir := t.TempDir()
+	skillsDir := filepath.Join(configDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(configDir, "copilot-instructions.md")
 	if err := os.WriteFile(target, []byte("v1"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +53,7 @@ func TestCreateFilesAndRestore(t *testing.T) {
 	if err := os.WriteFile(target, []byte("v2"), 0o644); err != nil { // mutate
 		t.Fatal(err)
 	}
-	if err := store.Restore(t.TempDir(), id); err != nil {
+	if err := store.Restore(skillsDir, id); err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 	if data, _ := os.ReadFile(target); string(data) != "v1" {
@@ -58,7 +64,12 @@ func TestCreateFilesAndRestore(t *testing.T) {
 // Restoring a files backup taken before the file existed removes it.
 func TestRestoreRemovesNewlyCreatedFile(t *testing.T) {
 	store := NewStore(t.TempDir())
-	target := filepath.Join(t.TempDir(), "copilot-instructions.md") // does not exist yet
+	configDir := t.TempDir()
+	skillsDir := filepath.Join(configDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(configDir, "copilot-instructions.md") // does not exist yet
 
 	id, err := store.CreateFiles("persona", "1.0.0", []string{target})
 	if err != nil {
@@ -67,7 +78,7 @@ func TestRestoreRemovesNewlyCreatedFile(t *testing.T) {
 	if err := os.WriteFile(target, []byte("created later"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Restore(t.TempDir(), id); err != nil {
+	if err := store.Restore(skillsDir, id); err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -229,5 +240,112 @@ func TestDeleteRemovesBackupButRefusesNonBackup(t *testing.T) {
 
 	if err := store.Delete("does-not-exist"); err == nil {
 		t.Error("Delete should refuse a non-backup id")
+	}
+}
+
+func TestRestoreRejectsTraversalInSkillName(t *testing.T) {
+	skillsDir := t.TempDir()
+	storeDir := t.TempDir()
+	store := NewStore(storeDir)
+	writeSkill(t, skillsDir, "legit", "ok")
+
+	id, err := store.Create(skillsDir, "install", "1.0.0", []string{"legit"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	manPath := filepath.Join(storeDir, id, "manifest.json")
+	data, err := os.ReadFile(manPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var man Manifest
+	if err := json.Unmarshal(data, &man); err != nil {
+		t.Fatal(err)
+	}
+	man.Entries[0].Skill = "../escape"
+	poisoned, _ := json.Marshal(man)
+	if err := os.WriteFile(manPath, poisoned, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Restore(skillsDir, id); err == nil {
+		t.Fatal("Restore should refuse a skill name that escapes skillsDir")
+	}
+}
+
+func TestRestoreRejectsFilePathOutsideAllowedRoot(t *testing.T) {
+	configDir := t.TempDir()
+	skillsDir := filepath.Join(configDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storeDir := t.TempDir()
+	store := NewStore(storeDir)
+
+	legitimate := filepath.Join(configDir, "copilot-instructions.md")
+	if err := os.WriteFile(legitimate, []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, err := store.CreateFiles("persona", "1.0.0", []string{legitimate})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manPath := filepath.Join(storeDir, id, "manifest.json")
+	data, err := os.ReadFile(manPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var man Manifest
+	if err := json.Unmarshal(data, &man); err != nil {
+		t.Fatal(err)
+	}
+	man.Files[0].Path = "/etc/passwd"
+	poisoned, _ := json.Marshal(man)
+	if err := os.WriteFile(manPath, poisoned, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Restore(skillsDir, id); err == nil {
+		t.Fatal("Restore should refuse a file path outside allowed roots")
+	}
+}
+
+func TestRestoreRejectsRelativeFilePath(t *testing.T) {
+	configDir := t.TempDir()
+	skillsDir := filepath.Join(configDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storeDir := t.TempDir()
+	store := NewStore(storeDir)
+
+	legitimate := filepath.Join(configDir, "instructions.md")
+	if err := os.WriteFile(legitimate, []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, err := store.CreateFiles("persona", "1.0.0", []string{legitimate})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manPath := filepath.Join(storeDir, id, "manifest.json")
+	data, err := os.ReadFile(manPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var man Manifest
+	if err := json.Unmarshal(data, &man); err != nil {
+		t.Fatal(err)
+	}
+	man.Files[0].Path = "../../etc/shadow"
+	poisoned, _ := json.Marshal(man)
+	if err := os.WriteFile(manPath, poisoned, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Restore(skillsDir, id); err == nil {
+		t.Fatal("Restore should refuse a relative file path")
 	}
 }

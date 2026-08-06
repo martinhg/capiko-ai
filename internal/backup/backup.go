@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -164,7 +165,12 @@ func (s *Store) Restore(skillsDir, id string) error {
 	if err != nil {
 		return err
 	}
+	configDir := filepath.Dir(skillsDir)
+	allowedRoots := []string{configDir}
 	for _, e := range man.Entries {
+		if err := validateSkillName(skillsDir, e.Skill); err != nil {
+			return err
+		}
 		dst := filepath.Join(skillsDir, e.Skill)
 		if err := os.RemoveAll(dst); err != nil {
 			return err
@@ -176,6 +182,9 @@ func (s *Store) Restore(skillsDir, id string) error {
 		}
 	}
 	for _, f := range man.Files {
+		if err := validateFilePath(f.Path, allowedRoots); err != nil {
+			return err
+		}
 		if f.Existed {
 			if err := copyFile(filepath.Join(s.dir, id, "files", f.Label), f.Path); err != nil {
 				return err
@@ -195,6 +204,33 @@ func (s *Store) Delete(id string) error {
 		return err
 	}
 	return os.RemoveAll(dir)
+}
+
+// validateSkillName rejects skill names that would resolve outside skillsDir.
+func validateSkillName(skillsDir, name string) error {
+	target := filepath.Join(skillsDir, name)
+	rel, err := filepath.Rel(skillsDir, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || strings.ContainsRune(rel, os.PathSeparator) {
+		return fmt.Errorf("backup: refusing to restore skill %q: resolves outside skills directory", name)
+	}
+	return nil
+}
+
+// validateFilePath rejects paths that escape the allowed roots. The allowed
+// roots are derived from skillsDir's parent (the Copilot config dir) and its
+// sibling ~/.capiko — matching the two trees capiko actually writes to.
+func validateFilePath(path string, allowedRoots []string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("backup: refusing to restore file %q: not an absolute path", path)
+	}
+	clean := filepath.Clean(path)
+	for _, root := range allowedRoots {
+		r := filepath.Clean(root)
+		if clean == r || strings.HasPrefix(clean, r+string(os.PathSeparator)) {
+			return nil
+		}
+	}
+	return fmt.Errorf("backup: refusing to restore file %q: not under an allowed root", path)
 }
 
 // --- helpers ---
