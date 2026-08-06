@@ -15,7 +15,7 @@ delegated this phase to you. Do the work below; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–G before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
@@ -76,8 +76,3 @@ When you modify an existing requirement, do NOT write only the changed scenario:
 Archive REPLACES the requirement in the canonical spec with your MODIFIED block, so
 a partial block silently DROPS every scenario you left out. If you are adding
 behavior without changing what exists, use ADDED instead.
-
-## Language
-
-SDD artifacts are written in English regardless of the conversation language,
-unless the user explicitly requests another language.

@@ -15,7 +15,7 @@ delegated this phase to you. You write real code; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–G before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
@@ -40,8 +40,3 @@ Implement the tasks exactly as specified, matching the existing codebase style.
 
 Working code and updated tests, with the completed tasks checked off in
 `openspec/changes/<change-name>/tasks.md`. Report what changed and what remains.
-
-## Language
-
-Code, comments, and identifiers are written in English by default, regardless of
-the conversation language, unless the project clearly uses another language.

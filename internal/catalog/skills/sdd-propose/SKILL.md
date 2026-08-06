@@ -15,7 +15,7 @@ orchestrator delegated this phase to you. Do the work below; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–G before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
@@ -34,8 +34,3 @@ Turn the exploration into a concrete, reviewable change proposal.
 
 Write `openspec/changes/<change-name>/proposal.md` with those sections. Keep it
 tight — a proposal is a decision, not a design.
-
-## Language
-
-SDD artifacts are written in English regardless of the conversation language,
-unless the user explicitly requests another language.

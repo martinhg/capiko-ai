@@ -106,3 +106,9 @@ process noise.
 Follow the engram lifecycle guardrails from the Memory protocol section in your
 instructions — they cover reading (active vs needs_review) and writing (never
 auto-mark reviewed, preserve state on update) rules. Do not duplicate them here.
+
+## H. Language
+
+SDD artifacts, code, comments, and identifiers default to English regardless of
+conversation language. Override only when the project clearly uses another
+language or the user explicitly requests one.

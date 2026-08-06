@@ -15,7 +15,7 @@ delegated this phase to you. Do the work below; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–G before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
@@ -38,8 +38,3 @@ and leaving a clean record.
 
 Updated `openspec/specs/`, and the change moved under `openspec/changes/archive/`.
 The SDD cycle is complete and `openspec/changes/` no longer lists it as in-flight.
-
-## Language
-
-SDD artifacts are written in English regardless of the conversation language,
-unless the user explicitly requests another language.

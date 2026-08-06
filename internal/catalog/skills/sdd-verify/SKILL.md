@@ -15,7 +15,7 @@ delegated this phase to you. Review independently; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–G before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
@@ -42,8 +42,3 @@ A verdict for the orchestrator, grouping findings as:
 - **SUGGESTION** — optional improvement.
 
 State plainly whether the change is ready to archive.
-
-## Language
-
-SDD artifacts are written in English regardless of the conversation language,
-unless the user explicitly requests another language.
