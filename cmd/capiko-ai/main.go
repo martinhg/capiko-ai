@@ -56,6 +56,15 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "backup":
+			_, exitCode, err := backupCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		case "doctor":
 			// Ecosystem health check: print pass/warn/fail diagnostics without
 			// launching the TUI. A failed check exits non-zero so the command is
