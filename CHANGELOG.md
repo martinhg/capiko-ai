@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.23.0](https://github.com/martinhg/capiko-ai/compare/v1.22.0...v1.23.0) (2026-08-06)
+
+
+### Features
+
+* **agent:** per-phase model routing via .agent.md frontmatter ([#164](https://github.com/martinhg/capiko-ai/issues/164)) ([0f01faf](https://github.com/martinhg/capiko-ai/commit/0f01faf6d68cf60524adde58e71e096e8c62d61e))
+* **backup:** validate restore targets against allowed roots (F-S3) ([#173](https://github.com/martinhg/capiko-ai/issues/173)) ([1ee6ce0](https://github.com/martinhg/capiko-ai/commit/1ee6ce091c94b63f005cf46b891d8455a576c4da))
+* **catalog:** interactive proposal questions + judgment-day agents (K-18) ([#179](https://github.com/martinhg/capiko-ai/issues/179)) ([e027226](https://github.com/martinhg/capiko-ai/commit/e0272269c6dd74371dc823bfecfa0ffecebf5984))
+* **catalog:** prompt-injection defence clause in file-reading skills (F-AI3) ([#175](https://github.com/martinhg/capiko-ai/issues/175)) ([4d3eb97](https://github.com/martinhg/capiko-ai/commit/4d3eb97bb8ecf2a25e010f51d5d5d2e1c65f917a))
+* **cli:** headless backup list and restore subcommands (G-CLI3) ([#176](https://github.com/martinhg/capiko-ai/issues/176)) ([e74dcf7](https://github.com/martinhg/capiko-ai/commit/e74dcf7fc92513c85b49f160e1d1fca60c86af23))
+* **cli:** help, unknown-command errors, and non-TTY guard (G-CLI1) ([#170](https://github.com/martinhg/capiko-ai/issues/170)) ([d30127b](https://github.com/martinhg/capiko-ai/commit/d30127bff602340b65c137c507bf3fca57777684))
+* **contract:** Copilot CLI schema contract tests (G-CC4) ([#172](https://github.com/martinhg/capiko-ai/issues/172)) ([44618e3](https://github.com/martinhg/capiko-ai/commit/44618e3adbe000dd376b53d2387ffba897ae0f57))
+* **copilot:** add copilot-managed-hooks foundation ($COPILOT_HOME + state record) ([#152](https://github.com/martinhg/capiko-ai/issues/152)) ([a08ea89](https://github.com/martinhg/capiko-ai/commit/a08ea893220b419508f16c459cc6095c4de2d462))
+* **copilothooks:** add atomic hook-file writer and combined checksum ([#155](https://github.com/martinhg/capiko-ai/issues/155)) ([ac394de](https://github.com/martinhg/capiko-ai/commit/ac394de8dd6fff2c1a12528894b1fee465ad71a0))
+* **copilothooks:** add sessionStart verification hook and doctor check (G-CC2) ([#165](https://github.com/martinhg/capiko-ai/issues/165)) ([ce2a958](https://github.com/martinhg/capiko-ai/commit/ce2a958580a3f9b0ff0b60193bc9421379f7c280))
+* **copilothooks:** add v1 hook schema and guardrails renderer ([#154](https://github.com/martinhg/capiko-ai/issues/154)) ([7e75536](https://github.com/martinhg/capiko-ai/commit/7e755362ffe3c49a5c8f07b12fc48b3bf05a847f))
+* **doctor:** Copilot CLI version-skew check (G-CC1) ([#171](https://github.com/martinhg/capiko-ai/issues/171)) ([e4942c1](https://github.com/martinhg/capiko-ai/commit/e4942c102b59d8c6ed78ea3c610e72072933e86e))
+* **doctor:** instruction budget check with per-block breakdown (F-AI2) ([#174](https://github.com/martinhg/capiko-ai/issues/174)) ([d1b2b3d](https://github.com/martinhg/capiko-ai/commit/d1b2b3d8f0469c2deebbc1f02cbc7b826820c95b))
+* **engram:** Key Learnings in sub-agents + lifecycle dedup (K-10, K-11) ([#166](https://github.com/martinhg/capiko-ai/issues/166)) ([03a112d](https://github.com/martinhg/capiko-ai/commit/03a112dcd4b95b26801775952491ddd98a3d0a1f))
+* **integrity:** SHA-256 protected-surface integrity manifest (K-2) ([#169](https://github.com/martinhg/capiko-ai/issues/169)) ([33f3d8e](https://github.com/martinhg/capiko-ai/commit/33f3d8ea5af66cf4b000715ac290cf4af6bbe50b))
+* **sdd:** model fallback/rotation on token/quota exhaustion (K-1) ([#168](https://github.com/martinhg/capiko-ai/issues/168)) ([246e1ed](https://github.com/martinhg/capiko-ai/commit/246e1edaf827324afe4e02e910bf391b5d6cf511))
+* **skillregistry:** content-hash fingerprint for staleness detection (K-13) ([#167](https://github.com/martinhg/capiko-ai/issues/167)) ([47b0ae6](https://github.com/martinhg/capiko-ai/commit/47b0ae69b9741010204280ec050fe03958eee38e))
+* **tui:** add copilot-hooks apply/disable orchestration, drift, and RunSync gate ([#156](https://github.com/martinhg/capiko-ai/issues/156)) ([12e1231](https://github.com/martinhg/capiko-ai/commit/12e1231ea5bf977b29c74682f26db19011835a4c))
+* **tui:** Copilot hooks configure screen + menu wiring (PR-5) ([#157](https://github.com/martinhg/capiko-ai/issues/157)) ([622ef31](https://github.com/martinhg/capiko-ai/commit/622ef310cdd990d9fafb555b774b5d2589c8f4f6))
+
 ## [1.22.0](https://github.com/martinhg/capiko-ai/compare/v1.21.0...v1.22.0) (2026-06-29)
 
 
