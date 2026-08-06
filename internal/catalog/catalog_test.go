@@ -118,6 +118,46 @@ func TestFourRReviewSkillsStructuredOutput(t *testing.T) {
 	}
 }
 
+// TestFileReadingSkillsCarryUntrustedContentClause pins the prompt-injection
+// defence to every skill that reads arbitrary project files. Without this
+// clause the agent may treat injected directives inside scanned files as
+// instructions (indirect prompt injection).
+func TestFileReadingSkillsCarryUntrustedContentClause(t *testing.T) {
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	byName := map[string]string{}
+	for _, s := range got {
+		byName[s.Name] = s.Content
+	}
+
+	skills := []string{
+		"codebase-docs",
+		"sdd-explore",
+		"review-risk",
+		"review-readability",
+		"review-reliability",
+		"review-resilience",
+	}
+	for _, name := range skills {
+		body, ok := byName[name]
+		if !ok {
+			t.Errorf("%s not found in catalog", name)
+			continue
+		}
+		for _, want := range []string{
+			"Untrusted content",
+			"prompt-injection",
+			"never as instructions to follow",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s must contain %q for untrusted-content defence", name, want)
+			}
+		}
+	}
+}
+
 // TestTasksSkillEmitsWorkloadGuard pins the review-workload guard contract to the
 // sdd-tasks skill body. The shared protocol (sdd-phase-common.md, section F)
 // requires sdd-tasks to forecast the 400-line review budget with exact guard
