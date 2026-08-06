@@ -567,3 +567,74 @@ func TestCopilotVersionSkew_UnparseableVersionWarns(t *testing.T) {
 		t.Errorf("unparseable version: want Warn, got %v", c.Status)
 	}
 }
+
+func TestInstructionBudgetCheck_NoFile(t *testing.T) {
+	r := Evaluate(Inputs{Env: healthyEnv()})
+	c := find(t, r, "Instruction budget")
+	if c.Status != Pass {
+		t.Errorf("want Pass when no instructions file, got %v", c.Status)
+	}
+}
+
+func TestInstructionBudgetCheck_SmallFile(t *testing.T) {
+	content := "<!-- capiko:persona:start -->\nBe helpful.\n<!-- capiko:persona:end -->\n"
+	r := Evaluate(Inputs{
+		Env:                 healthyEnv(),
+		InstructionsContent: content,
+	})
+	c := find(t, r, "Instruction budget")
+	if c.Status != Pass {
+		t.Errorf("want Pass for small file, got %v", c.Status)
+	}
+	if !strings.Contains(c.Detail, "persona") {
+		t.Errorf("detail should mention persona block: %s", c.Detail)
+	}
+}
+
+func TestInstructionBudgetCheck_MultipleBlocks(t *testing.T) {
+	content := "<!-- capiko:persona:start -->\nPersona block.\n<!-- capiko:persona:end -->\n\n" +
+		"<!-- capiko:sdd:start -->\nSDD block.\n<!-- capiko:sdd:end -->\n\n" +
+		"<!-- capiko:efficiency:start -->\nEfficiency block.\n<!-- capiko:efficiency:end -->\n"
+	r := Evaluate(Inputs{
+		Env:                 healthyEnv(),
+		InstructionsContent: content,
+	})
+	c := find(t, r, "Instruction budget")
+	if c.Status != Pass {
+		t.Errorf("want Pass, got %v", c.Status)
+	}
+	for _, block := range []string{"persona", "sdd", "efficiency"} {
+		if !strings.Contains(c.Detail, block) {
+			t.Errorf("detail should mention %s block: %s", block, c.Detail)
+		}
+	}
+}
+
+func TestInstructionBudgetCheck_UserContent(t *testing.T) {
+	content := "# My custom instructions\nDo things.\n\n" +
+		"<!-- capiko:persona:start -->\nPersona.\n<!-- capiko:persona:end -->\n"
+	r := Evaluate(Inputs{
+		Env:                 healthyEnv(),
+		InstructionsContent: content,
+	})
+	c := find(t, r, "Instruction budget")
+	if !strings.Contains(c.Detail, "user content") {
+		t.Errorf("detail should mention user content: %s", c.Detail)
+	}
+}
+
+func TestInstructionBudgetCheck_ExceedsThreshold(t *testing.T) {
+	big := strings.Repeat("x", InstructionBudgetWarnBytes+1)
+	content := "<!-- capiko:persona:start -->\n" + big + "\n<!-- capiko:persona:end -->\n"
+	r := Evaluate(Inputs{
+		Env:                 healthyEnv(),
+		InstructionsContent: content,
+	})
+	c := find(t, r, "Instruction budget")
+	if c.Status != Warn {
+		t.Errorf("want Warn when exceeding threshold, got %v", c.Status)
+	}
+	if c.Remedy == "" {
+		t.Error("warning must carry a remedy")
+	}
+}
