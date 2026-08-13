@@ -7,15 +7,15 @@ import "github.com/martinhg/capiko-ai/internal/copilot"
 // contract instead of each reimplementing it. detect is injected so this is
 // testable without touching the real PATH or home directory.
 //
-// Returns (host, 0) on success, (nil, 2) when detect reports Copilot is not
-// installed/initialized ((nil, nil)), and (nil, 1) when detect itself errors.
-func requireHost(detect func() (*copilot.Host, error)) (host *copilot.Host, exitCode int) {
+// Returns (host, 0, nil) on success, (nil, 2, nil) when detect reports
+// Copilot is not installed/initialized, and (nil, 1, err) when detect errors.
+func requireHost(detect func() (*copilot.Host, error)) (host *copilot.Host, exitCode int, err error) {
 	h, err := detect()
 	if err != nil {
-		return nil, 1
+		return nil, 1, err
 	}
 	if h == nil {
-		return nil, 2
+		return nil, 2, nil
 	}
-	return h, 0
+	return h, 0, nil
 }

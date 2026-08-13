@@ -17,13 +17,9 @@ type backupInputs struct {
 }
 
 var gatherBackupInputs = func() (backupInputs, error) {
-	host, exitCode := requireHost(copilot.Detect)
-	in := backupInputs{host: host, hostExitCode: exitCode}
+	host, exitCode, hostErr := requireHost(copilot.Detect)
+	in := backupInputs{host: host, hostExitCode: exitCode, hostErr: hostErr}
 	if exitCode != 0 {
-		if exitCode == 1 {
-			_, err := copilot.Detect()
-			in.hostErr = err
-		}
 		return in, nil
 	}
 	bkp, err := backup.DefaultStore()

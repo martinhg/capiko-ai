@@ -30,17 +30,9 @@ type installInputs struct {
 // It is a package var so tests can stub it without touching the real PATH,
 // home directory, or embedded catalog.
 var gatherInstallInputs = func() (installInputs, error) {
-	host, exitCode := requireHost(copilot.Detect)
-	in := installInputs{host: host, hostExitCode: exitCode}
+	host, exitCode, hostErr := requireHost(copilot.Detect)
+	in := installInputs{host: host, hostExitCode: exitCode, hostErr: hostErr}
 	if exitCode != 0 {
-		if exitCode == 1 {
-			// requireHost does not propagate the underlying error, so detect
-			// again to surface it for exit reporting. This second call is
-			// cheap (no I/O beyond what Detect already does) and only runs on
-			// the already-erroring path.
-			_, err := copilot.Detect()
-			in.hostErr = err
-		}
 		return in, nil // early return; installCommand handles the exit code
 	}
 
