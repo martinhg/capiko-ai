@@ -10,6 +10,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/copilothooks"
+	"github.com/martinhg/capiko-ai/internal/sdd"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -48,7 +49,7 @@ func TestRunSyncWritesCatalogAndRecordsState(t *testing.T) {
 	dir := t.TempDir()
 	store := state.NewStore(t.TempDir())
 
-	n, err := RunSync(&copilot.Host{SkillsDir: dir}, testCatalog(), nil, store, nil)
+	n, err := RunSync(&copilot.Host{SkillsDir: dir, ConfigDir: t.TempDir()}, testCatalog(), nil, store, nil)
 	if err != nil {
 		t.Fatalf("RunSync: %v", err)
 	}
@@ -158,6 +159,42 @@ func TestRunSyncReappliesSDD(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "capiko:sdd:start") {
 		t.Errorf("sync did not re-apply the SDD block: %q", data)
+	}
+}
+
+// TestRunSyncSeedsSDDOnFreshState asserts that sync seeds the SDD orchestrator
+// block with default assignments/efforts when state.SDDModels is empty, rather
+// than skipping the SDD branch entirely (SDD is always-on).
+// Spec: Sync Seeds SDD Block When Unset / Scenario: Fresh sync seeds defaults.
+func TestRunSyncSeedsSDDOnFreshState(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cfgDir, "copilot-instructions.md"))
+	if err != nil {
+		t.Fatalf("SDD instructions not written by sync: %v", err)
+	}
+	if !strings.Contains(string(data), "capiko:sdd:start") {
+		t.Errorf("sync did not seed the SDD block on fresh state: %q", data)
+	}
+
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := sdd.DefaultAssignments()
+	if len(st.SDDModels) != len(want) {
+		t.Fatalf("SDDModels = %v, want %d entries matching defaults", st.SDDModels, len(want))
+	}
+	for phase, model := range want {
+		if got := st.SDDModels[phase]; got != model {
+			t.Errorf("SDDModels[%q] = %q, want %q", phase, got, model)
+		}
 	}
 }
 
@@ -303,7 +340,7 @@ func TestRunSync_InstallsAgents(t *testing.T) {
 	skillsDir := t.TempDir()
 	agentsDir := t.TempDir()
 	store := state.NewStore(t.TempDir())
-	host := &copilot.Host{SkillsDir: skillsDir, AgentsDir: agentsDir}
+	host := &copilot.Host{SkillsDir: skillsDir, AgentsDir: agentsDir, ConfigDir: t.TempDir()}
 	agents := testAgentCatalog()
 
 	n, err := RunSync(host, testCatalog(), agents, store, nil)

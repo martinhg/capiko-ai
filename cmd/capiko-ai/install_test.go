@@ -32,7 +32,7 @@ func withStubInstallInputsErr(t *testing.T, err error) {
 func readyInstallInputs(t *testing.T) installInputs {
 	t.Helper()
 	return installInputs{
-		host:    &copilot.Host{SkillsDir: t.TempDir(), AgentsDir: t.TempDir()},
+		host:    &copilot.Host{SkillsDir: t.TempDir(), AgentsDir: t.TempDir(), ConfigDir: t.TempDir()},
 		catalog: []skill.Skill{{Name: "capiko-hello", Description: "smoke test", Content: "---\nname: capiko-hello\n---\nx"}},
 		agents:  []agent.Agent{{Name: "capiko-sdd-explore", Description: "explore", Content: "---\ndescription: explore\n---\nx"}},
 		store:   state.NewStore(t.TempDir()),
