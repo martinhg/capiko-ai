@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.24.0](https://github.com/martinhg/capiko-ai/compare/v1.23.0...v1.24.0) (2026-08-13)
+
+
+### Features
+
+* **tui:** seed SDD orchestrator block on headless install and sync (K-18) ([#180](https://github.com/martinhg/capiko-ai/issues/180)) ([e064e2f](https://github.com/martinhg/capiko-ai/commit/e064e2feabc1e3363f9109bd29cdb17dce887f76))
+* **tui:** show contextual description for focused menu item ([#185](https://github.com/martinhg/capiko-ai/issues/185)) ([70d32d3](https://github.com/martinhg/capiko-ai/commit/70d32d336b460c455d8916bf79b7717d10840152))
+
+
+### Bug Fixes
+
+* **sdd:** use ambiguity heuristic for SDD triage gate, add user override (K-14) ([#187](https://github.com/martinhg/capiko-ai/issues/187)) ([14332d3](https://github.com/martinhg/capiko-ai/commit/14332d32738f24a73073b80e872728174555e22d))
+* **skills:** harden SDD phase skills against phantom files, UUID false positives, and missing dirs ([#181](https://github.com/martinhg/capiko-ai/issues/181)) ([eaf3142](https://github.com/martinhg/capiko-ai/commit/eaf3142bda75791a644c491c2605cabcfc7a2369))
+
 ## [1.23.0](https://github.com/martinhg/capiko-ai/compare/v1.22.0...v1.23.0) (2026-08-06)
 
 
