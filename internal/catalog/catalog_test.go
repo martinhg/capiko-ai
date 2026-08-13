@@ -1,10 +1,12 @@
 package catalog
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
+	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/skill"
 )
 
@@ -607,6 +609,112 @@ func loadPhaseCommon(t *testing.T) string {
 	}
 	t.Fatal("sdd-shared must ship sdd-phase-common.md as an Extra file")
 	return ""
+}
+
+// loadStatusContract is a test helper that loads sdd-status-contract.md from
+// the sdd-shared skill's Extra files.
+func loadStatusContract(t *testing.T) string {
+	t.Helper()
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	for _, s := range got {
+		if s.Name == "sdd-shared" {
+			for _, f := range s.Extra {
+				if f.Path == "sdd-status-contract.md" {
+					return f.Content
+				}
+			}
+		}
+	}
+	t.Fatal("sdd-shared must ship sdd-status-contract.md as an Extra file")
+	return ""
+}
+
+// collectJSONFieldNames recursively extracts JSON tag names from a struct
+// type, descending into nested (and pointer-to) struct fields. Map- and
+// slice-typed fields are recorded by their own JSON name but not descended
+// into, since their element names are not compile-time struct metadata.
+func collectJSONFieldNames(t reflect.Type) []string {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+	var names []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name := field.Name
+		if tag != "" {
+			if parts := strings.Split(tag, ","); parts[0] != "" {
+				name = parts[0]
+			}
+		}
+		names = append(names, name)
+
+		ft := field.Type
+		if ft.Kind() == reflect.Ptr {
+			ft = ft.Elem()
+		}
+		if ft.Kind() == reflect.Struct {
+			names = append(names, collectJSONFieldNames(ft)...)
+		}
+	}
+	return names
+}
+
+// TestStatusContractCoversAllStructFields is a parity guard between the
+// sddstatus.Status struct (the actual capiko-ai sdd-status --json output) and
+// the sdd-status-contract.md fallback reference consumed when the binary is
+// not on PATH. It walks Status and its nested structs (PlanningHome,
+// ActionContext, TaskProgress, Dependencies, ArtifactPaths) via reflection and
+// asserts every JSON field name appears in the contract text, plus the
+// ArtifactState/DependencyState/ApplyState enum values. The Artifacts map's
+// six keys are not visible to reflection (map keys are a runtime detail, not
+// struct metadata), but they are identical to ArtifactPaths's JSON tags,
+// which are already covered by this walk. If a field is ever added to the Go
+// struct without updating the contract, this test fails — forcing the
+// contract to be updated, not this test relaxed.
+func TestStatusContractCoversAllStructFields(t *testing.T) {
+	contract := loadStatusContract(t)
+
+	fields := collectJSONFieldNames(reflect.TypeOf(sddstatus.Status{}))
+	if len(fields) == 0 {
+		t.Fatal("collectJSONFieldNames returned no fields for sddstatus.Status; reflection walk is broken")
+	}
+	for _, f := range fields {
+		if !strings.Contains(contract, f) {
+			t.Errorf("sdd-status-contract.md is missing struct field %q", f)
+		}
+	}
+
+	enumValues := []string{
+		string(sddstatus.ArtifactMissing),
+		string(sddstatus.ArtifactPartial),
+		string(sddstatus.ArtifactDone),
+		string(sddstatus.DependencyBlocked),
+		string(sddstatus.DependencyReady),
+		string(sddstatus.DependencyAllDone),
+		string(sddstatus.ApplyBlocked),
+		string(sddstatus.ApplyReady),
+		string(sddstatus.ApplyAllDone),
+	}
+	seen := map[string]bool{}
+	for _, v := range enumValues {
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+		if !strings.Contains(contract, v) {
+			t.Errorf("sdd-status-contract.md is missing enum value %q", v)
+		}
+	}
 }
 
 // TestSDDAgentsForwardStrictTDD pins the structural strict-TDD forwarding to the
