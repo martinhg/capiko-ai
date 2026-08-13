@@ -11,6 +11,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/persona"
+	"github.com/martinhg/capiko-ai/internal/sdd"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/versions"
@@ -69,7 +70,13 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					}
 				}
 			}
-			if len(st.SDDModels) > 0 || st.StrictTDD || len(st.SDDFallbackModels) > 0 {
+			// SDD is always-on: seed default assignments when unset, otherwise
+			// re-apply the user's existing configuration unchanged.
+			if len(st.SDDModels) == 0 {
+				if err := applySDD(host, store, bkp, sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("seeding SDD: %w", err)
+				}
+			} else {
 				if err := applySDD(host, store, bkp, st.SDDModels, st.SDDEfforts, st.StrictTDD, st.SDDFallbackModels); err != nil {
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying SDD: %w", err)
 				}

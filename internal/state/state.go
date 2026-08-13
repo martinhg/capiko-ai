@@ -21,7 +21,7 @@ type State struct {
 	Skills     map[string]SkillRecord `json:"skills"`
 	Agents     map[string]AgentRecord `json:"agents,omitempty"`
 	Persona    string                 `json:"persona,omitempty"`     // active persona id, "" = unmanaged
-	SDDModels  map[string]string      `json:"sdd_models,omitempty"`  // SDD phase → model, empty = SDD unmanaged
+	SDDModels  map[string]string      `json:"sdd_models,omitempty"`  // SDD phase → model, empty = not yet initialized (seed-eligible)
 	SDDEfforts map[string]string      `json:"sdd_efforts,omitempty"` // SDD phase → reasoning effort (low/medium/high)
 	// SDDFallbackModels maps SDD phase → fallback model, empty = no fallback
 	// configured for that phase.

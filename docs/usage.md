@@ -49,7 +49,7 @@ output.
 | Command | What it does | Flags |
 |---|---|---|
 | `capiko-ai install` | Install every catalog skill + agent not already present (additive). | `--all`, `--json`, `--verbose` |
-| `capiko-ai sync` | Overwrite all installed skills + agents to match the catalog; re-applies the persona, SDD, and engram blocks. | `--auto-repair`, `--json`, `--verbose` |
+| `capiko-ai sync` | Overwrite all installed skills + agents to match the catalog; re-applies the persona and engram blocks, seeding SDD with defaults on first run or re-applying the existing SDD config otherwise. | `--auto-repair`, `--json`, `--verbose` |
 | `capiko-ai uninstall` | Remove every capiko-managed skill + agent and clear them from state (leaves persona/SDD/engram blocks alone). | `--all`, `--json`, `--verbose` |
 | `capiko-ai doctor` | Read-only ecosystem health check; non-zero exit on failure. `--repair` re-applies the managed catalog when drift is found. | `--json`, `--repair`, `--verbose` |
 | `capiko-ai sdd-status` · `sdd-continue` | Native SDD engine: print or advance the deterministic workflow state. | |
