@@ -54,9 +54,13 @@ func TestRenderTriageGate(t *testing.T) {
 		"4-file rule",
 		"Delegate a writer",
 		"2+ non-trivial files with new logic",
+		"substantial ambiguity",
+		"durable artifacts",
 		"proposal → spec/design → tasks → apply → verify → archive",
 		"Fresh review before a PR",
 		"When in doubt, stay inline",
+		"ambiguity, not size",
+		"user can always override",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("triage gate missing %q\n---\n%s", want, out)

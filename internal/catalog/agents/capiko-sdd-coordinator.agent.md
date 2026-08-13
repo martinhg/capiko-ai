@@ -16,10 +16,10 @@ Before touching the routing algorithm, judge the weight of the request and apply
 - **Inline** when the change is small: 1–3 files to decide or verify, a mechanical edit, a git/state check, or a single targeted fix. Tell the user to handle it inline and STOP — do not spin up the phase DAG.
 - **Delegate an exploration** when scoping the change requires reading 4+ files (the 4-file rule). Run one focused exploration, then re-triage on its summary.
 - **Delegate a writer** when the change touches 2+ non-trivial files with new logic — delegate to a worker via the `agent` tool instead of editing inline.
-- **Run the full SDD workflow** only for a genuinely substantial change — then proceed to the Routing Algorithm below (proposal → spec/design → tasks → apply → verify → archive).
+- **Run the full SDD workflow** when the change carries substantial ambiguity and durable artifacts (proposal, spec, design) would materially help — then proceed to the Routing Algorithm below (proposal → spec/design → tasks → apply → verify → archive).
 - **Fresh review before a PR** when the diff is non-trivial, and after any incident — delegate an adversarial review with fresh context.
 
-When in doubt, prefer inline. The SDD workflow exists for substantial changes, not for small edits.
+When in doubt, prefer inline. The deciding factor is ambiguity, not size — a large mechanical refactor stays inline; a small architectural decision with unclear tradeoffs warrants SDD. The user can always override: an explicit request to use or skip SDD takes precedence over this gate.
 
 ## Routing Algorithm (deterministic)
 
