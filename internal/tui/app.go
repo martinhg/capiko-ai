@@ -59,25 +59,26 @@ const (
 type menuItem struct {
 	label string
 	id    string
+	desc  string
 	ready bool
 }
 
 var menuItems = []menuItem{
-	{"Start installation", "install", true},
-	{"Managed uninstall", "uninstall", true},
-	{"Sync configs", "sync", true},
-	{"Manage backups", "backups", true},
-	{"Configure SDD", "sdd", true},
-	{"SDD Status", "sdd-status", true},
-	{"Configure engram", "engram", true},
-	{"Configure headroom", "headroom", true},
-	{"Configure code review", "code-review", true},
-	{"Configure team sync", "team-sync", true},
-	{"Configure Copilot hooks", "copilot-hooks", true},
-	{"Upgrade tools", "upgrade", true},
-	{"Upgrade + sync", "upgrade-sync", true},
-	{"Install instructions", "instructions", true},
-	{"Quit", "quit", true},
+	{"Start installation", "install", "Install skills and agents into Copilot CLI.", true},
+	{"Managed uninstall", "uninstall", "Remove installed skills and agents cleanly.", true},
+	{"Sync configs", "sync", "Re-apply all configs to match the latest catalog.", true},
+	{"Manage backups", "backups", "View and restore configuration snapshots.", true},
+	{"Configure SDD", "sdd", "Set up Spec-Driven Development model assignments.", true},
+	{"SDD Status", "sdd-status", "View active SDD changes and their progress.", true},
+	{"Configure engram", "engram", "Set up persistent memory across sessions.", true},
+	{"Configure headroom", "headroom", "Tune context-window budget for large codebases.", true},
+	{"Configure code review", "code-review", "Enable structured multi-layer code reviews.", true},
+	{"Configure team sync", "team-sync", "Share conventions and hooks across a team.", true},
+	{"Configure Copilot hooks", "copilot-hooks", "Add safety hooks that run before Copilot actions.", true},
+	{"Upgrade tools", "upgrade", "Update capiko-ai to the latest release.", true},
+	{"Upgrade + sync", "upgrade-sync", "Update capiko-ai and re-sync all configs.", true},
+	{"Install instructions", "instructions", "Write the global copilot-instructions file.", true},
+	{"Quit", "quit", "Exit capiko-ai.", true},
 }
 
 // App is the root Bubbletea model.
@@ -324,6 +325,11 @@ func (a App) viewMenu() string {
 		default:
 			b.WriteString(textSty.Render("  "+label) + "\n")
 		}
+	}
+
+	if desc := menuItems[a.cursor].desc; desc != "" {
+		b.WriteString("\n")
+		b.WriteString(dimSty.Render(desc))
 	}
 
 	b.WriteString("\n")
