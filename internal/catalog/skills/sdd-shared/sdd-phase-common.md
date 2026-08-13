@@ -40,8 +40,12 @@ project's build/test commands and conventions.
 
 Every phase that produces an artifact MUST write it to its file under
 `openspec/changes/<change-name>/`. Skipping this BREAKS the pipeline — downstream
-phases will not find your output. Write the file during the phase's main step; no
-extra action is needed afterward.
+phases will not find your output.
+
+Before writing, ensure the target directory exists — create it (and any parents)
+if it does not. After writing, verify the file is on disk by reading it back. If
+the read fails, report `status: blocked` with the write error instead of claiming
+success with a phantom artifact.
 
 ## E. Return Envelope
 
@@ -107,7 +111,15 @@ Follow the engram lifecycle guardrails from the Memory protocol section in your
 instructions — they cover reading (active vs needs_review) and writing (never
 auto-mark reviewed, preserve state on update) rules. Do not duplicate them here.
 
-## H. Language
+## H. Example Data
+
+Do not block on format validation of example data in artifacts or test fixtures
+(UUIDs, timestamps, IDs, sample values). Verify behavioral correctness — whether
+the system does the right thing — not whether example literals match a specific
+format. A UUID used as a test identifier does not need to pass a v4 format check
+to be valid test data.
+
+## I. Language
 
 SDD artifacts, code, comments, and identifiers default to English regardless of
 conversation language. Override only when the project clearly uses another

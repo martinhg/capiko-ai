@@ -15,7 +15,7 @@ delegated this phase to you. Do the work below; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–I before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
@@ -31,7 +31,8 @@ and leaving a clean record.
    canonical specs are the cumulative "what the system does".
 3. Write a short archive summary (what shipped, key decisions, follow-ups) into the
    change folder.
-4. **Move** `openspec/changes/<change-name>/` to
+4. Create `openspec/changes/archive/` if it does not exist. Then **move**
+   `openspec/changes/<change-name>/` to
    `openspec/changes/archive/<YYYY-MM-DD>-<change-name>/`.
 
 ## Output
