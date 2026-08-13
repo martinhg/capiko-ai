@@ -15,7 +15,7 @@ orchestrator delegated this phase to you. Do the work below; do not delegate.
 
 ## Gate
 
-Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–H before work.
+Read `~/.copilot/skills/sdd-shared/sdd-phase-common.md` § A–I before work.
 Orchestrator: delegate. Executor: run this phase, do not re-delegate.
 
 ## Purpose
