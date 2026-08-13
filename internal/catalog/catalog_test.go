@@ -456,6 +456,159 @@ func TestVerifySkillShipsStrictTDDReference(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Content-quality regression tests: field-reported SDD pipeline bugs
+// ---------------------------------------------------------------------------
+// These tests pin the instructional safeguards added after three bugs surfaced
+// in real Copilot CLI usage. Without them, a future edit to the shared protocol
+// or a specific skill could silently re-introduce the failure mode.
+
+// TestPhaseCommonArtifactVerification pins the "verify after write" and "create
+// directory" instructions in § D. Without these, an executor agent can claim
+// success without the artifact actually existing on disk (phantom-file bug).
+func TestPhaseCommonArtifactVerification(t *testing.T) {
+	common := loadPhaseCommon(t)
+	for _, want := range []string{
+		"ensure the target directory exists",
+		"reading it back",
+		"status: blocked",
+	} {
+		if !strings.Contains(common, want) {
+			t.Errorf("sdd-phase-common.md § D must contain %q (phantom-file prevention)", want)
+		}
+	}
+}
+
+// TestPhaseCommonExampleDataGuard pins § H (Example Data) which prevents
+// design/verify phases from blocking on format validation of test data
+// (UUID false-positive bug).
+func TestPhaseCommonExampleDataGuard(t *testing.T) {
+	common := loadPhaseCommon(t)
+	for _, want := range []string{
+		"Example Data",
+		"format validation",
+		"UUID",
+	} {
+		if !strings.Contains(common, want) {
+			t.Errorf("sdd-phase-common.md must contain %q (example-data guard)", want)
+		}
+	}
+}
+
+// TestArchiveSkillCreatesDirectory pins the explicit "create archive directory"
+// instruction in sdd-archive step 4. Without it, the move fails when
+// openspec/changes/archive/ does not exist (archive-mkdir bug).
+func TestArchiveSkillCreatesDirectory(t *testing.T) {
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	var archive string
+	for _, s := range got {
+		if s.Name == "sdd-archive" {
+			archive = s.Content
+			break
+		}
+	}
+	if archive == "" {
+		t.Fatal("sdd-archive skill not found in catalog")
+	}
+	if !strings.Contains(archive, "Create") || !strings.Contains(archive, "archive/") {
+		t.Error("sdd-archive must instruct creating the archive directory before moving")
+	}
+}
+
+// TestPhaseCommonSectionsAtoI verifies that sdd-phase-common.md contains all
+// sections A through I. If a section is removed or renamed, every SDD skill's
+// Gate reference (§ A–I) becomes a dangling pointer.
+func TestPhaseCommonSectionsAtoI(t *testing.T) {
+	common := loadPhaseCommon(t)
+	sections := []string{
+		"## A.", "## B.", "## C.", "## D.", "## E.",
+		"## F.", "## G.", "## H.", "## I.",
+	}
+	for _, s := range sections {
+		if !strings.Contains(common, s) {
+			t.Errorf("sdd-phase-common.md must contain section %q", s)
+		}
+	}
+}
+
+// TestSDDSkillsReferenceCorrectSectionRange verifies that every SDD phase
+// skill's Gate references the actual section range in sdd-phase-common.md.
+// If a new section is added to the common file but the Gate references aren't
+// updated, executors skip the new section.
+func TestSDDSkillsReferenceCorrectSectionRange(t *testing.T) {
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	sddPhases := []string{
+		"sdd-explore", "sdd-propose", "sdd-spec", "sdd-design",
+		"sdd-tasks", "sdd-apply", "sdd-verify", "sdd-archive",
+	}
+	for _, name := range sddPhases {
+		for _, s := range got {
+			if s.Name == name {
+				if !strings.Contains(s.Content, "§ A–I") {
+					t.Errorf("%s Gate must reference § A–I (current section range)", name)
+				}
+				break
+			}
+		}
+	}
+}
+
+// TestProposeSkillHasStepZero pins the interactive proposal question round
+// (Step 0) that was added as part of K-18. Without it, the propose phase
+// writes proposals without gathering business context first.
+func TestProposeSkillHasStepZero(t *testing.T) {
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	var propose string
+	for _, s := range got {
+		if s.Name == "sdd-propose" {
+			propose = s.Content
+			break
+		}
+	}
+	if propose == "" {
+		t.Fatal("sdd-propose skill not found in catalog")
+	}
+	for _, want := range []string{
+		"Step 0",
+		"Proposal Questions",
+		"Non-interactive fallback",
+	} {
+		if !strings.Contains(propose, want) {
+			t.Errorf("sdd-propose must contain %q (Step 0 question round)", want)
+		}
+	}
+}
+
+// loadPhaseCommon is a test helper that loads sdd-phase-common.md from the
+// sdd-shared skill's Extra files.
+func loadPhaseCommon(t *testing.T) string {
+	t.Helper()
+	got, err := Load()
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	for _, s := range got {
+		if s.Name == "sdd-shared" {
+			for _, f := range s.Extra {
+				if f.Path == "sdd-phase-common.md" {
+					return f.Content
+				}
+			}
+		}
+	}
+	t.Fatal("sdd-shared must ship sdd-phase-common.md as an Extra file")
+	return ""
+}
+
 // TestSDDAgentsForwardStrictTDD pins the structural strict-TDD forwarding to the
 // delegation targets. The orchestrator forwards `strict_tdd: true` into the
 // apply/verify handoff; the worker .agent.md bodies are the direct delegation
