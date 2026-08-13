@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
+	"github.com/martinhg/capiko-ai/internal/sdd"
 	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/skill"
 )
@@ -753,6 +754,98 @@ func TestSDDAgentsForwardStrictTDD(t *testing.T) {
 			if !strings.Contains(body, want) {
 				t.Errorf("agent %q must carry strict-TDD forwarding %q, but it is missing", c.name, want)
 			}
+		}
+	}
+}
+
+// TestCoordinatorTriageParity is a drift guard between the coordinator agent's
+// Triage Gate and sdd.Render's "When to use SDD (triage)" section. Both carry
+// the same decision heuristic intentionally (the coordinator for Copilot agents,
+// the rendered block for Claude Code). If either copy drifts, this test fails —
+// forcing the author to update both, not relax the test.
+func TestCoordinatorTriageParity(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	var coordBody string
+	for _, a := range agents {
+		if a.Name == "capiko-sdd-coordinator" {
+			coordBody = a.Content
+			break
+		}
+	}
+	if coordBody == "" {
+		t.Fatal("capiko-sdd-coordinator agent not found in catalog")
+	}
+
+	rendered := sdd.Render(sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil)
+
+	// Invariant phrases that must appear in BOTH copies. If one is edited
+	// without the other, the test catches the drift.
+	triageInvariants := []string{
+		"**Inline**",
+		"**Delegate an exploration**",
+		"**Delegate a writer**",
+		"**Run the full SDD workflow**",
+		"**Fresh review before a PR**",
+		"ambiguity, not size",
+		"4-file rule",
+		"substantial ambiguity and durable artifacts",
+		"user can always override",
+	}
+
+	for _, phrase := range triageInvariants {
+		if !strings.Contains(coordBody, phrase) {
+			t.Errorf("coordinator agent missing triage invariant %q", phrase)
+		}
+		if !strings.Contains(rendered, phrase) {
+			t.Errorf("sdd.Render output missing triage invariant %q", phrase)
+		}
+	}
+}
+
+// TestCoordinatorDeliveryStrategyParity is a drift guard between the
+// coordinator agent's Review Workload Guard / chain-strategy rules and
+// sdd.Render's "Delivery & chain strategy" section. Both enumerate the same
+// strategy names and guard triggers; if either copy drifts, this test fails.
+func TestCoordinatorDeliveryStrategyParity(t *testing.T) {
+	agents, err := LoadAgents()
+	if err != nil {
+		t.Fatalf("LoadAgents error: %v", err)
+	}
+	var coordBody string
+	for _, a := range agents {
+		if a.Name == "capiko-sdd-coordinator" {
+			coordBody = a.Content
+			break
+		}
+	}
+	if coordBody == "" {
+		t.Fatal("capiko-sdd-coordinator agent not found in catalog")
+	}
+
+	rendered := sdd.Render(sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil)
+
+	deliveryInvariants := []string{
+		"ask-on-risk",
+		"auto-chain",
+		"single-pr",
+		"exception-ok",
+		"stacked-to-main",
+		"feature-branch-chain",
+		"Chained PRs recommended: Yes",
+		"400-line budget risk: High",
+		"Decision needed before apply: Yes",
+		"size:exception",
+	}
+
+	for _, phrase := range deliveryInvariants {
+		if !strings.Contains(coordBody, phrase) {
+			t.Errorf("coordinator agent missing delivery invariant %q", phrase)
+		}
+		if !strings.Contains(rendered, phrase) {
+			t.Errorf("sdd.Render output missing delivery invariant %q", phrase)
 		}
 	}
 }

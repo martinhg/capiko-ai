@@ -46,15 +46,9 @@ type syncInputs struct {
 // package var so tests can stub it without touching the real PATH, home
 // directory, or embedded catalog.
 var gatherSyncInputs = func() (syncInputs, error) {
-	host, exitCode := requireHost(copilot.Detect)
-	in := syncInputs{host: host, hostExitCode: exitCode}
+	host, exitCode, hostErr := requireHost(copilot.Detect)
+	in := syncInputs{host: host, hostExitCode: exitCode, hostErr: hostErr}
 	if exitCode != 0 {
-		if exitCode == 1 {
-			// requireHost swallows the detect error; call again to surface it for
-			// exit reporting. Cheap: only on the already-failing path.
-			_, err := copilot.Detect()
-			in.hostErr = err
-		}
 		return in, nil // early return; syncCommand handles the exit code
 	}
 

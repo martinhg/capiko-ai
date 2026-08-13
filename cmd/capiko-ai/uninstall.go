@@ -27,15 +27,9 @@ type uninstallInputs struct {
 // loaded: uninstall discovers what to remove from state (or disk when store is
 // nil), so catalog knowledge is not needed.
 var gatherUninstallInputs = func() (uninstallInputs, error) {
-	host, exitCode := requireHost(copilot.Detect)
-	in := uninstallInputs{host: host, hostExitCode: exitCode}
+	host, exitCode, hostErr := requireHost(copilot.Detect)
+	in := uninstallInputs{host: host, hostExitCode: exitCode, hostErr: hostErr}
 	if exitCode != 0 {
-		if exitCode == 1 {
-			// requireHost swallows the detect error; call again to surface it for
-			// exit reporting. Cheap: only on the already-failing path.
-			_, err := copilot.Detect()
-			in.hostErr = err
-		}
 		return in, nil // early return; uninstallCommand handles the exit code
 	}
 
