@@ -213,3 +213,40 @@ func TestDetectPatterns(t *testing.T) {
 		})
 	}
 }
+
+func TestDraftRuleText(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern Pattern
+		want    string
+	}{
+		{
+			name:    "critical severity maps to REJECT if",
+			pattern: Pattern{Severity: SeverityCritical, Description: "errors swallowed silently"},
+			want:    "REJECT if: errors swallowed silently",
+		},
+		{
+			name:    "warning severity maps to REQUIRE",
+			pattern: Pattern{Severity: SeverityWarning, Description: "missing test coverage"},
+			want:    "REQUIRE: missing test coverage",
+		},
+		{
+			name:    "suggestion severity maps to PREFER",
+			pattern: Pattern{Severity: SeveritySuggestion, Description: "consider a comment"},
+			want:    "PREFER: consider a comment",
+		},
+		{
+			name:    "unrecognized severity still renders description",
+			pattern: Pattern{Severity: Severity("UNKNOWN"), Description: "an odd finding"},
+			want:    "UNKNOWN: an odd finding",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DraftRuleText(tt.pattern)
+			if got != tt.want {
+				t.Errorf("DraftRuleText(%+v) = %q, want %q", tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
