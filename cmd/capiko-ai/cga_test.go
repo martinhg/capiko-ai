@@ -268,3 +268,67 @@ func TestCgaLearnRejectionDiscardsRule(t *testing.T) {
 		t.Fatalf("want 0 learned rules after rejection, got %d: %+v", len(rules), rules)
 	}
 }
+
+// --- Task 3.4: empty-state ---
+
+const belowThresholdLog = `{"timestamp":"2026-08-16T10:00:00Z","parent_sha":"a","commit_sha":"a1","verdict":"FAIL","findings":[{"file":"a.go","severity":"WARNING","description":"missing test coverage"}]}
+{"timestamp":"2026-08-17T10:00:00Z","parent_sha":"a1","commit_sha":"b1","verdict":"FAIL","findings":[{"file":"b.go","severity":"WARNING","description":"missing test coverage"}]}
+`
+
+func TestCgaLearnEmptyStateGracefulExit(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, belowThresholdLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader(""))
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "no patterns meet the evidence threshold") {
+		t.Errorf("expected graceful empty-state message, got:\n%s", buf.String())
+	}
+
+	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("want 0 learned rules, got %d: %+v", len(rules), rules)
+	}
+}
+
+func TestCgaLearnRetiresRulesBelowThreshold(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, belowThresholdLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	existing := []cga.LearnedRule{
+		{ID: "old", Severity: cga.SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 3, ApprovedAt: "2026-08-01T00:00:00Z"},
+	}
+	if err := SaveLearnedRules(baseDir, "acme/repo", existing); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader(""))
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+
+	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("want rule retired (0 active rules), got %d: %+v", len(rules), rules)
+	}
+}
