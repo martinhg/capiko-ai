@@ -167,11 +167,44 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 	}
 	project := cgaProject()
 
+	existing, err := LoadLearnedRules(baseDir, project)
+	if err != nil {
+		return true, 1, err
+	}
 	patterns := cga.DetectPatterns(entries, cgaLearnThreshold)
 
-	learned := make([]cga.LearnedRule, 0)
-	reader := bufio.NewReader(in)
+	if len(patterns) == 0 && len(existing) == 0 {
+		fmt.Fprintln(out, "no patterns meet the evidence threshold")
+		return true, 0, nil
+	}
+
+	// Re-check existing rules against the current detection pass (spec F3.6,
+	// design D7): rules whose evidence dropped below threshold are retired
+	// automatically, with no user action required.
+	active, _ := cga.CheckRetirement(existing, patterns, cgaLearnThreshold)
+
+	activeText := make(map[string]bool, len(active))
+	for _, r := range active {
+		activeText[r.Text] = true
+	}
+	var candidates []cga.Pattern
 	for _, p := range patterns {
+		if !activeText[cga.DraftRuleText(p)] {
+			candidates = append(candidates, p)
+		}
+	}
+
+	if len(candidates) == 0 {
+		fmt.Fprintln(out, "no new patterns meet the evidence threshold")
+		if err := SaveLearnedRules(baseDir, project, active); err != nil {
+			return true, 1, err
+		}
+		return true, 0, nil
+	}
+
+	learned := active
+	reader := bufio.NewReader(in)
+	for _, p := range candidates {
 		text := cga.DraftRuleText(p)
 		fmt.Fprintf(out, "\nCandidate rule (%s severity, evidence: %d):\n  %s\n", p.Severity, p.EvidenceCount, text)
 		if len(p.Files) > 0 {
@@ -196,6 +229,7 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 		fmt.Fprintln(out, "approved")
 	}
 
+	learned = cga.EnforceCap(learned, cga.LearnedRulesCap)
 	if err := SaveLearnedRules(baseDir, project, learned); err != nil {
 		return true, 1, err
 	}
