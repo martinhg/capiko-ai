@@ -63,3 +63,26 @@ func EnforceCap(rules []LearnedRule, cap int) []LearnedRule {
 
 	return trimmed[len(trimmed)-cap:]
 }
+
+// CheckRetirement partitions rules into active and retired by re-checking
+// each rule's evidence against the current detection pass (spec F3.6, design
+// D7): a rule stays active only when a pattern with the same severity and
+// drafted text exists in patterns with EvidenceCount >= threshold; otherwise
+// (no matching pattern, or its evidence fell below threshold) the rule is
+// retired. Matching uses DraftRuleText so this stays independent of any rule
+// ID scheme. It is a pure function: no I/O.
+func CheckRetirement(rules []LearnedRule, patterns []Pattern, threshold int) (active, retired []LearnedRule) {
+	current := make(map[string]int, len(patterns))
+	for _, p := range patterns {
+		current[DraftRuleText(p)] = p.EvidenceCount
+	}
+
+	for _, r := range rules {
+		if count, ok := current[r.Text]; ok && count >= threshold {
+			active = append(active, r)
+			continue
+		}
+		retired = append(retired, r)
+	}
+	return active, retired
+}
