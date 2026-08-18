@@ -51,6 +51,8 @@ func cgaCommand(name string, args []string, out io.Writer) (handled bool, exitCo
 		return cgaFindings(out)
 	case "learn":
 		return cgaLearn(out, cgaStdin)
+	case "rules":
+		return cgaRules(out)
 	default:
 		fmt.Fprintf(out, "cga: unknown subcommand %q\n", sub)
 		fmt.Fprintln(out, cgaUsage)
@@ -234,6 +236,25 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 		return true, 1, err
 	}
 
+	return true, 0, nil
+}
+
+// cgaRules lists the locally persisted learned rules for the current
+// workspace's engram project (spec F3.7).
+func cgaRules(out io.Writer) (bool, int, error) {
+	baseDir, err := cgaBaseDir()
+	if err != nil {
+		return true, 1, err
+	}
+	rules, err := LoadLearnedRules(baseDir, cgaProject())
+	if err != nil {
+		return true, 1, err
+	}
+	if len(rules) == 0 {
+		fmt.Fprintln(out, "no learned rules")
+		return true, 0, nil
+	}
+	fmt.Fprintln(out, cga.FormatLearnedRules(rules))
 	return true, 0, nil
 }
 
