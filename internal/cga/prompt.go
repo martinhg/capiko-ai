@@ -1,7 +1,7 @@
 // Package cga implements the Capiko Guardian Angel: a native pre-commit code
 // review that invokes Copilot as the sole reviewer via a git hook script.
 // Everything in this package is pure — no I/O, no exec, no network. The
-// pre-commit hook script (rendered by RenderHook) is the only piece that
+// pre-commit hook script (rendered by RenderPreCommitHook) is the only piece that
 // talks to Copilot, at commit time, on the user's machine. capiko's Go
 // binary never calls an AI model directly.
 package cga
