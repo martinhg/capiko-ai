@@ -105,6 +105,28 @@ func TestRenderHookRecursionGuard(t *testing.T) {
 	}
 }
 
+func TestRenderHookDisplaysFindingsViaJq(t *testing.T) {
+	script := RenderHook("RULES-BODY", true, 120)
+	if !strings.Contains(script, `.findings[]?`) {
+		t.Errorf("rendered hook missing jq findings extraction (.findings[]?):\n%s", script)
+	}
+	if !strings.Contains(script, "severity") {
+		t.Errorf("rendered hook findings block should reference severity:\n%s", script)
+	}
+}
+
+func TestRenderHookFindingsDisplayBeforeCaseStatement(t *testing.T) {
+	script := RenderHook("RULES-BODY", true, 120)
+	findingsIdx := strings.Index(script, `.findings[]?`)
+	caseIdx := strings.Index(script, `case "$verdict"`)
+	if findingsIdx < 0 || caseIdx < 0 {
+		t.Fatal("expected both findings display and case statement in rendered hook")
+	}
+	if findingsIdx > caseIdx {
+		t.Errorf("findings display must appear before the verdict case-statement (runs on PASS and FAIL):\n%s", script)
+	}
+}
+
 func TestRenderHookIsBashOnlyNoPowerShell(t *testing.T) {
 	script := RenderHook("RULES-BODY", true, 120)
 	for _, banned := range []string{"powershell", "PowerShell", "Get-ChildItem", "$env:"} {

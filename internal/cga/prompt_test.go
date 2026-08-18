@@ -77,6 +77,11 @@ func TestBuildPrompt(t *testing.T) {
 			if !strings.Contains(got, "verdict") {
 				t.Errorf("prompt should reference the verdict field:\n%s", got)
 			}
+			for _, kw := range []string{"findings", "severity", "CRITICAL", "WARNING", "SUGGESTION"} {
+				if !strings.Contains(got, kw) {
+					t.Errorf("prompt should instruct the optional findings schema, missing %q:\n%s", kw, got)
+				}
+			}
 		})
 	}
 }

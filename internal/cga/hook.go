@@ -68,6 +68,10 @@ func RenderHook(rules string, strict bool, timeout int) string {
 	b.WriteString(`  verdict="$(printf '%s' "$result" | grep -o '"verdict"[[:space:]]*:[[:space:]]*"[A-Za-z]*"' | grep -o '"[A-Za-z]*"$' | tr -d '"' | tr '[:lower:]' '[:upper:]')"` + "\n")
 	b.WriteString("fi\n")
 
+	b.WriteString(`printf '%s' "$result" | jq -r ` +
+		`'.findings[]? | "  [\(.severity)] \(.file)\(if .line and .line > 0 then ":\(.line)" else "" end) - \(.description)"' ` +
+		"2>/dev/null >&2\n")
+
 	b.WriteString("case \"$verdict\" in\n")
 	b.WriteString("  PASS)\n")
 	b.WriteString("    exit 0\n")
