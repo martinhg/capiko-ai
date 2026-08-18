@@ -97,7 +97,7 @@ func removeGGAPreCommitHook(workspace string) error {
 // applyCGA installs (or re-applies) the Capiko Guardian Angel pre-commit
 // review hook into workspace: it first cleans up any gga remnants (gga is
 // replaced entirely, with no automatic migration — see cleanupGGA), then
-// renders and writes the CGA hook via cga.RenderHook + githooks.WriteBlock,
+// renders and writes the CGA hook via cga.RenderPreCommitHook + githooks.WriteBlock,
 // and records the result in state. Disabling removes the hook block and
 // records it off, so sync does not re-apply. Shared by the configure screen
 // and the post-sync re-apply.
@@ -114,7 +114,11 @@ func applyCGA(workspace string, store *state.Store, bkp *backup.Store, rec *stat
 	}
 
 	persona := activePersona(store)
-	script := cga.RenderHook(cga.Rules(persona), rec.StrictMode, rec.Timeout)
+	// logPath/rotationCap wiring (findings-log persistence) lands in CGA
+	// Phase 2 PR3 alongside post-commit hook installation; until then the
+	// findings-append block stays disabled (logPath "") so the rendered
+	// hook is byte-for-byte unchanged.
+	script := cga.RenderPreCommitHook(cga.Rules(persona), rec.StrictMode, rec.Timeout, "", 0)
 
 	if err := backupCGAHook(bkp, workspace); err != nil {
 		return err
@@ -191,7 +195,7 @@ const (
 )
 
 // Timeout bounds and step for the Timeout row, in seconds. Mirrors the
-// default baked into cga.RenderHook when a record carries Timeout: 0.
+// default baked into cga.RenderPreCommitHook when a record carries Timeout: 0.
 const (
 	cgaTimeoutDefault = 120
 	cgaTimeoutStep    = 30
