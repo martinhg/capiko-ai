@@ -38,6 +38,9 @@ func RenderHook(rules string, strict bool, timeout int) string {
 
 	var b strings.Builder
 
+	b.WriteString("[ \"$CGA_RUNNING\" = \"1\" ] && exit 0\n")
+	b.WriteString("export CGA_RUNNING=1\n\n")
+
 	fmt.Fprintf(&b, "STRICT=%s\n", strictVal)
 	fmt.Fprintf(&b, "TIMEOUT=%d\n", timeout)
 	fmt.Fprintf(&b, "rules=%s\n", shellSingleQuote(rules))
