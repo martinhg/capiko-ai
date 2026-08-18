@@ -63,7 +63,19 @@ nothing else after it. Do not wrap it in a code fence.
 
 - {"verdict":"PASS"} if the diff has no violations of the rules above.
 - {"verdict":"FAIL","reason":"<one-sentence reason>"} if it violates a REJECT
-  or REQUIRE rule.`
+  or REQUIRE rule.
+
+Optionally include a "findings" array with per-file details:
+
+{"verdict":"FAIL","reason":"<one-sentence>","findings":[{"file":"path/to/file","line":10,"severity":"CRITICAL","description":"what is wrong"}]}
+
+Severity levels:
+- CRITICAL: violates a REJECT rule (hard failure)
+- WARNING: violates a REQUIRE rule (mandatory fix)
+- SUGGESTION: violates a PREFER rule (advisory)
+
+Omit "line" when the finding applies to the entire file.
+If the diff has no violations, you may still include SUGGESTION findings.`
 
 // BuildPrompt combines rules text and a staged diff into a Copilot review
 // prompt. It is a pure function: no I/O, no exec. When diff is empty (or
