@@ -58,6 +58,11 @@ type State struct {
 	// unmanaged. When set, drift detection re-hashes the declared files and
 	// compares against the recorded checksums.
 	Integrity *IntegrityRecord `json:"integrity,omitempty"`
+	// CGA records the managed Capiko Guardian Angel (native pre-commit review)
+	// configuration; nil = unmanaged. Replaces CodeReview (gga) entirely — no
+	// automatic migration from CodeReviewRecord is performed. Sync re-applies
+	// the hook only when enabled, mirroring TeamSync/CopilotHooks.
+	CGA *CGARecord `json:"cga,omitempty"`
 	// LastUpdateCheck is the last time a GitHub release check succeeded. Nil
 	// means "never checked" — the next launch will always call the API. The
 	// timestamp is advanced only on a successful check, so failures don't
@@ -134,6 +139,21 @@ type IntegrityRecord struct {
 	Files     []string          `json:"files"`               // protected file paths (absolute)
 	Checksums map[string]string `json:"checksums,omitempty"` // path → SHA-256
 	Checksum  string            `json:"checksum,omitempty"`  // combined SHA-256
+}
+
+// CGARecord is the managed Capiko Guardian Angel (CGA) configuration: a
+// native pre-commit review hook that shells out to `copilot -p`. capiko
+// configures the hook (writes the marker-delimited pre-commit block via
+// githooks.WriteBlock); it never calls an AI model directly from the Go
+// binary. Enabled false records a deliberately-disabled wiring so sync does
+// not re-apply it. Replaces CodeReviewRecord entirely — enabling CGA is a
+// fresh opt-in with no automatic migration from a prior CodeReviewRecord.
+type CGARecord struct {
+	Enabled    bool   `json:"enabled"`
+	StrictMode bool   `json:"strict_mode,omitempty"` // ambiguous verdict blocks the commit when true (default true)
+	Timeout    int    `json:"timeout,omitempty"`     // copilot -p timeout in seconds, default 120
+	Workspace  string `json:"workspace,omitempty"`   // repo root where the hook was written, for RunSync re-apply
+	Checksum   string `json:"checksum,omitempty"`    // of the rendered hook script, for drift
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
@@ -431,6 +451,20 @@ func (s *Store) SetIntegrity(rec *IntegrityRecord) error {
 		return err
 	}
 	st.Integrity = rec
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetCGA records the managed Capiko Guardian Angel configuration (nil =
+// unmanaged). Mirrors SetTeamSync/SetCopilotHooks: snapshot-before-mutate is
+// the caller's responsibility; this method only persists the record. Does
+// not read or touch CodeReview — CGA replaces it with no auto-migration.
+func (s *Store) SetCGA(rec *CGARecord) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.CGA = rec
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

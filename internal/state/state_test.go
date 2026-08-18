@@ -728,3 +728,137 @@ func TestLoadIntegrityBackwardCompat(t *testing.T) {
 		t.Errorf("Integrity should be nil for a state.json predating this field, got %+v", st.Integrity)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// CGARecord / SetCGA
+// ---------------------------------------------------------------------------
+
+func TestSetCGA_RoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := &CGARecord{
+		Enabled:    true,
+		StrictMode: true,
+		Timeout:    120,
+		Workspace:  "/home/user/repo",
+		Checksum:   "abc123",
+	}
+	if err := s.SetCGA(rec); err != nil {
+		t.Fatalf("SetCGA: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CGA == nil {
+		t.Fatal("CGA should be set after SetCGA")
+	}
+	if !st.CGA.Enabled {
+		t.Error("Enabled should be true")
+	}
+	if !st.CGA.StrictMode {
+		t.Error("StrictMode should be true")
+	}
+	if st.CGA.Timeout != 120 {
+		t.Errorf("Timeout = %d, want 120", st.CGA.Timeout)
+	}
+	if st.CGA.Workspace != "/home/user/repo" {
+		t.Errorf("Workspace = %q, want /home/user/repo", st.CGA.Workspace)
+	}
+	if st.CGA.Checksum != "abc123" {
+		t.Errorf("Checksum = %q, want abc123", st.CGA.Checksum)
+	}
+}
+
+func TestSetCGA_NilClears(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetCGA(&CGARecord{Enabled: true, StrictMode: true, Timeout: 120}); err != nil {
+		t.Fatalf("SetCGA seed: %v", err)
+	}
+	if err := s.SetCGA(nil); err != nil {
+		t.Fatalf("SetCGA nil: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CGA != nil {
+		t.Errorf("CGA should be nil after clear, got %+v", st.CGA)
+	}
+}
+
+func TestSetCGA_UpdatedAt(t *testing.T) {
+	s := NewStore(t.TempDir())
+	before := time.Now().UTC()
+	if err := s.SetCGA(&CGARecord{Enabled: true, StrictMode: true, Timeout: 120}); err != nil {
+		t.Fatalf("SetCGA: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.UpdatedAt.Before(before) {
+		t.Errorf("UpdatedAt %v should be >= %v", st.UpdatedAt, before)
+	}
+}
+
+func TestCGAOmittedWhenNil(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.Apply("1.0.0", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(data, []byte(`"cga"`)) {
+		t.Errorf("state without cga should omit the key, got:\n%s", data)
+	}
+}
+
+func TestLoadCGABackwardCompat(t *testing.T) {
+	// A state.json written before this field existed must still load cleanly,
+	// with CGA left nil (unmanaged).
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"version":"1.0.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(dir)
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CGA != nil {
+		t.Errorf("CGA should be nil for a state.json predating this field, got %+v", st.CGA)
+	}
+}
+
+func TestSetCGA_DoesNotAutoMigrateFromCodeReview(t *testing.T) {
+	// A prior CodeReviewRecord (GGA) must never be auto-converted into a
+	// CGARecord. Enabling CGA is a fresh, explicit opt-in per spec.
+	s := NewStore(t.TempDir())
+	if err := s.SetCodeReview(&CodeReviewRecord{Enabled: true, Provider: "claude", StrictMode: true, Timeout: 90}); err != nil {
+		t.Fatalf("SetCodeReview seed: %v", err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CGA != nil {
+		t.Errorf("CGA should remain nil after only SetCodeReview was called, got %+v", st.CGA)
+	}
+	if st.CodeReview == nil || !st.CodeReview.Enabled {
+		t.Fatalf("CodeReview should still be persisted independently, got %+v", st.CodeReview)
+	}
+
+	// Explicitly enabling CGA afterward does not touch or clear CodeReview.
+	if err := s.SetCGA(&CGARecord{Enabled: true, StrictMode: true, Timeout: 120}); err != nil {
+		t.Fatalf("SetCGA: %v", err)
+	}
+	st, err = s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if st.CGA == nil || !st.CGA.Enabled {
+		t.Fatalf("CGA should be set after explicit SetCGA, got %+v", st.CGA)
+	}
+	if st.CodeReview == nil || !st.CodeReview.Enabled {
+		t.Errorf("CodeReview should remain untouched by SetCGA, got %+v", st.CodeReview)
+	}
+}
