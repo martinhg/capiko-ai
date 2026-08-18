@@ -65,6 +65,17 @@ func main() {
 				os.Exit(exitCode)
 			}
 			return
+		case "cga":
+			// Headless CGA findings log reader: prints the persisted
+			// per-commit review log without launching the TUI.
+			_, exitCode, err := cgaCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		case "doctor":
 			// Ecosystem health check: print pass/warn/fail diagnostics without
 			// launching the TUI. A failed check exits non-zero so the command is

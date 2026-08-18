@@ -12,6 +12,7 @@ import (
 // Keep sorted. Each entry is name → one-line description.
 var commands = map[string]string{
 	"backup":         "List or restore skill backups",
+	"cga":            "Show CGA (commit gate agent) findings log",
 	"doctor":         "Run ecosystem health checks",
 	"help":           "Show this help message",
 	"install":        "Install all catalog skills and agents",
