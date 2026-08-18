@@ -5,8 +5,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/martinhg/capiko-ai/internal/cga"
 )
 
 func withStubGitDir(t *testing.T, dir string, err error) {
@@ -117,5 +120,43 @@ func TestCgaFindingsGitDirResolutionFails(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "no findings recorded") {
 		t.Errorf("expected 'no findings recorded' in output:\n%s", buf.String())
+	}
+}
+
+// --- Task 3.1: local JSON store ---
+
+func TestLoadLearnedRulesMissingFileReturnsEmpty(t *testing.T) {
+	baseDir := t.TempDir()
+	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("want empty slice, got %v", rules)
+	}
+}
+
+func TestSaveLoadLearnedRulesRoundTrip(t *testing.T) {
+	baseDir := t.TempDir()
+	want := []cga.LearnedRule{
+		{ID: "abc123", Severity: cga.SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 4, ApprovedAt: "2026-08-18T10:00:00Z"},
+		{ID: "def456", Severity: cga.SeverityCritical, Text: "REJECT if: errors swallowed silently", EvidenceCount: 3, ApprovedAt: "2026-08-17T10:00:00Z"},
+	}
+
+	if err := SaveLearnedRules(baseDir, "acme/repo", want); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	got, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+
+	path := filepath.Join(baseDir, "cga", "acme/repo", "learned-rules.json")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected file at %s: %v", path, err)
 	}
 }
