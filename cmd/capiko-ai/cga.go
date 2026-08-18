@@ -179,7 +179,11 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 		}
 		fmt.Fprint(out, "Approve? [y/N] ")
 		line, _ := reader.ReadString('\n')
-		_ = strings.ToLower(strings.TrimSpace(line))
+		answer := strings.ToLower(strings.TrimSpace(line))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(out, "rejected")
+			continue
+		}
 
 		rule := cga.LearnedRule{
 			ID:            state.Checksum(string(p.Severity) + "|" + p.Description),
