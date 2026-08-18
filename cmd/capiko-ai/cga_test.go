@@ -239,3 +239,32 @@ func TestCgaLearnApprovalPersists(t *testing.T) {
 		t.Error("expected non-empty ApprovedAt")
 	}
 }
+
+// --- Task 3.3: rejection path ---
+
+func TestCgaLearnRejectionDiscardsRule(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("n\n"))
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "rejected") {
+		t.Errorf("expected 'rejected' in output:\n%s", buf.String())
+	}
+
+	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("want 0 learned rules after rejection, got %d: %+v", len(rules), rules)
+	}
+}
