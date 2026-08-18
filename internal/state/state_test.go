@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -860,5 +861,38 @@ func TestSetCGA_DoesNotAutoMigrateFromCodeReview(t *testing.T) {
 	}
 	if st.CodeReview == nil || !st.CodeReview.Enabled {
 		t.Errorf("CodeReview should remain untouched by SetCGA, got %+v", st.CodeReview)
+	}
+}
+
+func TestCGARecord_LearnedRulesChecksum_JSONRoundTrip(t *testing.T) {
+	rec := CGARecord{
+		Enabled:              true,
+		StrictMode:           true,
+		Timeout:              120,
+		Workspace:            "/home/user/repo",
+		Checksum:             "abc123",
+		LearnedRulesChecksum: "def456",
+	}
+	data, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got CGARecord
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got.LearnedRulesChecksum != "def456" {
+		t.Errorf("LearnedRulesChecksum round-trip = %q, want %q", got.LearnedRulesChecksum, "def456")
+	}
+}
+
+func TestCGARecord_LearnedRulesChecksum_OmittedWhenEmpty(t *testing.T) {
+	rec := CGARecord{Enabled: true}
+	data, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if bytes.Contains(data, []byte(`"learned_rules_checksum"`)) {
+		t.Errorf("empty LearnedRulesChecksum should be omitted, got:\n%s", data)
 	}
 }
