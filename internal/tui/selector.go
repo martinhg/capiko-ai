@@ -111,7 +111,7 @@ func (s *selector) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		// After a successful install, offer to configure AI code review for the
 		// project as an optional next step (install flow only — resolveDeps marks it).
 		if s.state == selDone && s.resolveDeps && msg.String() == "c" {
-			return newCodeReview(s.svc), nil
+			return newCGA(s.svc), nil
 		}
 		return s, back // any other key returns to the menu
 	}

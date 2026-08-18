@@ -72,7 +72,7 @@ var menuItems = []menuItem{
 	{"SDD Status", "sdd-status", "View active SDD changes and their progress.", true},
 	{"Configure engram", "engram", "Set up persistent memory across sessions.", true},
 	{"Configure headroom", "headroom", "Tune context-window budget for large codebases.", true},
-	{"Configure code review", "code-review", "Enable structured multi-layer code reviews.", true},
+	{"Configure CGA", "code-review", "Capiko Guardian Angel: Copilot reviews every commit.", true},
 	{"Configure team sync", "team-sync", "Share conventions and hooks across a team.", true},
 	{"Configure Copilot hooks", "copilot-hooks", "Add safety hooks that run before Copilot actions.", true},
 	{"Upgrade tools", "upgrade", "Update capiko-ai to the latest release.", true},
@@ -249,7 +249,7 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 	case it.id == "headroom":
 		a.active = newHeadroom(a.svc)
 	case it.id == "code-review":
-		a.active = newCodeReview(a.svc)
+		a.active = newCGA(a.svc)
 	case it.id == "team-sync":
 		a.active = newTeamSync(a.svc)
 	case it.id == "copilot-hooks":

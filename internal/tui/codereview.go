@@ -178,70 +178,89 @@ func activePersona(store *state.Store) string {
 }
 
 // ============================================================================
-// Configure code review screen
-//
-// NOTE: this screen still uses the codeReviewScreen/codeReview* names and its
-// pre-CGA row layout (no Timeout control yet). It is repurposed here only
-// enough to compile against applyCGA/state.CGARecord after the gga backend
-// and internal/codereview package were removed. The full screen rewrite
-// (rename to cgaScreen, add a Timeout row, update copy/labels) is tracked as
-// a separate, later work unit.
+// Configure CGA screen
 // ============================================================================
 
 // Row indices on the configure screen.
 const (
-	rowCodeReviewEnabled = iota
-	rowCodeReviewStrict
-	rowCodeReviewApply
-	rowCodeReviewBack
-	codeReviewRows
+	rowCGAEnabled = iota
+	rowCGAStrict
+	rowCGATimeout
+	rowCGAApply
+	rowCGABack
+	cgaRows
 )
 
-type codeReviewState int
+// Timeout bounds and step for the Timeout row, in seconds. Mirrors the
+// default baked into cga.RenderHook when a record carries Timeout: 0.
+const (
+	cgaTimeoutDefault = 120
+	cgaTimeoutStep    = 30
+	cgaTimeoutMin     = 30
+	cgaTimeoutMax     = 600
+)
+
+// adjustTimeout adds delta to timeout, clamped to [cgaTimeoutMin, cgaTimeoutMax].
+func adjustTimeout(timeout, delta int) int {
+	next := timeout + delta
+	if next < cgaTimeoutMin {
+		return cgaTimeoutMin
+	}
+	if next > cgaTimeoutMax {
+		return cgaTimeoutMax
+	}
+	return next
+}
+
+type cgaScreenState int
 
 const (
-	codeReviewEditing codeReviewState = iota
-	codeReviewApplying
-	codeReviewDone
-	codeReviewFailed
+	cgaEditing cgaScreenState = iota
+	cgaApplying
+	cgaDone
+	cgaFailed
 )
 
-// codeReviewScreen configures Capiko Guardian Angel (CGA) for the current
-// project: it toggles the integration and strict mode, then writes the
-// pre-commit review hook.
-type codeReviewScreen struct {
+// cgaScreen configures Capiko Guardian Angel (CGA) for the current project:
+// it toggles the integration, strict mode, and review timeout, then writes
+// the pre-commit review hook.
+type cgaScreen struct {
 	svc     services
 	enabled bool
 	strict  bool
+	timeout int
 	cursor  int
-	state   codeReviewState
+	state   cgaScreenState
 	err     error
 }
 
-type codeReviewAppliedMsg struct{ err error }
+type cgaAppliedMsg struct{ err error }
 
-func newCodeReview(svc services) screen {
-	s := &codeReviewScreen{svc: svc, strict: true}
+func newCGA(svc services) screen {
+	s := &cgaScreen{svc: svc, strict: true, timeout: cgaTimeoutDefault}
 	if svc.state != nil {
 		if st, err := svc.state.Load(); err == nil && st.CGA != nil {
 			s.enabled = st.CGA.Enabled
 			s.strict = st.CGA.StrictMode
+			if st.CGA.Timeout > 0 {
+				s.timeout = st.CGA.Timeout
+			}
 		}
 	}
 	return s
 }
 
-func (s *codeReviewScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
+func (s *cgaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
-	case codeReviewAppliedMsg:
+	case cgaAppliedMsg:
 		if msg.err != nil {
-			s.state, s.err = codeReviewFailed, msg.err
+			s.state, s.err = cgaFailed, msg.err
 		} else {
-			s.state = codeReviewDone
+			s.state = cgaDone
 		}
 		return s, nil
 	case tea.KeyMsg:
-		if s.state == codeReviewApplying {
+		if s.state == cgaApplying {
 			return s, nil
 		}
 		switch msg.String() {
@@ -252,17 +271,25 @@ func (s *codeReviewScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 				s.cursor--
 			}
 		case "down", "j":
-			if s.cursor < codeReviewRows-1 {
+			if s.cursor < cgaRows-1 {
 				s.cursor++
 			}
 		case " ":
 			s.toggle()
+		case "left", "h":
+			if s.cursor == rowCGATimeout {
+				s.timeout = adjustTimeout(s.timeout, -cgaTimeoutStep)
+			}
+		case "right", "l":
+			if s.cursor == rowCGATimeout {
+				s.timeout = adjustTimeout(s.timeout, cgaTimeoutStep)
+			}
 		case "enter":
 			switch s.cursor {
-			case rowCodeReviewApply:
-				s.state = codeReviewApplying
+			case rowCGAApply:
+				s.state = cgaApplying
 				return s, s.applyCmd()
-			case rowCodeReviewBack:
+			case rowCGABack:
 				return s, back
 			default:
 				s.toggle()
@@ -272,45 +299,47 @@ func (s *codeReviewScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	return s, nil
 }
 
-// toggle flips the boolean on the current row (enabled or strict mode).
-func (s *codeReviewScreen) toggle() {
+// toggle flips the boolean on the current row (enabled or strict mode). The
+// Timeout row is adjusted via left/right instead — see Update.
+func (s *cgaScreen) toggle() {
 	switch s.cursor {
-	case rowCodeReviewEnabled:
+	case rowCGAEnabled:
 		s.enabled = !s.enabled
-	case rowCodeReviewStrict:
+	case rowCGAStrict:
 		s.strict = !s.strict
 	}
 }
 
-func (s *codeReviewScreen) applyCmd() tea.Cmd {
+func (s *cgaScreen) applyCmd() tea.Cmd {
 	svc := s.svc
 	rec := &state.CGARecord{
 		Enabled:    s.enabled,
 		StrictMode: s.strict,
+		Timeout:    s.timeout,
 	}
 	return func() tea.Msg {
 		ws, err := cgaGetwd()
 		if err != nil {
-			return codeReviewAppliedMsg{err: err}
+			return cgaAppliedMsg{err: err}
 		}
-		return codeReviewAppliedMsg{err: applyCGA(ws, svc.state, svc.backup, rec)}
+		return cgaAppliedMsg{err: applyCGA(ws, svc.state, svc.backup, rec)}
 	}
 }
 
-func (s *codeReviewScreen) View() string {
+func (s *cgaScreen) View() string {
 	var b strings.Builder
-	b.WriteString(titleSty.Render("Configure code review") + "\n")
+	b.WriteString(titleSty.Render("Configure Capiko Guardian Angel (CGA)") + "\n")
 	b.WriteString(dimSty.Render("Wire Capiko Guardian Angel into this project: Copilot reviews every commit.") + "\n\n")
 
 	switch s.state {
-	case codeReviewApplying:
-		b.WriteString("Applying code-review config…\n")
+	case cgaApplying:
+		b.WriteString("Applying CGA config…\n")
 		return b.String()
-	case codeReviewDone:
-		b.WriteString(okSty.Render("Code review configured ✓") + "\n\n")
+	case cgaDone:
+		b.WriteString(okSty.Render("CGA configured ✓") + "\n\n")
 		b.WriteString(dimSty.Render("any key to go back") + "\n")
 		return b.String()
-	case codeReviewFailed:
+	case cgaFailed:
 		b.WriteString(errSty.Render("Error: "+s.err.Error()) + "\n\n")
 		b.WriteString(dimSty.Render("any key to go back") + "\n")
 		return b.String()
@@ -319,6 +348,7 @@ func (s *codeReviewScreen) View() string {
 	rows := []struct{ label, value string }{
 		{"Enabled", onOff(s.enabled)},
 		{"Strict mode", onOff(s.strict)},
+		{"Timeout", fmt.Sprintf("%ds", s.timeout)},
 		{"Apply", ""},
 		{"Back", ""},
 	}
@@ -335,7 +365,7 @@ func (s *codeReviewScreen) View() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n" + dimSty.Render("↑/↓ move · space toggle · enter select · esc back") + "\n")
+	b.WriteString("\n" + dimSty.Render("↑/↓ move · space toggle · ←/→ timeout · enter select · esc back") + "\n")
 	return b.String()
 }
 

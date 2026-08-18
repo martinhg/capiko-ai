@@ -1,11 +1,12 @@
 capiko-ai  ·  Copilot configurator
 
-Configure code review
+Configure Capiko Guardian Angel (CGA)
 Wire Capiko Guardian Angel into this project: Copilot reviews every commit.
 
 ▸ Enabled         off
   Strict mode     on
+  Timeout         120s
   Apply         
   Back          
 
-↑/↓ move · space toggle · enter select · esc back
+↑/↓ move · space toggle · ←/→ timeout · enter select · esc back
