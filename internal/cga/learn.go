@@ -1,6 +1,7 @@
 package cga
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -117,4 +118,29 @@ func DetectPatterns(entries []LogEntry, threshold int) []Pattern {
 	})
 
 	return patterns
+}
+
+// severityVerb maps a finding severity to the rule-prose verb DraftRuleText
+// uses, mirroring the REJECT/REQUIRE/PREFER vocabulary from Rules(). An
+// unrecognized severity renders verbatim as its own verb so the drafted
+// text stays informative rather than silently dropping information.
+func severityVerb(s Severity) string {
+	switch s {
+	case SeverityCritical:
+		return "REJECT if"
+	case SeverityWarning:
+		return "REQUIRE"
+	case SeveritySuggestion:
+		return "PREFER"
+	default:
+		return string(s)
+	}
+}
+
+// DraftRuleText generates formulaic rule prose from a pattern, preserving
+// the pattern's severity with no automatic downgrade (spec F3.2): CRITICAL
+// drafts as "REJECT if: ...", WARNING as "REQUIRE: ...", SUGGESTION as
+// "PREFER: ...". It is a pure function: no I/O, no AI call.
+func DraftRuleText(p Pattern) string {
+	return fmt.Sprintf("%s: %s", severityVerb(p.Severity), p.Description)
 }
