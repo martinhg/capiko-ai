@@ -127,6 +127,15 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying copilot hooks: %w", err)
 				}
 			}
+			// Re-apply the CGA pre-commit review hook, only once the user has
+			// enabled it — mirroring the copilot-hooks/headroom opt-in.
+			// applyCGA re-renders the hook from the current rules/config and
+			// rewrites the workspace's managed pre-commit block.
+			if st.CGA != nil && st.CGA.Enabled {
+				if err := applyCGA(st.CGA.Workspace, store, bkp, st.CGA); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying CGA: %w", err)
+				}
+			}
 		}
 	}
 	return len(recorded) + len(agentRecorded), nil
