@@ -87,6 +87,24 @@ func TestRenderHookDefaultsTimeoutWhenNonPositive(t *testing.T) {
 	}
 }
 
+func TestRenderHookRecursionGuard(t *testing.T) {
+	script := RenderHook("RULES-BODY", true, 120)
+	guardIdx := strings.Index(script, "CGA_RUNNING")
+	copilotIdx := strings.Index(script, "copilot -p")
+	if guardIdx < 0 {
+		t.Fatal("rendered hook must include a CGA_RUNNING recursion guard")
+	}
+	if copilotIdx < 0 {
+		t.Fatal("rendered hook must include copilot invocation")
+	}
+	if guardIdx > copilotIdx {
+		t.Error("recursion guard must appear before the copilot invocation")
+	}
+	if !strings.Contains(script, "export CGA_RUNNING=1") {
+		t.Error("rendered hook must export CGA_RUNNING=1 so nested hooks see it")
+	}
+}
+
 func TestRenderHookIsBashOnlyNoPowerShell(t *testing.T) {
 	script := RenderHook("RULES-BODY", true, 120)
 	for _, banned := range []string{"powershell", "PowerShell", "Get-ChildItem", "$env:"} {
