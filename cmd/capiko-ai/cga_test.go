@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/cga"
+	"github.com/martinhg/capiko-ai/internal/clilog"
 )
 
 func withStubGitDir(t *testing.T, dir string, err error) {
@@ -445,6 +447,78 @@ func TestCgaLearnEngramSyncFailureIsNonFatal(t *testing.T) {
 	}
 	if len(rules) != 1 {
 		t.Fatalf("want rule persisted locally despite sync failure, got %d", len(rules))
+	}
+}
+
+// --- Task 3.7: metrics events ---
+
+func withStubCgaLearnLog(t *testing.T, buf *bytes.Buffer) {
+	t.Helper()
+	prev := cgaLearnLog
+	cgaLearnLog = clilog.New(buf, "cga-learn")
+	t.Cleanup(func() { cgaLearnLog = prev })
+}
+
+func eventNames(t *testing.T, jsonLines string) []string {
+	t.Helper()
+	var names []string
+	for _, line := range strings.Split(strings.TrimSpace(jsonLines), "\n") {
+		if line == "" {
+			continue
+		}
+		var e clilog.Entry
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("invalid JSON line %q: %v", line, err)
+		}
+		names = append(names, e.Event)
+	}
+	return names
+}
+
+const twoPatternLog = `{"timestamp":"2026-08-16T10:00:00Z","parent_sha":"a","commit_sha":"a1","verdict":"FAIL","findings":[{"file":"a.go","severity":"WARNING","description":"missing test coverage"},{"file":"x.go","severity":"CRITICAL","description":"errors swallowed silently"}]}
+{"timestamp":"2026-08-17T10:00:00Z","parent_sha":"a1","commit_sha":"b1","verdict":"FAIL","findings":[{"file":"b.go","severity":"WARNING","description":"missing test coverage"},{"file":"y.go","severity":"CRITICAL","description":"errors swallowed silently"}]}
+{"timestamp":"2026-08-18T10:00:00Z","parent_sha":"b1","commit_sha":"c1","verdict":"FAIL","findings":[{"file":"c.go","severity":"WARNING","description":"missing test coverage"},{"file":"z.go","severity":"CRITICAL","description":"errors swallowed silently"}]}
+`
+
+func TestCgaLearnEmitsMetricsEvents(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, twoPatternLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+	withStubEngramSync(t, func(string, cga.LearnedRule) error { return nil })
+
+	stale := []cga.LearnedRule{
+		{ID: "stale", Severity: cga.SeverityWarning, Text: "REQUIRE: some rule with no current evidence", EvidenceCount: 3, ApprovedAt: "2026-08-01T00:00:00Z"},
+	}
+	if err := SaveLearnedRules(baseDir, "acme/repo", stale); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var logBuf bytes.Buffer
+	withStubCgaLearnLog(t, &logBuf)
+
+	var out bytes.Buffer
+	// Approve the first candidate (WARNING), reject the second (CRITICAL).
+	handled, exitCode, err := cgaLearn(&out, strings.NewReader("y\nn\n"))
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+
+	names := eventNames(t, logBuf.String())
+	for _, want := range []string{"pattern_detected", "rule_proposed", "rule_approved", "rule_rejected", "rule_retired"} {
+		found := false
+		for _, n := range names {
+			if n == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %q event, got events: %v", want, names)
+		}
 	}
 }
 
