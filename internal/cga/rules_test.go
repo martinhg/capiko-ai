@@ -208,3 +208,41 @@ func TestCheckRetirement(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatLearnedRules(t *testing.T) {
+	tests := []struct {
+		name  string
+		rules []LearnedRule
+		want  string
+	}{
+		{
+			name:  "empty rules formats to empty string",
+			rules: nil,
+			want:  "",
+		},
+		{
+			name: "single rule renders severity, text, and evidence count",
+			rules: []LearnedRule{
+				{Severity: SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 4},
+			},
+			want: "[WARNING] REQUIRE: missing test coverage (evidence: 4)",
+		},
+		{
+			name: "multiple rules render one line each",
+			rules: []LearnedRule{
+				{Severity: SeverityCritical, Text: "REJECT if: errors swallowed silently", EvidenceCount: 7},
+				{Severity: SeveritySuggestion, Text: "PREFER: consider a comment", EvidenceCount: 3},
+			},
+			want: "[CRITICAL] REJECT if: errors swallowed silently (evidence: 7)\n" +
+				"[SUGGESTION] PREFER: consider a comment (evidence: 3)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatLearnedRules(tt.rules)
+			if got != tt.want {
+				t.Errorf("FormatLearnedRules() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
