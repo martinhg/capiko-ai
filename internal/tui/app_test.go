@@ -114,13 +114,13 @@ func TestEnterOpensHeadroom(t *testing.T) {
 	}
 }
 
-func TestEnterOpensCodeReview(t *testing.T) {
+func TestEnterOpensCGA(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 8 // Configure code review
+	a.cursor = 8 // Configure CGA
 
 	next, _ := a.Update(key("enter"))
-	if _, ok := next.(App).active.(*codeReviewScreen); !ok {
-		t.Errorf("active = %T, want *codeReviewScreen", next.(App).active)
+	if _, ok := next.(App).active.(*cgaScreen); !ok {
+		t.Errorf("active = %T, want *cgaScreen", next.(App).active)
 	}
 }
 

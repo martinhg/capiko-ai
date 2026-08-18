@@ -306,7 +306,7 @@ type teamSyncAppliedMsg struct{ err error }
 // newTeamSync constructs the Configure team sync screen. It pre-detects
 // the engram binary and hook framework conflicts at construction time so
 // View() is fully deterministic — no filesystem calls at render time.
-// Mirrors newCodeReview and newHeadroom.
+// Mirrors newCGA and newHeadroom.
 func newTeamSync(svc services) screen {
 	ws, _ := teamSyncGetwd()
 	conflictReason := teamSyncDetectConflict(ws)
@@ -398,7 +398,7 @@ func (s *teamSyncScreen) toggle() {
 }
 
 // applyCmd returns a tea.Cmd that runs apply/disable in a goroutine and emits
-// teamSyncAppliedMsg when done. Mirrors codeReviewScreen.applyCmd.
+// teamSyncAppliedMsg when done. Mirrors cgaScreen.applyCmd.
 func (s *teamSyncScreen) applyCmd() tea.Cmd {
 	svc := s.svc
 	enabled := s.enabled

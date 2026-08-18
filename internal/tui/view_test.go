@@ -188,8 +188,8 @@ func TestViewGolden(t *testing.T) {
 			agentNames:   []string{"capiko-sdd-explore", "capiko-sdd-apply"},
 		}}.View()},
 		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},
-		{"code_review", App{state: appScreen, active: &codeReviewScreen{
-			svc: svc, strict: true,
+		{"code_review", App{state: appScreen, active: &cgaScreen{
+			svc: svc, strict: true, timeout: cgaTimeoutDefault,
 		}}.View()},
 		{"sdd_status_list", App{state: appScreen, active: &sddStatusScreen{entries: []sddChange{
 			sddChangeFixture("add-auth", "apply", sddstatus.Dependencies{
