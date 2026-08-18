@@ -1,0 +1,112 @@
+#!/bin/sh
+
+# >>> capiko:cga:pre-commit >>>
+[ "$CGA_RUNNING" = "1" ] && exit 0
+export CGA_RUNNING=1
+
+STRICT=true
+TIMEOUT=60
+rules='# Code Review Rules (capiko-managed)
+
+These standards are enforced by Capiko Guardian Angel on every commit.
+`REJECT if` is a hard failure, `REQUIRE` is mandatory, `PREFER` is advisory.
+
+## Architecture
+
+- REJECT if: business or domain logic lives inside UI components or framework adapters
+- REQUIRE: dependencies point inward — the domain imports no framework or I/O code
+- PREFER: small single-responsibility modules over multi-purpose "god" files
+
+## Naming
+
+- REJECT if: names do not reveal intent (`x`, `tmp`, `data`, `helper`, `manager`)
+- REQUIRE: booleans read as predicates (`isReady`, `hasAccess`, `canRetry`)
+- PREFER: domain language over technical jargon
+
+## Testing
+
+- REJECT if: a behavior change ships without a test that would catch its regression
+- REQUIRE: tests assert observable behavior, not implementation details
+- PREFER: fast deterministic tests; reserve end-to-end coverage for genuinely async flows
+
+## Error Handling
+
+- REJECT if: errors are swallowed silently or replaced with a default without a reason
+- REQUIRE: errors are wrapped with context as they cross a boundary
+- PREFER: failing fast and explicitly over silent fallbacks
+
+## Comments
+
+- REJECT if: a comment merely restates what the code already says
+- PREFER: comments that explain WHY a non-obvious decision was made
+
+## Learned Rules
+
+- REQUIRE: add regression test before merging
+- REJECT if: secrets are committed in plaintext
+'
+verdict_instructions='## Verdict
+
+Respond with ONLY a single JSON object on the last line of your response, and
+nothing else after it. Do not wrap it in a code fence.
+
+- {"verdict":"PASS"} if the diff has no violations of the rules above.
+- {"verdict":"FAIL","reason":"<one-sentence reason>"} if it violates a REJECT
+  or REQUIRE rule.
+
+Optionally include a "findings" array with per-file details:
+
+{"verdict":"FAIL","reason":"<one-sentence>","findings":[{"file":"path/to/file","line":10,"severity":"CRITICAL","description":"what is wrong"}]}
+
+Severity levels:
+- CRITICAL: violates a REJECT rule (hard failure)
+- WARNING: violates a REQUIRE rule (mandatory fix)
+- SUGGESTION: violates a PREFER rule (advisory)
+
+Omit "line" when the finding applies to the entire file.
+If the diff has no violations, you may still include SUGGESTION findings.'
+diff="$(git diff --cached --no-color)"
+if [ -z "$diff" ]; then
+  exit 0
+fi
+prompt="$rules
+
+## Staged Diff
+
+```diff
+$diff
+```
+
+$verdict_instructions"
+result="$(printf '%s' "$prompt" | timeout "$TIMEOUT" copilot -p --output-format json 2>/dev/null)"
+rc=$?
+if [ $rc -ne 0 ]; then
+  if [ "$STRICT" = "true" ]; then
+    echo "CGA: copilot review timed out or failed; blocking commit (StrictMode)." >&2
+    exit 1
+  fi
+  exit 0
+fi
+verdict="$(printf '%s' "$result" | jq -r '.verdict // empty' 2>/dev/null)"
+if [ -z "$verdict" ]; then
+  verdict="$(printf '%s' "$result" | grep -o '"verdict"[[:space:]]*:[[:space:]]*"[A-Za-z]*"' | grep -o '"[A-Za-z]*"$' | tr -d '"' | tr '[:lower:]' '[:upper:]')"
+fi
+printf '%s' "$result" | jq -r '.findings[]? | "  [\(.severity)] \(.file)\(if .line and .line > 0 then ":\(.line)" else "" end) - \(.description)"' 2>/dev/null >&2
+case "$verdict" in
+  PASS)
+    exit 0
+    ;;
+  FAIL)
+    reason="$(printf '%s' "$result" | jq -r '.reason // empty' 2>/dev/null)"
+    echo "CGA: commit blocked by review. $reason" >&2
+    exit 1
+    ;;
+  *)
+    if [ "$STRICT" = "true" ]; then
+      echo "CGA: ambiguous review verdict; blocking commit (StrictMode)." >&2
+      exit 1
+    fi
+    exit 0
+    ;;
+esac
+# <<< capiko:cga:pre-commit <<<
