@@ -332,3 +332,54 @@ func TestCgaLearnRetiresRulesBelowThreshold(t *testing.T) {
 		t.Fatalf("want rule retired (0 active rules), got %d: %+v", len(rules), rules)
 	}
 }
+
+// --- Task 3.5: `cga rules` subcommand ---
+
+func TestCgaRulesPrintsFormattedList(t *testing.T) {
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	rules := []cga.LearnedRule{
+		{ID: "abc", Severity: cga.SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 4, ApprovedAt: "2026-08-18T10:00:00Z"},
+	}
+	if err := SaveLearnedRules(baseDir, "acme/repo", rules); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaRules(&buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if buf.String() != cga.FormatLearnedRules(rules)+"\n" {
+		t.Errorf("got:\n%s\nwant:\n%s\n", buf.String(), cga.FormatLearnedRules(rules)+"\n")
+	}
+}
+
+func TestCgaRulesEmptyStoreMessage(t *testing.T) {
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaRules(&buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "no learned rules") {
+		t.Errorf("expected 'no learned rules' in output:\n%s", buf.String())
+	}
+}
+
+func TestCgaCommandRulesWiredIn(t *testing.T) {
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaCommand("cga", []string{"rules"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+}
