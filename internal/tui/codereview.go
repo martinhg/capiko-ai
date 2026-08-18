@@ -29,11 +29,10 @@ const (
 )
 
 // ggaHookSignature is checked case-insensitively against an existing
-// .git/hooks/pre-commit file to detect a gga-owned hook. gga installs its
-// hook directly via the external `gga install` command rather than through
-// capiko's marker-delimited githooks.WriteBlock, so there is no marker to key
-// off — the whole file is gga's when this signature is present.
-const ggaHookSignature = "gga"
+// .git/hooks/pre-commit file to detect a gga-owned hook. "gga run" is
+// specific to gga's actual hook content, avoiding false positives on
+// unrelated words (e.g. "aggregation").
+const ggaHookSignature = "gga run"
 
 // cleanupGGA removes any Gentleman Guardian Angel (gga) remnants from
 // workspace: the .gga config file, the capiko-managed AGENTS.md rules block,

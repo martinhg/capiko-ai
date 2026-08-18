@@ -130,9 +130,7 @@ func dependencySpecs(goos string) []depSpec {
 	}
 	specs = append(specs, depSpec{"go", false, []string{"version"}})
 	specs = append(specs, depSpec{"engram", false, []string{"--version"}})
-	// gga (Gentleman Guardian Angel) is the optional AI code-review tool capiko can
-	// configure (Configure code review); capiko works without it.
-	return append(specs, depSpec{"gga", false, []string{"version"}})
+	return specs
 }
 
 func detectDependencies(goos string) []Dependency {
@@ -256,10 +254,6 @@ func installInfo(name, pm string) (cmd string, auto bool) {
 		return installInfo("node", pm) // npm ships with node
 	case "engram":
 		return manualHint("engram"), false // installed from its own release channel
-	case "gga":
-		// gga ships from a custom Homebrew tap, not the default formula; capiko
-		// configures gga but never installs the binary, so this is never one-click.
-		return "brew install gentleman-programming/tap/gga", false
 	}
 
 	switch pm {
