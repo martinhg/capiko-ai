@@ -6,19 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/martinhg/capiko-ai/internal/cga"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
-// withStubGGADetected swaps the gga-availability seam for the screen tests.
-func withStubGGADetected(t *testing.T, available bool) {
-	t.Helper()
-	prev := ggaDetected
-	ggaDetected = func() bool { return available }
-	t.Cleanup(func() { ggaDetected = prev })
-}
-
 func TestCodeReviewToggleEnabled(t *testing.T) {
-	withStubGGADetected(t, true)
 	s := newCodeReview(services{}).(*codeReviewScreen)
 	start := s.enabled
 	s.cursor = rowCodeReviewEnabled
@@ -28,28 +20,21 @@ func TestCodeReviewToggleEnabled(t *testing.T) {
 	}
 }
 
-func TestCodeReviewCycleProvider(t *testing.T) {
-	withStubGGADetected(t, true)
+func TestCodeReviewToggleStrict(t *testing.T) {
 	s := newCodeReview(services{}).(*codeReviewScreen)
-	s.cursor = rowCodeReviewProvider
-	before := s.providerIdx
-	s.Update(key("right"))
-	if s.providerIdx == before {
-		t.Error("right on the Provider row should cycle the provider")
-	}
-	s.Update(key("left"))
-	if s.providerIdx != before {
-		t.Error("left should cycle back to the previous provider")
+	start := s.strict
+	s.cursor = rowCodeReviewStrict
+	s.Update(key(" "))
+	if s.strict == start {
+		t.Error("space on the Strict mode row should toggle strict")
 	}
 }
 
 func TestCodeReviewApplyWritesConfig(t *testing.T) {
-	withStubGGADetected(t, true)
-	stubGGAHooks(t)
 	ws := t.TempDir()
-	prev := codeReviewGetwd
-	codeReviewGetwd = func() (string, error) { return ws, nil }
-	t.Cleanup(func() { codeReviewGetwd = prev })
+	prev := cgaGetwd
+	cgaGetwd = func() (string, error) { return ws, nil }
+	t.Cleanup(func() { cgaGetwd = prev })
 
 	s := newCodeReview(services{state: state.NewStore(t.TempDir())}).(*codeReviewScreen)
 	s.enabled = true
@@ -64,13 +49,16 @@ func TestCodeReviewApplyWritesConfig(t *testing.T) {
 	if next.(*codeReviewScreen).state != codeReviewDone {
 		t.Fatalf("apply should reach done state, got %d", next.(*codeReviewScreen).state)
 	}
-	if _, err := os.Stat(filepath.Join(ws, ".gga")); err != nil {
-		t.Errorf(".gga should be written on apply: %v", err)
+	hook, err := os.ReadFile(filepath.Join(ws, ".git", "hooks", "pre-commit"))
+	if err != nil {
+		t.Fatalf("pre-commit hook should be written on apply: %v", err)
+	}
+	if !strings.Contains(string(hook), cga.MarkerStart) {
+		t.Errorf("pre-commit hook missing CGA marker:\n%s", hook)
 	}
 }
 
 func TestCodeReviewBackGoesToMenu(t *testing.T) {
-	withStubGGADetected(t, true)
 	s := newCodeReview(services{}).(*codeReviewScreen)
 	_, cmd := s.Update(key("esc"))
 	if cmd == nil {
@@ -81,25 +69,16 @@ func TestCodeReviewBackGoesToMenu(t *testing.T) {
 	}
 }
 
-func TestCodeReviewWarnsWhenGgaMissing(t *testing.T) {
-	withStubGGADetected(t, false)
-	s := newCodeReview(services{}).(*codeReviewScreen)
-	if !strings.Contains(s.View(), "gga") {
-		t.Errorf("view should warn when gga is not installed:\n%s", s.View())
-	}
-}
-
 func TestCodeReviewHydratesFromState(t *testing.T) {
-	withStubGGADetected(t, true)
 	store := state.NewStore(t.TempDir())
-	if err := store.SetCodeReview(&state.CodeReviewRecord{Enabled: true, Provider: "gemini", StrictMode: false}); err != nil {
+	if err := store.SetCGA(&state.CGARecord{Enabled: true, StrictMode: false}); err != nil {
 		t.Fatal(err)
 	}
 	s := newCodeReview(services{state: store}).(*codeReviewScreen)
 	if !s.enabled {
 		t.Error("screen should hydrate enabled from state")
 	}
-	if codeReviewProviders[s.providerIdx] != "gemini" {
-		t.Errorf("screen should hydrate provider from state, got %q", codeReviewProviders[s.providerIdx])
+	if s.strict {
+		t.Error("screen should hydrate strict mode from state")
 	}
 }
