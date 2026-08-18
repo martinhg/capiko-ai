@@ -19,6 +19,31 @@ func withStubGitDir(t *testing.T, dir string, err error) {
 	t.Cleanup(func() { resolveGitDir = prev })
 }
 
+func withStubCgaBaseDir(t *testing.T, dir string) {
+	t.Helper()
+	prev := cgaBaseDir
+	cgaBaseDir = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { cgaBaseDir = prev })
+}
+
+func withStubCgaProject(t *testing.T, project string) {
+	t.Helper()
+	prev := cgaProject
+	cgaProject = func() string { return project }
+	t.Cleanup(func() { cgaProject = prev })
+}
+
+func writeFindingsLog(t *testing.T, gitDir string, content string) {
+	t.Helper()
+	logDir := filepath.Join(gitDir, "capiko")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(logDir, cga.FindingsLogName), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCgaCommandNotHandledForOtherName(t *testing.T) {
 	var buf bytes.Buffer
 	handled, exitCode, err := cgaCommand("backup", nil, &buf)
@@ -158,5 +183,59 @@ func TestSaveLoadLearnedRulesRoundTrip(t *testing.T) {
 	path := filepath.Join(baseDir, "cga", "acme/repo", "learned-rules.json")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected file at %s: %v", path, err)
+	}
+}
+
+// --- Task 3.2: `cga learn` core flow ---
+
+const threePeatWarningLog = `{"timestamp":"2026-08-16T10:00:00Z","parent_sha":"a","commit_sha":"a1","verdict":"FAIL","findings":[{"file":"a.go","severity":"WARNING","description":"missing test coverage"}]}
+{"timestamp":"2026-08-17T10:00:00Z","parent_sha":"a1","commit_sha":"b1","verdict":"FAIL","findings":[{"file":"b.go","severity":"WARNING","description":"missing test coverage"}]}
+{"timestamp":"2026-08-18T10:00:00Z","parent_sha":"b1","commit_sha":"c1","verdict":"FAIL","findings":[{"file":"c.go","severity":"WARNING","description":"missing test coverage"}]}
+`
+
+func TestCgaLearnApprovalPersists(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"))
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "REQUIRE: missing test coverage") {
+		t.Errorf("expected drafted rule text in output:\n%s", out)
+	}
+	if !strings.Contains(out, "evidence: 3") && !strings.Contains(out, "evidence count: 3") {
+		t.Errorf("expected evidence count in output:\n%s", out)
+	}
+
+	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("want 1 learned rule, got %d: %+v", len(rules), rules)
+	}
+	if rules[0].Text != "REQUIRE: missing test coverage" {
+		t.Errorf("rule text = %q", rules[0].Text)
+	}
+	if rules[0].EvidenceCount != 3 {
+		t.Errorf("evidence count = %d, want 3", rules[0].EvidenceCount)
+	}
+	if rules[0].Severity != cga.SeverityWarning {
+		t.Errorf("severity = %q, want WARNING", rules[0].Severity)
+	}
+	if rules[0].ID == "" {
+		t.Error("expected non-empty rule ID")
+	}
+	if rules[0].ApprovedAt == "" {
+		t.Error("expected non-empty ApprovedAt")
 	}
 }
