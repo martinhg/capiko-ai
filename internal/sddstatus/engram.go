@@ -115,12 +115,12 @@ var gitOriginURLRe = regexp.MustCompile(`(?m)^\[remote "origin"\][^\[]*?url\s*=\
 // a trailing .git suffix. Works for both HTTPS and SSH URLs.
 var gitOwnerRepoRe = regexp.MustCompile(`[:/]([^/:]+/[^/]+?)(?:\.git)?$`)
 
-// inferEngramProject returns the project identifier for the Engram matching
+// InferEngramProject returns the project identifier for the Engram matching
 // step, using the first match from this chain:
 //  1. ENGRAM_PROJECT environment variable (if non-empty)
 //  2. owner/repo from [remote "origin"] in <cwd>/.git/config (lowercased)
 //  3. Lowercased basename of cwd
-func inferEngramProject(cwd string) string {
+func InferEngramProject(cwd string) string {
 	if p := strings.TrimSpace(os.Getenv("ENGRAM_PROJECT")); p != "" {
 		return p
 	}
@@ -299,7 +299,7 @@ func resolveEngramStatus(cwd, requested string) (Status, bool) {
 	if err != nil {
 		return Status{}, false // binary absent / non-zero exit / malformed JSON
 	}
-	project := inferEngramProject(cwd)
+	project := InferEngramProject(cwd)
 
 	changes := collectEngramChanges(obs, project)
 
