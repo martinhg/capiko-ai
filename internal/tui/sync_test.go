@@ -260,6 +260,9 @@ func TestRunSyncSkipsCopilotHooksWhenDisabled(t *testing.T) {
 func TestRunSyncReappliesCGA(t *testing.T) {
 	cfgDir := t.TempDir()
 	workspace := t.TempDir()
+	prevGitDir := gitRevParseGitDir
+	gitRevParseGitDir = func(string) (string, error) { return filepath.Join(workspace, ".git"), nil }
+	t.Cleanup(func() { gitRevParseGitDir = prevGitDir })
 	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
 	store := state.NewStore(t.TempDir())
 	if err := store.SetCGA(&state.CGARecord{Enabled: true, StrictMode: true, Timeout: 120, Workspace: workspace}); err != nil {
@@ -273,6 +276,10 @@ func TestRunSyncReappliesCGA(t *testing.T) {
 	hookPath := filepath.Join(workspace, ".git", "hooks", "pre-commit")
 	if _, err := os.Stat(hookPath); err != nil {
 		t.Errorf("sync did not re-apply the CGA pre-commit hook: %v", err)
+	}
+	postHookPath := filepath.Join(workspace, ".git", "hooks", "post-commit")
+	if _, err := os.Stat(postHookPath); err != nil {
+		t.Errorf("sync did not re-apply the CGA post-commit hook: %v", err)
 	}
 	st, err := store.Load()
 	if err != nil {
