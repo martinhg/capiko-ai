@@ -133,3 +133,78 @@ func TestEnforceCap(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckRetirement(t *testing.T) {
+	stillStrong := LearnedRule{ID: "strong", Severity: SeverityWarning, Text: "REQUIRE: missing test coverage"}
+	droppedBelow := LearnedRule{ID: "dropped", Severity: SeverityCritical, Text: "REJECT if: errors swallowed silently"}
+	noEvidence := LearnedRule{ID: "gone", Severity: SeveritySuggestion, Text: "PREFER: consider a comment"}
+
+	tests := []struct {
+		name        string
+		rules       []LearnedRule
+		patterns    []Pattern
+		threshold   int
+		wantActive  []string
+		wantRetired []string
+	}{
+		{
+			name:  "evidence still at or above threshold stays active",
+			rules: []LearnedRule{stillStrong},
+			patterns: []Pattern{
+				{Severity: SeverityWarning, Description: "missing test coverage", EvidenceCount: 5},
+			},
+			threshold:  3,
+			wantActive: []string{"strong"},
+		},
+		{
+			name:  "evidence dropped below threshold is retired",
+			rules: []LearnedRule{droppedBelow},
+			patterns: []Pattern{
+				{Severity: SeverityCritical, Description: "errors swallowed silently", EvidenceCount: 2},
+			},
+			threshold:   3,
+			wantRetired: []string{"dropped"},
+		},
+		{
+			name:        "no matching pattern at all is retired",
+			rules:       []LearnedRule{noEvidence},
+			patterns:    nil,
+			threshold:   3,
+			wantRetired: []string{"gone"},
+		},
+		{
+			name:  "mixed set partitions correctly",
+			rules: []LearnedRule{stillStrong, droppedBelow, noEvidence},
+			patterns: []Pattern{
+				{Severity: SeverityWarning, Description: "missing test coverage", EvidenceCount: 5},
+				{Severity: SeverityCritical, Description: "errors swallowed silently", EvidenceCount: 2},
+			},
+			threshold:   3,
+			wantActive:  []string{"strong"},
+			wantRetired: []string{"dropped", "gone"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			active, retired := CheckRetirement(tt.rules, tt.patterns, tt.threshold)
+			if got := ruleIDs(active); len(got) != len(tt.wantActive) {
+				t.Errorf("active = %+v, want ids %v", active, tt.wantActive)
+			} else {
+				for _, id := range tt.wantActive {
+					if !got[id] {
+						t.Errorf("active missing %q, got %+v", id, active)
+					}
+				}
+			}
+			if got := ruleIDs(retired); len(got) != len(tt.wantRetired) {
+				t.Errorf("retired = %+v, want ids %v", retired, tt.wantRetired)
+			} else {
+				for _, id := range tt.wantRetired {
+					if !got[id] {
+						t.Errorf("retired missing %q, got %+v", id, retired)
+					}
+				}
+			}
+		})
+	}
+}
