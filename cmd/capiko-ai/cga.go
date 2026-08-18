@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,10 +9,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/martinhg/capiko-ai/internal/cga"
+	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
+
+// cgaLearnThreshold is the minimum evidence count (spec F3.1) for a
+// recurring findings-log pattern to become a candidate rule.
+const cgaLearnThreshold = 3
 
 // resolveGitDir returns the current workspace's git directory, resolved via
 // `git rev-parse --git-dir` so it works correctly from worktrees (where
@@ -34,22 +41,28 @@ func cgaCommand(name string, args []string, out io.Writer) (handled bool, exitCo
 	}
 
 	if len(args) == 0 {
-		fmt.Fprintln(out, "Usage:")
-		fmt.Fprintln(out, "  capiko-ai cga findings")
-		return true, 1, fmt.Errorf("cga: subcommand required (findings)")
+		fmt.Fprintln(out, cgaUsage)
+		return true, 1, fmt.Errorf("cga: subcommand required (findings, learn, rules)")
 	}
 
 	sub := args[0]
 	switch sub {
 	case "findings":
 		return cgaFindings(out)
+	case "learn":
+		return cgaLearn(out, cgaStdin)
 	default:
 		fmt.Fprintf(out, "cga: unknown subcommand %q\n", sub)
-		fmt.Fprintln(out, "Usage:")
-		fmt.Fprintln(out, "  capiko-ai cga findings")
+		fmt.Fprintln(out, cgaUsage)
 		return true, 1, nil
 	}
 }
+
+// cgaUsage is the usage block printed for a missing or unknown subcommand.
+const cgaUsage = "Usage:\n" +
+	"  capiko-ai cga findings\n" +
+	"  capiko-ai cga learn\n" +
+	"  capiko-ai cga rules"
 
 // cgaFindings prints the persisted CGA findings log for the current
 // workspace. A git dir resolution failure, missing log file, or empty log
@@ -100,6 +113,90 @@ var cgaBaseDir = func() (string, error) {
 		return "", err
 	}
 	return s.Dir(), nil
+}
+
+// cgaProject resolves the engram project identity for the current workspace
+// via the shared inference chain (env var → git origin → dir basename). It
+// is a seam so tests can pin a project without depending on the real working
+// directory or git config.
+var cgaProject = func() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return sddstatus.InferEngramProject(cwd)
+}
+
+// cgaStdin is the source of `cga learn` approval-prompt answers. It is a
+// seam so tests can inject canned answers via strings.Reader instead of the
+// real stdin.
+var cgaStdin io.Reader = os.Stdin
+
+// cgaNow is a seam over time.Now for deterministic ApprovedAt timestamps in
+// tests.
+var cgaNow = time.Now
+
+// cgaLearn runs the learn-loop: detect recurring findings-log patterns
+// (spec F3.1), draft candidate rules (F3.2), present each for approval on
+// in/out (F3.3), and persist approved rules to the local JSON store (F3.4).
+// A git dir resolution failure or missing/empty log is treated as "no
+// patterns detected" rather than an error, matching cgaFindings' graceful
+// degradation.
+func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
+	gitDir, err := resolveGitDir()
+	if err != nil {
+		fmt.Fprintln(out, "no findings recorded — nothing to learn from")
+		return true, 0, nil
+	}
+
+	logPath := filepath.Join(gitDir, "capiko", cga.FindingsLogName)
+	f, err := os.Open(logPath)
+	if err != nil {
+		fmt.Fprintln(out, "no findings recorded — nothing to learn from")
+		return true, 0, nil
+	}
+	entries, err := cga.ParseLog(f)
+	f.Close()
+	if err != nil {
+		return true, 1, err
+	}
+
+	baseDir, err := cgaBaseDir()
+	if err != nil {
+		return true, 1, err
+	}
+	project := cgaProject()
+
+	patterns := cga.DetectPatterns(entries, cgaLearnThreshold)
+
+	learned := make([]cga.LearnedRule, 0)
+	reader := bufio.NewReader(in)
+	for _, p := range patterns {
+		text := cga.DraftRuleText(p)
+		fmt.Fprintf(out, "\nCandidate rule (%s severity, evidence: %d):\n  %s\n", p.Severity, p.EvidenceCount, text)
+		if len(p.Files) > 0 {
+			fmt.Fprintf(out, "  files: %s\n", strings.Join(p.Files, ", "))
+		}
+		fmt.Fprint(out, "Approve? [y/N] ")
+		line, _ := reader.ReadString('\n')
+		_ = strings.ToLower(strings.TrimSpace(line))
+
+		rule := cga.LearnedRule{
+			ID:            state.Checksum(string(p.Severity) + "|" + p.Description),
+			Severity:      p.Severity,
+			Text:          text,
+			EvidenceCount: p.EvidenceCount,
+			ApprovedAt:    cgaNow().UTC().Format(time.RFC3339),
+		}
+		learned = append(learned, rule)
+		fmt.Fprintln(out, "approved")
+	}
+
+	if err := SaveLearnedRules(baseDir, project, learned); err != nil {
+		return true, 1, err
+	}
+
+	return true, 0, nil
 }
 
 // learnedRulesPath returns the local JSON store path for a project's learned
