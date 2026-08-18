@@ -372,6 +372,81 @@ func TestCgaRulesEmptyStoreMessage(t *testing.T) {
 	}
 }
 
+// --- Task 3.6: engram sync (best-effort) ---
+
+func withStubEngramSync(t *testing.T, fn func(project string, rule cga.LearnedRule) error) {
+	t.Helper()
+	prev := engramSyncLearnedRule
+	engramSyncLearnedRule = fn
+	t.Cleanup(func() { engramSyncLearnedRule = prev })
+}
+
+func TestCgaLearnSyncsApprovedRuleToEngram(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	var syncedProject string
+	var syncedRule cga.LearnedRule
+	calls := 0
+	withStubEngramSync(t, func(project string, rule cga.LearnedRule) error {
+		calls++
+		syncedProject = project
+		syncedRule = rule
+		return nil
+	})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"))
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if calls != 1 {
+		t.Fatalf("want 1 engram sync call, got %d", calls)
+	}
+	if syncedProject != "acme/repo" {
+		t.Errorf("synced project = %q, want acme/repo", syncedProject)
+	}
+	if syncedRule.Text != "REQUIRE: missing test coverage" {
+		t.Errorf("synced rule text = %q", syncedRule.Text)
+	}
+}
+
+func TestCgaLearnEngramSyncFailureIsNonFatal(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	withStubEngramSync(t, func(project string, rule cga.LearnedRule) error {
+		return errors.New("engram unavailable")
+	})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"))
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want non-fatal sync failure", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "engram") {
+		t.Errorf("expected a warning mentioning engram in output:\n%s", buf.String())
+	}
+
+	rules, loadErr := LoadLearnedRules(baseDir, "acme/repo")
+	if loadErr != nil {
+		t.Fatalf("load: %v", loadErr)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("want rule persisted locally despite sync failure, got %d", len(rules))
+	}
+}
+
 func TestCgaCommandRulesWiredIn(t *testing.T) {
 	baseDir := t.TempDir()
 	withStubCgaBaseDir(t, baseDir)
