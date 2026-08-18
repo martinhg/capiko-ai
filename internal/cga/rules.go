@@ -1,6 +1,7 @@
 package cga
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -85,4 +86,19 @@ func CheckRetirement(rules []LearnedRule, patterns []Pattern, threshold int) (ac
 		retired = append(retired, r)
 	}
 	return active, retired
+}
+
+// FormatLearnedRules renders learned rules for terminal display (used by
+// `cga rules`), one line per rule as "[SEVERITY] text (evidence: N)".
+// Returns "" when rules is nil or empty. It is a pure function: no I/O.
+func FormatLearnedRules(rules []LearnedRule) string {
+	if len(rules) == 0 {
+		return ""
+	}
+
+	lines := make([]string, len(rules))
+	for i, r := range rules {
+		lines[i] = fmt.Sprintf("[%s] %s (evidence: %d)", r.Severity, r.Text, r.EvidenceCount)
+	}
+	return strings.Join(lines, "\n")
 }
