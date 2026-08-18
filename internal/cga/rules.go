@@ -5,9 +5,9 @@ import "strings"
 // LearnedRule is an approved rule with provenance metadata, persisted per
 // engram-project once a user approves a drafted pattern (spec F3.3/F3.4).
 type LearnedRule struct {
-	ID            string   `json:"id"`             // deterministic hash of severity+normalized description
+	ID            string   `json:"id"` // deterministic hash of severity+normalized description
 	Severity      Severity `json:"severity"`
-	Text          string   `json:"text"`           // the rule prose line, e.g. "REQUIRE: missing test coverage"
+	Text          string   `json:"text"` // the rule prose line, e.g. "REQUIRE: missing test coverage"
 	EvidenceCount int      `json:"evidence_count"`
 	ApprovedAt    string   `json:"approved_at"` // RFC 3339
 }
