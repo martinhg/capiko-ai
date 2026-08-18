@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/martinhg/capiko-ai/internal/cga"
+	"github.com/martinhg/capiko-ai/internal/clilog"
 	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -50,6 +51,8 @@ func cgaCommand(name string, args []string, out io.Writer) (handled bool, exitCo
 	case "findings":
 		return cgaFindings(out)
 	case "learn":
+		_, verbose := parseVerbose(args[1:])
+		cgaLearnLog = newLogger("cga-learn", verbose)
 		return cgaLearn(out, cgaStdin)
 	case "rules":
 		return cgaRules(out)
@@ -138,6 +141,12 @@ var cgaStdin io.Reader = os.Stdin
 // tests.
 var cgaNow = time.Now
 
+// cgaLearnLog emits structured learn-loop metrics (spec F3.8): a disabled
+// no-op logger by default, wired to a real sink when `--verbose` is passed
+// to `cga learn`. It is a package-level var so tests can swap it for a
+// buffer-backed logger and assert on the emitted events directly.
+var cgaLearnLog = clilog.New(nil, "cga-learn")
+
 // engramSyncLearnedRule is a best-effort seam that syncs an approved rule to
 // engram (topic key cga/{project}/learned-rules, spec F3.4) by shelling out
 // to the engram CLI. The local JSON store stays canonical — a sync failure
@@ -196,6 +205,9 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 		return true, 1, err
 	}
 	patterns := cga.DetectPatterns(entries, cgaLearnThreshold)
+	for _, p := range patterns {
+		cgaLearnLog.Event("pattern_detected", cga.DraftRuleText(p))
+	}
 
 	if len(patterns) == 0 && len(existing) == 0 {
 		fmt.Fprintln(out, "no patterns meet the evidence threshold")
@@ -205,7 +217,10 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 	// Re-check existing rules against the current detection pass (spec F3.6,
 	// design D7): rules whose evidence dropped below threshold are retired
 	// automatically, with no user action required.
-	active, _ := cga.CheckRetirement(existing, patterns, cgaLearnThreshold)
+	active, retired := cga.CheckRetirement(existing, patterns, cgaLearnThreshold)
+	for _, r := range retired {
+		cgaLearnLog.Event("rule_retired", r.ID)
+	}
 
 	activeText := make(map[string]bool, len(active))
 	for _, r := range active {
@@ -230,6 +245,7 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 	reader := bufio.NewReader(in)
 	for _, p := range candidates {
 		text := cga.DraftRuleText(p)
+		cgaLearnLog.Event("rule_proposed", text)
 		fmt.Fprintf(out, "\nCandidate rule (%s severity, evidence: %d):\n  %s\n", p.Severity, p.EvidenceCount, text)
 		if len(p.Files) > 0 {
 			fmt.Fprintf(out, "  files: %s\n", strings.Join(p.Files, ", "))
@@ -238,6 +254,7 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 		line, _ := reader.ReadString('\n')
 		answer := strings.ToLower(strings.TrimSpace(line))
 		if answer != "y" && answer != "yes" {
+			cgaLearnLog.Event("rule_rejected", text)
 			fmt.Fprintln(out, "rejected")
 			continue
 		}
@@ -249,6 +266,7 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 			EvidenceCount: p.EvidenceCount,
 			ApprovedAt:    cgaNow().UTC().Format(time.RFC3339),
 		}
+		cgaLearnLog.Event("rule_approved", rule.ID)
 		learned = append(learned, rule)
 		fmt.Fprintln(out, "approved")
 
