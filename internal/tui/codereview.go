@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -18,6 +19,46 @@ import (
 // cgaGetwd resolves the working directory at apply/construct time for the CGA
 // screen. Mirrors teamSyncGetwd.
 var cgaGetwd = os.Getwd
+
+const cgaLogRotationCap = 200
+
+// gitRevParseGitDir resolves the git directory for workspace via
+// `git -C workspace rev-parse --git-dir`, returning an absolute path.
+//
+// This is worktree-safe: inside a git worktree, `<workspace>/.git` is a
+// *file* (not a directory) containing a `gitdir: ...` pointer to the real
+// per-worktree git-dir elsewhere on disk, so a hardcoded
+// filepath.Join(workspace, ".git", ...) resolves to a nonexistent path.
+// Asking git itself for --git-dir always returns the correct location,
+// worktree or not.
+//
+// Overridable as a package-level var so tests can stub it without requiring
+// a real git repository (mirrors cgaGetwd).
+var gitRevParseGitDir = func(workspace string) (string, error) {
+	out, err := exec.Command("git", "-C", workspace, "rev-parse", "--git-dir").Output()
+	if err != nil {
+		return "", err
+	}
+	dir := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(workspace, dir)
+	}
+	return dir, nil
+}
+
+// cgaFindingsLogPath resolves the absolute path to the CGA findings-log
+// JSONL file for workspace. Returns "" (findings-log persistence disabled)
+// when workspace is not inside a git repository yet, rather than failing
+// hook installation outright — findings-log persistence is a best-effort
+// add-on to the review hook, never a precondition for it (see the
+// Graceful Degradation spec requirement).
+func cgaFindingsLogPath(workspace string) string {
+	gitDir, err := gitRevParseGitDir(workspace)
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(gitDir, "capiko", cga.FindingsLogName)
+}
 
 // ggaMarkerStart/ggaMarkerEnd are the marker delimiters gga used for its
 // managed AGENTS.md block. gga itself has been fully replaced by CGA; these
@@ -114,11 +155,8 @@ func applyCGA(workspace string, store *state.Store, bkp *backup.Store, rec *stat
 	}
 
 	persona := activePersona(store)
-	// logPath/rotationCap wiring (findings-log persistence) lands in CGA
-	// Phase 2 PR3 alongside post-commit hook installation; until then the
-	// findings-append block stays disabled (logPath "") so the rendered
-	// hook is byte-for-byte unchanged.
-	script := cga.RenderPreCommitHook(cga.Rules(persona), rec.StrictMode, rec.Timeout, "", 0)
+	logPath := cgaFindingsLogPath(workspace)
+	script := cga.RenderPreCommitHook(cga.Rules(persona), rec.StrictMode, rec.Timeout, logPath, cgaLogRotationCap)
 
 	if err := backupCGAHook(bkp, workspace); err != nil {
 		return err
@@ -126,6 +164,11 @@ func applyCGA(workspace string, store *state.Store, bkp *backup.Store, rec *stat
 
 	if err := githooks.WriteBlock(workspace, "pre-commit", cga.MarkerStart, cga.MarkerEnd, script); err != nil {
 		return fmt.Errorf("writing pre-commit hook: %w", err)
+	}
+
+	postScript := cga.RenderPostCommitHook(logPath)
+	if err := githooks.WriteBlock(workspace, "post-commit", cga.PostCommitMarkerStart, cga.PostCommitMarkerEnd, postScript); err != nil {
+		return fmt.Errorf("writing post-commit hook: %w", err)
 	}
 
 	rec.Workspace = workspace
@@ -137,14 +180,18 @@ func applyCGA(workspace string, store *state.Store, bkp *backup.Store, rec *stat
 	return nil
 }
 
-// disableCGA removes CGA's managed pre-commit hook block (backing it up
-// first) and records Enabled:false so sync does not re-apply it.
+// disableCGA removes CGA's managed pre-commit and post-commit hook blocks
+// (backing both up first) and records Enabled:false so sync does not
+// re-apply them.
 func disableCGA(workspace string, store *state.Store, bkp *backup.Store, rec *state.CGARecord) error {
 	if err := backupCGAHook(bkp, workspace); err != nil {
 		return err
 	}
 	if err := githooks.RemoveBlock(workspace, "pre-commit", cga.MarkerStart, cga.MarkerEnd); err != nil {
 		return fmt.Errorf("removing pre-commit hook block: %w", err)
+	}
+	if err := githooks.RemoveBlock(workspace, "post-commit", cga.PostCommitMarkerStart, cga.PostCommitMarkerEnd); err != nil {
+		return fmt.Errorf("removing post-commit hook block: %w", err)
 	}
 	rec.Workspace = workspace
 	if store != nil {
@@ -153,17 +200,24 @@ func disableCGA(workspace string, store *state.Store, bkp *backup.Store, rec *st
 	return nil
 }
 
-// backupCGAHook snapshots the pre-commit hook file before a CGA mutation,
-// when it already exists. Mirrors backupTeamSyncHooks.
+// backupCGAHook snapshots the pre-commit and post-commit hook files before a
+// CGA mutation, for whichever of the two already exist. Mirrors
+// backupTeamSyncHooks.
 func backupCGAHook(bkp *backup.Store, workspace string) error {
 	if bkp == nil {
 		return nil
 	}
-	hookPath := filepath.Join(workspace, ".git", "hooks", "pre-commit")
-	if _, err := os.Stat(hookPath); err != nil {
+	var paths []string
+	for _, name := range []string{"pre-commit", "post-commit"} {
+		hookPath := filepath.Join(workspace, ".git", "hooks", name)
+		if _, err := os.Stat(hookPath); err == nil {
+			paths = append(paths, hookPath)
+		}
+	}
+	if len(paths) == 0 {
 		return nil
 	}
-	if _, err := bkp.CreateFiles("cga", Version, []string{hookPath}); err != nil {
+	if _, err := bkp.CreateFiles("cga", Version, paths); err != nil {
 		return fmt.Errorf("backup failed, aborting: %w", err)
 	}
 	return nil
