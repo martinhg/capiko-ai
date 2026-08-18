@@ -252,6 +252,66 @@ func TestRunSyncSkipsCopilotHooksWhenDisabled(t *testing.T) {
 	}
 }
 
+// TestRunSyncReappliesCGA asserts that once CGA is managed (enabled in
+// state), sync re-applies the pre-commit review hook into the recorded
+// workspace so it tracks the current rules/config, mirroring the
+// copilot-hooks/headroom re-apply pattern.
+// Spec: RunSync Re-applies CGA.
+func TestRunSyncReappliesCGA(t *testing.T) {
+	cfgDir := t.TempDir()
+	workspace := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+	if err := store.SetCGA(&state.CGARecord{Enabled: true, StrictMode: true, Timeout: 120, Workspace: workspace}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	hookPath := filepath.Join(workspace, ".git", "hooks", "pre-commit")
+	if _, err := os.Stat(hookPath); err != nil {
+		t.Errorf("sync did not re-apply the CGA pre-commit hook: %v", err)
+	}
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.CGA == nil || st.CGA.Checksum == "" {
+		t.Errorf("expected a recorded checksum after re-apply, got %+v", st.CGA)
+	}
+}
+
+// TestRunSyncSkipsCGAWhenDisabled asserts sync does NOT write the CGA
+// pre-commit hook for a user who never enabled it, nor for one who
+// explicitly disabled it.
+// Spec: RunSync Re-applies CGA.
+func TestRunSyncSkipsCGAWhenDisabled(t *testing.T) {
+	cfgDir := t.TempDir()
+	workspace := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+	hookPath := filepath.Join(workspace, ".git", "hooks", "pre-commit")
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync (nil record): %v", err)
+	}
+	if _, err := os.Stat(hookPath); err == nil {
+		t.Error("sync wrote the CGA pre-commit hook for a user who never enabled it")
+	}
+
+	if err := store.SetCGA(&state.CGARecord{Enabled: false, Workspace: workspace}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync (disabled record): %v", err)
+	}
+	if _, err := os.Stat(hookPath); err == nil {
+		t.Error("sync wrote the CGA pre-commit hook for a disabled record")
+	}
+}
+
 // TestRunSyncSnapshotsBeforeWriting asserts that a non-nil backup store gets a
 // snapshot created before the catalog is overwritten.
 func TestRunSyncSnapshotsBeforeWriting(t *testing.T) {
