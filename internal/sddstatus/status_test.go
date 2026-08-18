@@ -499,12 +499,12 @@ func TestEngramSeamIsolation(t *testing.T) {
 	}
 }
 
-// ---------- inferEngramProject / projectFromGitConfig ----------
+// ---------- InferEngramProject / projectFromGitConfig ----------
 
 func TestInferEngramProject_EnvVar(t *testing.T) {
 	t.Setenv("ENGRAM_PROJECT", "acme/my-service")
 	cwd := t.TempDir()
-	if got := inferEngramProject(cwd); got != "acme/my-service" {
+	if got := InferEngramProject(cwd); got != "acme/my-service" {
 		t.Errorf("got %q, want acme/my-service", got)
 	}
 }
@@ -520,7 +520,7 @@ func TestInferEngramProject_GitConfigHTTPS(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := inferEngramProject(cwd); got != "myorg/myrepo" {
+	if got := InferEngramProject(cwd); got != "myorg/myrepo" {
 		t.Errorf("got %q, want myorg/myrepo", got)
 	}
 }
@@ -536,7 +536,7 @@ func TestInferEngramProject_GitConfigSSH(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := inferEngramProject(cwd); got != "myorg/myrepo" {
+	if got := InferEngramProject(cwd); got != "myorg/myrepo" {
 		t.Errorf("got %q, want myorg/myrepo", got)
 	}
 }
@@ -545,7 +545,7 @@ func TestInferEngramProject_DirBasename(t *testing.T) {
 	t.Setenv("ENGRAM_PROJECT", "")
 	// No .git/config — falls back to lowercased basename.
 	cwd := t.TempDir()
-	got := inferEngramProject(cwd)
+	got := InferEngramProject(cwd)
 	want := strings.ToLower(filepath.Base(cwd))
 	if got != want {
 		t.Errorf("got %q, want %q (lowercased basename)", got, want)
@@ -906,7 +906,7 @@ func engramCwd(t *testing.T) (string, string) {
 	if err := os.MkdirAll(filepath.Join(cwd, ".engram"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return cwd, inferEngramProject(cwd)
+	return cwd, InferEngramProject(cwd)
 }
 
 // SC-01: Gating OFF — seam is never invoked, nextRecommended stays sdd-new.
@@ -928,7 +928,7 @@ func TestSC01_GatingOff_FatalSeam(t *testing.T) {
 func TestSC02a_GatingOn_EnvVar(t *testing.T) {
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
 	cwd := t.TempDir()
-	project := inferEngramProject(cwd)
+	project := InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -970,7 +970,7 @@ func TestSC02c_GatingOn_ConfigEngram(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: engram\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	project := inferEngramProject(cwd)
+	project := InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -995,7 +995,7 @@ func TestSC02d_GatingOn_ConfigHybrid(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: hybrid\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	project := inferEngramProject(cwd)
+	project := InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -1088,7 +1088,7 @@ func TestSC04_FallbackA_ZeroOpenSpecOneEngram(t *testing.T) {
 func TestSC05_FallbackB_NamedChangeInEngram(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
-	project := inferEngramProject(cwd)
+	project := InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("auth-refactor", "proposal", "# Proposal\n...", project),
 		engramObs("auth-refactor", "spec", "# Spec\n...", project),
@@ -1348,7 +1348,7 @@ func TestSC09c_Degradation_EmptyObservations(t *testing.T) {
 func TestSC10_OriginFlags_ConsumerSafe(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
-	project := inferEngramProject(cwd)
+	project := InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -1390,7 +1390,7 @@ func TestSC10_OriginFlags_ConsumerSafe(t *testing.T) {
 func TestSC_StateOnlyChange_RoutesToPropose(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
-	project := inferEngramProject(cwd)
+	project := InferEngramProject(cwd)
 	// Only a state observation — no proposal, spec, etc.
 	obs := []engramObservation{{
 		Title:   "sdd/state-only-change/state",

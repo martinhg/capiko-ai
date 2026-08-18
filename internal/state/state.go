@@ -154,6 +154,10 @@ type CGARecord struct {
 	Timeout    int    `json:"timeout,omitempty"`     // copilot -p timeout in seconds, default 120
 	Workspace  string `json:"workspace,omitempty"`   // repo root where the hook was written, for RunSync re-apply
 	Checksum   string `json:"checksum,omitempty"`    // of the rendered hook script, for drift
+	// LearnedRulesChecksum is the checksum of the learned-rules composition
+	// baked into the hook at last re-render (CGA Phase 3 learn-loop). Empty
+	// means no learn-loop composition has run yet, so no drift is flagged.
+	LearnedRulesChecksum string `json:"learned_rules_checksum,omitempty"`
 }
 
 // SkillRecord is what capiko knows about one skill it installed.
