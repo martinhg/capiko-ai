@@ -7,134 +7,98 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
-	"github.com/martinhg/capiko-ai/internal/codereview"
+	"github.com/martinhg/capiko-ai/internal/cga"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
-// stubGGAHooks swaps the gga install/uninstall seams so apply tests never shell
-// out to a real gga binary or touch a real git repo. It returns pointers the test
-// can read to assert which hook ran.
-func stubGGAHooks(t *testing.T) (installed, uninstalled *bool) {
-	t.Helper()
-	var didInstall, didUninstall bool
-	prevInstall, prevUninstall := ggaInstallHook, ggaUninstallHook
-	ggaInstallHook = func(string) error { didInstall = true; return nil }
-	ggaUninstallHook = func(string) error { didUninstall = true; return nil }
-	t.Cleanup(func() { ggaInstallHook, ggaUninstallHook = prevInstall, prevUninstall })
-	return &didInstall, &didUninstall
-}
+// ---------------------------------------------------------------------------
+// applyCGA
+// ---------------------------------------------------------------------------
 
-func TestApplyCodeReviewWritesConfigRulesAndHook(t *testing.T) {
-	installed, _ := stubGGAHooks(t)
+func TestApplyCGAWritesHookAndRecordsState(t *testing.T) {
 	ws := t.TempDir()
 	store := state.NewStore(t.TempDir())
-	rec := &state.CodeReviewRecord{Enabled: true, Provider: "claude", StrictMode: true}
+	rec := &state.CGARecord{Enabled: true, StrictMode: true, Timeout: 60}
 
-	if err := applyCodeReview(ws, store, nil, rec); err != nil {
-		t.Fatalf("applyCodeReview: %v", err)
+	if err := applyCGA(ws, store, nil, rec); err != nil {
+		t.Fatalf("applyCGA: %v", err)
 	}
 
-	gga, err := os.ReadFile(filepath.Join(ws, ".gga"))
+	hook, err := os.ReadFile(filepath.Join(ws, ".git", "hooks", "pre-commit"))
 	if err != nil {
-		t.Fatalf(".gga not written: %v", err)
+		t.Fatalf("pre-commit hook not written: %v", err)
 	}
-	if !strings.Contains(string(gga), `PROVIDER="claude"`) {
-		t.Errorf(".gga missing provider:\n%s", gga)
+	if !strings.Contains(string(hook), cga.MarkerStart) || !strings.Contains(string(hook), cga.MarkerEnd) {
+		t.Errorf("pre-commit hook missing CGA markers:\n%s", hook)
 	}
-
-	agents, err := os.ReadFile(filepath.Join(ws, "AGENTS.md"))
-	if err != nil {
-		t.Fatalf("AGENTS.md not written: %v", err)
-	}
-	if !strings.Contains(string(agents), codereview.MarkerStart) || !strings.Contains(string(agents), "REJECT") {
-		t.Errorf("AGENTS.md missing the managed rules block:\n%s", agents)
-	}
-
-	if !*installed {
-		t.Error("apply should install the gga git hook")
+	if !strings.Contains(string(hook), "copilot -p") {
+		t.Errorf("pre-commit hook should invoke copilot -p:\n%s", hook)
 	}
 
 	st, _ := store.Load()
-	if st.CodeReview == nil || !st.CodeReview.Enabled {
-		t.Error("apply should record the enabled code-review state")
+	if st.CGA == nil || !st.CGA.Enabled {
+		t.Error("apply should record the enabled CGA state")
+	}
+	if st.CGA.Workspace != ws {
+		t.Errorf("apply should record the workspace, got %q", st.CGA.Workspace)
+	}
+	if st.CGA.Checksum == "" {
+		t.Error("apply should record a checksum of the rendered hook")
 	}
 }
 
-func TestApplyCodeReviewIncludesActivePersona(t *testing.T) {
-	stubGGAHooks(t)
+func TestApplyCGAIncludesActivePersona(t *testing.T) {
 	ws := t.TempDir()
 	store := state.NewStore(t.TempDir())
 	if err := store.SetPersona("capiko"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := applyCodeReview(ws, store, nil, &state.CodeReviewRecord{Enabled: true}); err != nil {
-		t.Fatalf("applyCodeReview: %v", err)
+	if err := applyCGA(ws, store, nil, &state.CGARecord{Enabled: true}); err != nil {
+		t.Fatalf("applyCGA: %v", err)
 	}
 
-	agents, _ := os.ReadFile(filepath.Join(ws, "AGENTS.md"))
-	if !strings.Contains(string(agents), "capiko") {
-		t.Errorf("AGENTS.md should reference the active persona:\n%s", agents)
+	hook, _ := os.ReadFile(filepath.Join(ws, ".git", "hooks", "pre-commit"))
+	if !strings.Contains(string(hook), "capiko") {
+		t.Errorf("pre-commit hook should reference the active persona:\n%s", hook)
 	}
 }
 
-func TestApplyCodeReviewPreservesUserRules(t *testing.T) {
-	stubGGAHooks(t)
-	ws := t.TempDir()
-	rulesPath := filepath.Join(ws, "AGENTS.md")
-	if err := os.WriteFile(rulesPath, []byte("# My own rules\n\n- REQUIRE: keep this line\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := applyCodeReview(ws, state.NewStore(t.TempDir()), nil, &state.CodeReviewRecord{Enabled: true}); err != nil {
-		t.Fatalf("applyCodeReview: %v", err)
-	}
-
-	agents, _ := os.ReadFile(rulesPath)
-	if !strings.Contains(string(agents), "keep this line") {
-		t.Errorf("apply must not clobber user-authored rules:\n%s", agents)
-	}
-	if !strings.Contains(string(agents), codereview.MarkerStart) {
-		t.Errorf("apply should inject the managed block alongside user rules:\n%s", agents)
-	}
-}
-
-func TestApplyCodeReviewDisableRemovesBlockAndHook(t *testing.T) {
-	_, uninstalled := stubGGAHooks(t)
+func TestApplyCGADisableRemovesHookAndRecordsState(t *testing.T) {
 	ws := t.TempDir()
 	store := state.NewStore(t.TempDir())
 
-	// Enable first so there is a managed block to remove.
-	if err := applyCodeReview(ws, store, nil, &state.CodeReviewRecord{Enabled: true}); err != nil {
+	// Enable first so there is a managed hook to remove.
+	if err := applyCGA(ws, store, nil, &state.CGARecord{Enabled: true}); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
-	if err := applyCodeReview(ws, store, nil, &state.CodeReviewRecord{Enabled: false}); err != nil {
+	if err := applyCGA(ws, store, nil, &state.CGARecord{Enabled: false}); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
 
-	agents, _ := os.ReadFile(filepath.Join(ws, "AGENTS.md"))
-	if strings.Contains(string(agents), codereview.MarkerStart) {
-		t.Errorf("disable should remove capiko's managed block:\n%s", agents)
+	hook, err := os.ReadFile(filepath.Join(ws, ".git", "hooks", "pre-commit"))
+	if err == nil && strings.Contains(string(hook), cga.MarkerStart) {
+		t.Errorf("disable should remove the CGA hook block:\n%s", hook)
 	}
-	if !*uninstalled {
-		t.Error("disable should uninstall the gga git hook")
-	}
+
 	st, _ := store.Load()
-	if st.CodeReview == nil || st.CodeReview.Enabled {
-		t.Error("disable should record code review as off")
+	if st.CGA == nil || st.CGA.Enabled {
+		t.Error("disable should record CGA as off")
 	}
 }
 
-func TestApplyCodeReviewBacksUpExistingFiles(t *testing.T) {
-	stubGGAHooks(t)
+func TestApplyCGABacksUpExistingHook(t *testing.T) {
 	ws := t.TempDir()
-	if err := os.WriteFile(filepath.Join(ws, ".gga"), []byte("PROVIDER=\"old\"\n"), 0o644); err != nil {
+	if err := os.MkdirAll(filepath.Join(ws, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, ".git", "hooks", "pre-commit"), []byte("#!/bin/sh\necho old\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	bkp := backup.NewStore(t.TempDir())
 
-	if err := applyCodeReview(ws, state.NewStore(t.TempDir()), bkp, &state.CodeReviewRecord{Enabled: true}); err != nil {
-		t.Fatalf("applyCodeReview: %v", err)
+	if err := applyCGA(ws, state.NewStore(t.TempDir()), bkp, &state.CGARecord{Enabled: true}); err != nil {
+		t.Fatalf("applyCGA: %v", err)
 	}
 
 	manifests, err := bkp.List()
@@ -142,6 +106,160 @@ func TestApplyCodeReviewBacksUpExistingFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(manifests) == 0 {
-		t.Error("apply should snapshot existing files before overwriting")
+		t.Error("apply should snapshot the existing hook before overwriting")
+	}
+}
+
+func TestApplyCGANilRecordIsNoop(t *testing.T) {
+	ws := t.TempDir()
+	if err := applyCGA(ws, state.NewStore(t.TempDir()), nil, nil); err != nil {
+		t.Fatalf("applyCGA with nil record should be a no-op, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(ws, ".git", "hooks", "pre-commit")); !os.IsNotExist(err) {
+		t.Error("applyCGA with nil record should not write a hook")
+	}
+}
+
+func TestApplyCGACleansUpGGARemnants(t *testing.T) {
+	ws := t.TempDir()
+	writeGGARemnants(t, ws)
+
+	if err := applyCGA(ws, state.NewStore(t.TempDir()), nil, &state.CGARecord{Enabled: true}); err != nil {
+		t.Fatalf("applyCGA: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(ws, ".gga")); !os.IsNotExist(err) {
+		t.Error("applyCGA should remove the .gga remnant before installing its own hook")
+	}
+	agents, _ := os.ReadFile(filepath.Join(ws, "AGENTS.md"))
+	if strings.Contains(string(agents), "capiko:review") {
+		t.Errorf("applyCGA should remove the gga AGENTS.md block:\n%s", agents)
+	}
+	hook, err := os.ReadFile(filepath.Join(ws, ".git", "hooks", "pre-commit"))
+	if err != nil {
+		t.Fatalf("pre-commit hook not written: %v", err)
+	}
+	if strings.Contains(string(hook), "gga run") {
+		t.Errorf("applyCGA should have removed gga's hook content:\n%s", hook)
+	}
+	if !strings.Contains(string(hook), cga.MarkerStart) {
+		t.Errorf("applyCGA should still write its own hook after cleanup:\n%s", hook)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cleanupGGA
+// ---------------------------------------------------------------------------
+
+// writeGGARemnants seeds a workspace with the three artifacts GGA leaves
+// behind: the .gga config, a capiko:review AGENTS.md block, and a
+// non-marker-delimited pre-commit hook GGA installed directly.
+func writeGGARemnants(t *testing.T, ws string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(ws, ".gga"), []byte(`PROVIDER="claude"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agents := "<!-- capiko:review:start -->\n# Code Review Rules\n<!-- capiko:review:end -->\n"
+	if err := os.WriteFile(filepath.Join(ws, "AGENTS.md"), []byte(agents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(ws, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hook := "#!/bin/sh\n# installed by gga\ngga run \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(ws, ".git", "hooks", "pre-commit"), []byte(hook), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCleanupGGARemovesAllRemnants(t *testing.T) {
+	ws := t.TempDir()
+	writeGGARemnants(t, ws)
+
+	if err := cleanupGGA(ws); err != nil {
+		t.Fatalf("cleanupGGA: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(ws, ".gga")); !os.IsNotExist(err) {
+		t.Error("cleanupGGA should remove the .gga file")
+	}
+	agents, err := os.ReadFile(filepath.Join(ws, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("AGENTS.md should still exist (only the block is removed): %v", err)
+	}
+	if strings.Contains(string(agents), "capiko:review") {
+		t.Errorf("cleanupGGA should remove the capiko:review AGENTS.md block:\n%s", agents)
+	}
+	if _, err := os.Stat(filepath.Join(ws, ".git", "hooks", "pre-commit")); !os.IsNotExist(err) {
+		t.Error("cleanupGGA should remove gga's pre-commit hook file")
+	}
+}
+
+func TestCleanupGGAPreservesUserAgentsContent(t *testing.T) {
+	ws := t.TempDir()
+	writeGGARemnants(t, ws)
+	agentsPath := filepath.Join(ws, "AGENTS.md")
+	existing, _ := os.ReadFile(agentsPath)
+	withUserContent := "# My own rules\n\n- REQUIRE: keep this line\n\n" + string(existing)
+	if err := os.WriteFile(agentsPath, []byte(withUserContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cleanupGGA(ws); err != nil {
+		t.Fatalf("cleanupGGA: %v", err)
+	}
+
+	agents, _ := os.ReadFile(agentsPath)
+	if !strings.Contains(string(agents), "keep this line") {
+		t.Errorf("cleanupGGA must not clobber user-authored AGENTS.md content:\n%s", agents)
+	}
+}
+
+func TestCleanupGGANoRemnantsIsNoop(t *testing.T) {
+	ws := t.TempDir()
+
+	if err := cleanupGGA(ws); err != nil {
+		t.Fatalf("cleanupGGA on a clean workspace should be a no-op, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(ws, ".gga")); !os.IsNotExist(err) {
+		t.Error("cleanupGGA should not create a .gga file")
+	}
+	if _, err := os.Stat(filepath.Join(ws, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Error("cleanupGGA should not create AGENTS.md")
+	}
+}
+
+func TestCleanupGGALeavesNonGGAHookUntouched(t *testing.T) {
+	ws := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(ws, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hook := "#!/bin/sh\necho custom user hook\n"
+	if err := os.WriteFile(filepath.Join(ws, ".git", "hooks", "pre-commit"), []byte(hook), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cleanupGGA(ws); err != nil {
+		t.Fatalf("cleanupGGA: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(ws, ".git", "hooks", "pre-commit"))
+	if err != nil {
+		t.Fatalf("cleanupGGA should not remove a hook without a gga signature: %v", err)
+	}
+	if string(got) != hook {
+		t.Errorf("cleanupGGA modified a non-gga hook:\ngot:  %q\nwant: %q", got, hook)
+	}
+}
+
+func TestCleanupGGAIdempotent(t *testing.T) {
+	ws := t.TempDir()
+	writeGGARemnants(t, ws)
+
+	if err := cleanupGGA(ws); err != nil {
+		t.Fatalf("first cleanupGGA: %v", err)
+	}
+	if err := cleanupGGA(ws); err != nil {
+		t.Fatalf("second cleanupGGA should be a no-op, got: %v", err)
 	}
 }

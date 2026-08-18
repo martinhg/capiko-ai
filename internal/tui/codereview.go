@@ -3,125 +3,164 @@ package tui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
-	"github.com/martinhg/capiko-ai/internal/codereview"
+	"github.com/martinhg/capiko-ai/internal/cga"
+	"github.com/martinhg/capiko-ai/internal/githooks"
 	"github.com/martinhg/capiko-ai/internal/instructions"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
-// gga seams, swapped in tests so the flow never shells out to a real gga binary or
-// touches a real git repo. capiko configures gga; it never installs the binary.
-var (
-	ggaInstallHook   = func(workspace string) error { return runGGA(workspace, "install") }
-	ggaUninstallHook = func(workspace string) error { return runGGA(workspace, "uninstall") }
-	ggaDetected      = func() bool { _, err := exec.LookPath("gga"); return err == nil }
-	codeReviewGetwd  = os.Getwd
+// cgaGetwd resolves the working directory at apply/construct time for the CGA
+// screen. Mirrors teamSyncGetwd.
+var cgaGetwd = os.Getwd
+
+// ggaMarkerStart/ggaMarkerEnd are the marker delimiters gga used for its
+// managed AGENTS.md block. gga itself has been fully replaced by CGA; these
+// constants exist only so cleanupGGA can remove a prior installation's
+// remnants — capiko never writes this block anymore.
+const (
+	ggaMarkerStart = "<!-- capiko:review:start -->"
+	ggaMarkerEnd   = "<!-- capiko:review:end -->"
 )
 
-// runGGA invokes the gga CLI in the given workspace.
-func runGGA(workspace string, args ...string) error {
-	cmd := exec.Command("gga", args...)
-	cmd.Dir = workspace
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("gga %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+// ggaHookSignature is checked case-insensitively against an existing
+// .git/hooks/pre-commit file to detect a gga-owned hook. gga installs its
+// hook directly via the external `gga install` command rather than through
+// capiko's marker-delimited githooks.WriteBlock, so there is no marker to key
+// off — the whole file is gga's when this signature is present.
+const ggaHookSignature = "gga"
+
+// cleanupGGA removes any Gentleman Guardian Angel (gga) remnants from
+// workspace: the .gga config file, the capiko-managed AGENTS.md rules block,
+// and gga's pre-commit hook (detected by signature, since gga owns the whole
+// file rather than a marker-delimited block within it). It runs before CGA
+// installs its own hook so a fresh CGA install never leaves gga wiring
+// behind. Idempotent — a no-op when no remnants are present.
+func cleanupGGA(workspace string) error {
+	if err := removeGGAFile(workspace); err != nil {
+		return err
+	}
+	if err := removeGGAAgentsBlock(workspace); err != nil {
+		return err
+	}
+	return removeGGAPreCommitHook(workspace)
+}
+
+// removeGGAFile removes the .gga config file, if present.
+func removeGGAFile(workspace string) error {
+	if err := os.Remove(filepath.Join(workspace, ".gga")); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing .gga: %w", err)
 	}
 	return nil
 }
 
-// applyCodeReview writes capiko's managed gga configuration into the workspace:
-// the .gga config, the curated AGENTS.md rules block (preserving any user-authored
-// rules in the same file), and the git hook — then records the choice in state.
-// Disabling removes capiko's managed block and the hook and records it off, so sync
-// does not re-apply. Shared by the configure screen and the post-sync re-apply.
-func applyCodeReview(workspace string, store *state.Store, bkp *backup.Store, rec *state.CodeReviewRecord) error {
+// removeGGAAgentsBlock removes the capiko:review marker block from AGENTS.md,
+// preserving any user-authored content outside the markers.
+func removeGGAAgentsBlock(workspace string) error {
+	rulesPath := filepath.Join(workspace, "AGENTS.md")
+	content, changed, err := instructions.Render(rulesPath, ggaMarkerStart, ggaMarkerEnd, "")
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	return instructions.Write(rulesPath, content)
+}
+
+// removeGGAPreCommitHook deletes .git/hooks/pre-commit when it looks
+// gga-owned (see ggaHookSignature). A missing hook, or one without the
+// signature — a user's own hook, or one CGA already rewrote — is left
+// untouched.
+func removeGGAPreCommitHook(workspace string) error {
+	hookPath := filepath.Join(workspace, ".git", "hooks", "pre-commit")
+	raw, err := os.ReadFile(hookPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("reading pre-commit hook: %w", err)
+	}
+	if !strings.Contains(strings.ToLower(string(raw)), ggaHookSignature) {
+		return nil
+	}
+	if err := os.Remove(hookPath); err != nil {
+		return fmt.Errorf("removing gga pre-commit hook: %w", err)
+	}
+	return nil
+}
+
+// applyCGA installs (or re-applies) the Capiko Guardian Angel pre-commit
+// review hook into workspace: it first cleans up any gga remnants (gga is
+// replaced entirely, with no automatic migration — see cleanupGGA), then
+// renders and writes the CGA hook via cga.RenderHook + githooks.WriteBlock,
+// and records the result in state. Disabling removes the hook block and
+// records it off, so sync does not re-apply. Shared by the configure screen
+// and the post-sync re-apply.
+func applyCGA(workspace string, store *state.Store, bkp *backup.Store, rec *state.CGARecord) error {
 	if rec == nil {
 		return nil
 	}
-	rulesPath := filepath.Join(workspace, ggaRulesFile(rec))
-	ggaPath := filepath.Join(workspace, ".gga")
-
 	if !rec.Enabled {
-		return disableCodeReview(workspace, store, bkp, rec, rulesPath)
+		return disableCGA(workspace, store, bkp, rec)
 	}
 
-	// Render the managed AGENTS.md block for the active persona, injecting it into
-	// any existing rules file so user-authored content survives.
+	if err := cleanupGGA(workspace); err != nil {
+		return err
+	}
+
 	persona := activePersona(store)
-	content, changed, err := instructions.Render(rulesPath, codereview.MarkerStart, codereview.MarkerEnd, codereview.Rules(persona))
-	if err != nil {
+	script := cga.RenderHook(cga.Rules(persona), rec.StrictMode, rec.Timeout)
+
+	if err := backupCGAHook(bkp, workspace); err != nil {
 		return err
 	}
 
-	if err := backupCodeReviewFiles(bkp, rulesPath, ggaPath); err != nil {
-		return err
+	if err := githooks.WriteBlock(workspace, "pre-commit", cga.MarkerStart, cga.MarkerEnd, script); err != nil {
+		return fmt.Errorf("writing pre-commit hook: %w", err)
 	}
 
-	if changed {
-		if err := instructions.Write(rulesPath, content); err != nil {
-			return err
-		}
-	}
-	cfg := codereview.RenderConfig(codereviewConfig(rec))
-	if err := os.WriteFile(ggaPath, []byte(cfg), 0o644); err != nil {
-		return fmt.Errorf("writing .gga: %w", err)
-	}
-	if err := ggaInstallHook(workspace); err != nil {
-		return err
-	}
+	rec.Workspace = workspace
+	rec.Checksum = state.Checksum(script)
+
 	if store != nil {
-		return store.SetCodeReview(rec)
+		return store.SetCGA(rec)
 	}
 	return nil
 }
 
-// disableCodeReview removes capiko's managed AGENTS.md block and the git hook
-// (backing the rules file up first), then records the disabled state so sync does
-// not re-apply. The .gga file is left in place — it is the user's config now.
-func disableCodeReview(workspace string, store *state.Store, bkp *backup.Store, rec *state.CodeReviewRecord, rulesPath string) error {
-	content, changed, err := instructions.Render(rulesPath, codereview.MarkerStart, codereview.MarkerEnd, "")
-	if err != nil {
+// disableCGA removes CGA's managed pre-commit hook block (backing it up
+// first) and records Enabled:false so sync does not re-apply it.
+func disableCGA(workspace string, store *state.Store, bkp *backup.Store, rec *state.CGARecord) error {
+	if err := backupCGAHook(bkp, workspace); err != nil {
 		return err
 	}
-	if changed {
-		if err := backupCodeReviewFiles(bkp, rulesPath); err != nil {
-			return err
-		}
-		if err := instructions.Write(rulesPath, content); err != nil {
-			return err
-		}
+	if err := githooks.RemoveBlock(workspace, "pre-commit", cga.MarkerStart, cga.MarkerEnd); err != nil {
+		return fmt.Errorf("removing pre-commit hook block: %w", err)
 	}
-	if err := ggaUninstallHook(workspace); err != nil {
-		return err
-	}
+	rec.Workspace = workspace
 	if store != nil {
-		return store.SetCodeReview(rec)
+		return store.SetCGA(rec)
 	}
 	return nil
 }
 
-// backupCodeReviewFiles snapshots the given paths that already exist, before a
-// code-review mutation. A first write has nothing to back up.
-func backupCodeReviewFiles(bkp *backup.Store, paths ...string) error {
+// backupCGAHook snapshots the pre-commit hook file before a CGA mutation,
+// when it already exists. Mirrors backupTeamSyncHooks.
+func backupCGAHook(bkp *backup.Store, workspace string) error {
 	if bkp == nil {
 		return nil
 	}
-	var existing []string
-	for _, p := range paths {
-		if _, err := os.Stat(p); err == nil {
-			existing = append(existing, p)
-		}
-	}
-	if len(existing) == 0 {
+	hookPath := filepath.Join(workspace, ".git", "hooks", "pre-commit")
+	if _, err := os.Stat(hookPath); err != nil {
 		return nil
 	}
-	if _, err := bkp.CreateFiles("code-review", Version, existing); err != nil {
+	if _, err := bkp.CreateFiles("cga", Version, []string{hookPath}); err != nil {
 		return fmt.Errorf("backup failed, aborting: %w", err)
 	}
 	return nil
@@ -138,25 +177,20 @@ func activePersona(store *state.Store) string {
 	return ""
 }
 
-// ggaRulesFile is the rules file gga reads, defaulting to AGENTS.md.
-func ggaRulesFile(rec *state.CodeReviewRecord) string {
-	if rec.RulesFile != "" {
-		return rec.RulesFile
-	}
-	return "AGENTS.md"
-}
-
 // ============================================================================
 // Configure code review screen
+//
+// NOTE: this screen still uses the codeReviewScreen/codeReview* names and its
+// pre-CGA row layout (no Timeout control yet). It is repurposed here only
+// enough to compile against applyCGA/state.CGARecord after the gga backend
+// and internal/codereview package were removed. The full screen rewrite
+// (rename to cgaScreen, add a Timeout row, update copy/labels) is tracked as
+// a separate, later work unit.
 // ============================================================================
-
-// codeReviewProviders are the gga providers offered on the configure screen.
-var codeReviewProviders = []string{"claude", "gemini", "codex", "opencode", "ollama:llama3.2", "lmstudio", "github:gpt-4o"}
 
 // Row indices on the configure screen.
 const (
 	rowCodeReviewEnabled = iota
-	rowCodeReviewProvider
 	rowCodeReviewStrict
 	rowCodeReviewApply
 	rowCodeReviewBack
@@ -172,42 +206,29 @@ const (
 	codeReviewFailed
 )
 
-// codeReviewScreen configures Gentleman Guardian Angel (gga) for the current
-// project: it toggles the integration, picks the review provider and strict mode,
-// then writes the .gga config, the curated AGENTS.md block, and the git hook.
+// codeReviewScreen configures Capiko Guardian Angel (CGA) for the current
+// project: it toggles the integration and strict mode, then writes the
+// pre-commit review hook.
 type codeReviewScreen struct {
-	svc          services
-	enabled      bool
-	providerIdx  int
-	strict       bool
-	cursor       int
-	state        codeReviewState
-	ggaAvailable bool
-	err          error
+	svc     services
+	enabled bool
+	strict  bool
+	cursor  int
+	state   codeReviewState
+	err     error
 }
 
 type codeReviewAppliedMsg struct{ err error }
 
 func newCodeReview(svc services) screen {
-	s := &codeReviewScreen{svc: svc, strict: true, ggaAvailable: ggaDetected()}
+	s := &codeReviewScreen{svc: svc, strict: true}
 	if svc.state != nil {
-		if st, err := svc.state.Load(); err == nil && st.CodeReview != nil {
-			s.enabled = st.CodeReview.Enabled
-			s.strict = st.CodeReview.StrictMode
-			s.providerIdx = providerIndex(st.CodeReview.Provider)
+		if st, err := svc.state.Load(); err == nil && st.CGA != nil {
+			s.enabled = st.CGA.Enabled
+			s.strict = st.CGA.StrictMode
 		}
 	}
 	return s
-}
-
-// providerIndex returns the offered-providers index for name, or 0 when unknown.
-func providerIndex(name string) int {
-	for i, p := range codeReviewProviders {
-		if p == name {
-			return i
-		}
-	}
-	return 0
 }
 
 func (s *codeReviewScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
@@ -236,14 +257,6 @@ func (s *codeReviewScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			}
 		case " ":
 			s.toggle()
-		case "left", "h":
-			if s.cursor == rowCodeReviewProvider {
-				s.providerIdx = (s.providerIdx - 1 + len(codeReviewProviders)) % len(codeReviewProviders)
-			}
-		case "right", "l":
-			if s.cursor == rowCodeReviewProvider {
-				s.providerIdx = (s.providerIdx + 1) % len(codeReviewProviders)
-			}
 		case "enter":
 			switch s.cursor {
 			case rowCodeReviewApply:
@@ -271,29 +284,23 @@ func (s *codeReviewScreen) toggle() {
 
 func (s *codeReviewScreen) applyCmd() tea.Cmd {
 	svc := s.svc
-	rec := &state.CodeReviewRecord{
+	rec := &state.CGARecord{
 		Enabled:    s.enabled,
-		Provider:   codeReviewProviders[s.providerIdx],
 		StrictMode: s.strict,
 	}
 	return func() tea.Msg {
-		ws, err := codeReviewGetwd()
+		ws, err := cgaGetwd()
 		if err != nil {
 			return codeReviewAppliedMsg{err: err}
 		}
-		return codeReviewAppliedMsg{err: applyCodeReview(ws, svc.state, svc.backup, rec)}
+		return codeReviewAppliedMsg{err: applyCGA(ws, svc.state, svc.backup, rec)}
 	}
 }
 
 func (s *codeReviewScreen) View() string {
 	var b strings.Builder
 	b.WriteString(titleSty.Render("Configure code review") + "\n")
-	b.WriteString(dimSty.Render("Wire Gentleman Guardian Angel (gga) into this project: AI review on every commit.") + "\n\n")
-
-	if !s.ggaAvailable {
-		b.WriteString(warnSty.Render("! gga is not installed — capiko configures it, but the hook needs gga on PATH.") + "\n")
-		b.WriteString(dimSty.Render("  Install: brew install gentleman-programming/tap/gga") + "\n\n")
-	}
+	b.WriteString(dimSty.Render("Wire Capiko Guardian Angel into this project: Copilot reviews every commit.") + "\n\n")
 
 	switch s.state {
 	case codeReviewApplying:
@@ -311,7 +318,6 @@ func (s *codeReviewScreen) View() string {
 
 	rows := []struct{ label, value string }{
 		{"Enabled", onOff(s.enabled)},
-		{"Provider", codeReviewProviders[s.providerIdx]},
 		{"Strict mode", onOff(s.strict)},
 		{"Apply", ""},
 		{"Back", ""},
@@ -329,7 +335,7 @@ func (s *codeReviewScreen) View() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n" + dimSty.Render("↑/↓ move · ←/→ provider · space toggle · enter select · esc back") + "\n")
+	b.WriteString("\n" + dimSty.Render("↑/↓ move · space toggle · enter select · esc back") + "\n")
 	return b.String()
 }
 
@@ -339,24 +345,4 @@ func onOff(v bool) string {
 		return okSty.Render("on")
 	}
 	return dimSty.Render("off")
-}
-
-// codereviewConfig merges a state record over capiko's defaults.
-func codereviewConfig(rec *state.CodeReviewRecord) codereview.Config {
-	c := codereview.DefaultConfig()
-	if rec.Provider != "" {
-		c.Provider = rec.Provider
-	}
-	if rec.RulesFile != "" {
-		c.RulesFile = rec.RulesFile
-	}
-	if rec.FilePatterns != "" {
-		c.FilePatterns = rec.FilePatterns
-	}
-	c.ExcludePatterns = rec.ExcludePatterns
-	c.StrictMode = rec.StrictMode
-	if rec.Timeout > 0 {
-		c.Timeout = rec.Timeout
-	}
-	return c
 }

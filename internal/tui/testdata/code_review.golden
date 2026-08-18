@@ -1,12 +1,11 @@
 capiko-ai  ·  Copilot configurator
 
 Configure code review
-Wire Gentleman Guardian Angel (gga) into this project: AI review on every commit.
+Wire Capiko Guardian Angel into this project: Copilot reviews every commit.
 
 ▸ Enabled         off
-  Provider        claude
   Strict mode     on
   Apply         
   Back          
 
-↑/↓ move · ←/→ provider · space toggle · enter select · esc back
+↑/↓ move · space toggle · enter select · esc back
