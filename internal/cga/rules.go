@@ -1,6 +1,14 @@
 package cga
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
+
+// LearnedRulesCap is the fixed maximum number of active learned rules
+// EnforceCap allows (spec F3.6, design D6): ~500 tokens at 25 rules, well
+// within the ~2000 token composition budget.
+const LearnedRulesCap = 25
 
 // LearnedRule is an approved rule with provenance metadata, persisted per
 // engram-project once a user approves a drafted pattern (spec F3.3/F3.4).
@@ -31,4 +39,27 @@ func ComposeRules(staticRules string, learned []LearnedRule) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// EnforceCap trims rules to at most cap entries (spec F3.6, design D6): when
+// already within cap it returns rules unchanged (no-op); otherwise it
+// removes the lowest-EvidenceCount rules first, breaking ties by oldest
+// ApprovedAt, until exactly cap rules remain. It is a pure function: no I/O.
+func EnforceCap(rules []LearnedRule, cap int) []LearnedRule {
+	if len(rules) <= cap {
+		return rules
+	}
+
+	// Sort ascending by removal priority: lowest EvidenceCount first, then
+	// oldest ApprovedAt first — these are trimmed off the front.
+	trimmed := make([]LearnedRule, len(rules))
+	copy(trimmed, rules)
+	sort.SliceStable(trimmed, func(i, j int) bool {
+		if trimmed[i].EvidenceCount != trimmed[j].EvidenceCount {
+			return trimmed[i].EvidenceCount < trimmed[j].EvidenceCount
+		}
+		return trimmed[i].ApprovedAt < trimmed[j].ApprovedAt
+	})
+
+	return trimmed[len(trimmed)-cap:]
 }
