@@ -138,6 +138,28 @@ var cgaStdin io.Reader = os.Stdin
 // tests.
 var cgaNow = time.Now
 
+// engramSyncLearnedRule is a best-effort seam that syncs an approved rule to
+// engram (topic key cga/{project}/learned-rules, spec F3.4) by shelling out
+// to the engram CLI. The local JSON store stays canonical — a sync failure
+// is non-fatal, surfaced as a warning, and never blocks persistence or the
+// exit code (design open question: local file is the sole writable store of
+// record; engram sync is best-effort durability, not a dependency).
+var engramSyncLearnedRule = func(project string, rule cga.LearnedRule) error {
+	payload, err := json.Marshal(rule)
+	if err != nil {
+		return err
+	}
+	topic := fmt.Sprintf("cga/%s/learned-rules", project)
+	cmd := exec.Command("engram", "save",
+		"--project", project,
+		"--scope", "project",
+		"--type", "architecture",
+		"--topic-key", topic,
+		"--content", string(payload),
+	)
+	return cmd.Run()
+}
+
 // cgaLearn runs the learn-loop: detect recurring findings-log patterns
 // (spec F3.1), draft candidate rules (F3.2), present each for approval on
 // in/out (F3.3), and persist approved rules to the local JSON store (F3.4).
@@ -229,6 +251,10 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 		}
 		learned = append(learned, rule)
 		fmt.Fprintln(out, "approved")
+
+		if syncErr := engramSyncLearnedRule(project, rule); syncErr != nil {
+			fmt.Fprintf(out, "warning: engram sync failed: %v\n", syncErr)
+		}
 	}
 
 	learned = cga.EnforceCap(learned, cga.LearnedRulesCap)

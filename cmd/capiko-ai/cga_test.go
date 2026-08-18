@@ -201,6 +201,7 @@ func TestCgaLearnApprovalPersists(t *testing.T) {
 	baseDir := t.TempDir()
 	withStubCgaBaseDir(t, baseDir)
 	withStubCgaProject(t, "acme/repo")
+	withStubEngramSync(t, func(string, cga.LearnedRule) error { return nil })
 
 	var buf bytes.Buffer
 	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"))
