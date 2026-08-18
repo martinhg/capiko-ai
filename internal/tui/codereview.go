@@ -20,21 +20,6 @@ import (
 // screen. Mirrors teamSyncGetwd.
 var cgaGetwd = os.Getwd
 
-// cgaFindingsLogName is the findings-log JSONL filename, appended under
-// <git-dir>/capiko/ to build the full findings-log path.
-//
-// Deviation from design: the design (CGA Phase 2 design.md) names this
-// constant cga.FindingsLogName, defined in internal/cga/log.go (CGA Phase 2
-// PR1). PR3 branches from PR2 only — not PR1 — because PR3 depends on PR2's
-// renamed RenderPreCommitHook/PostCommitMarker* symbols, while PR1 is an
-// independent, not-yet-merged sibling PR. Since log.go is unavailable on
-// this branch, a local const with the same filename stands in; once PR1
-// merges to main this can be swapped for cga.FindingsLogName in one line.
-const cgaFindingsLogName = "cga-findings.jsonl"
-
-// cgaLogRotationCap is the maximum number of findings-log entries retained
-// after each pre-commit append (see cga.RenderPreCommitHook's rotationCap
-// param and the Self-Rotation spec requirement).
 const cgaLogRotationCap = 200
 
 // gitRevParseGitDir resolves the git directory for workspace via
@@ -72,7 +57,7 @@ func cgaFindingsLogPath(workspace string) string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(gitDir, "capiko", cgaFindingsLogName)
+	return filepath.Join(gitDir, "capiko", cga.FindingsLogName)
 }
 
 // ggaMarkerStart/ggaMarkerEnd are the marker delimiters gga used for its
