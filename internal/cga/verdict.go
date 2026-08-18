@@ -38,10 +38,10 @@ const (
 // Findings are diagnostic only — they never gate the commit; the top-level
 // Verdict.Result/Reason remain the sole PASS/FAIL authority.
 type Finding struct {
-	File        string
-	Line        int // 0 means file-level (no specific line)
-	Severity    Severity
-	Description string
+	File        string   `json:"file"`
+	Line        int      `json:"line,omitempty"` // 0 means file-level (no specific line)
+	Severity    Severity `json:"severity"`
+	Description string   `json:"description"`
 }
 
 // Verdict is the parsed outcome of a Copilot review response.
