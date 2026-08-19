@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/martinhg/capiko-ai/internal/cga"
+	"github.com/martinhg/capiko-ai/internal/cgastore"
 	"github.com/martinhg/capiko-ai/internal/clilog"
 	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/state"
@@ -280,7 +281,7 @@ func cgaLearn(out io.Writer, in io.Reader, scope string) (bool, int, error) {
 	}
 	project := cgaProject()
 
-	existing, err := LoadLearnedRules(baseDir, project)
+	existing, err := cgastore.LoadLearnedRules(cgastore.DefaultStorePath(baseDir, project))
 	if err != nil {
 		return true, 1, err
 	}
@@ -315,7 +316,7 @@ func cgaLearn(out io.Writer, in io.Reader, scope string) (bool, int, error) {
 
 	if len(candidates) == 0 {
 		fmt.Fprintln(out, "no new patterns meet the evidence threshold")
-		if err := SaveLearnedRules(baseDir, project, active); err != nil {
+		if err := cgastore.SaveLearnedRules(cgastore.DefaultStorePath(baseDir, project), active); err != nil {
 			return true, 1, err
 		}
 		return true, 0, nil
@@ -360,7 +361,7 @@ func cgaLearn(out io.Writer, in io.Reader, scope string) (bool, int, error) {
 	}
 
 	learned = cga.EnforceCap(learned, cga.LearnedRulesCap)
-	if err := SaveLearnedRules(baseDir, project, learned); err != nil {
+	if err := cgastore.SaveLearnedRules(cgastore.DefaultStorePath(baseDir, project), learned); err != nil {
 		return true, 1, err
 	}
 
@@ -376,7 +377,7 @@ func cgaRules(out io.Writer, scope string) (bool, int, error) {
 	if err != nil {
 		return true, 1, err
 	}
-	rules, err := LoadLearnedRules(baseDir, cgaProject())
+	rules, err := cgastore.LoadLearnedRules(cgastore.DefaultStorePath(baseDir, cgaProject()))
 	if err != nil {
 		return true, 1, err
 	}
@@ -387,42 +388,4 @@ func cgaRules(out io.Writer, scope string) (bool, int, error) {
 	}
 	fmt.Fprintln(out, cga.FormatLearnedRules(rules))
 	return true, 0, nil
-}
-
-// learnedRulesPath returns the local JSON store path for a project's learned
-// rules: "{baseDir}/cga/{project}/learned-rules.json" (spec F3.4, design D3).
-func learnedRulesPath(baseDir, project string) string {
-	return filepath.Join(baseDir, "cga", project, "learned-rules.json")
-}
-
-// LoadLearnedRules reads the local JSON store of learned rules for the given
-// baseDir and project. A missing file is not an error — it yields an empty
-// slice, matching the store's "no rules yet" steady state.
-func LoadLearnedRules(baseDir, project string) ([]cga.LearnedRule, error) {
-	data, err := os.ReadFile(learnedRulesPath(baseDir, project))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []cga.LearnedRule{}, nil
-		}
-		return nil, err
-	}
-	var rules []cga.LearnedRule
-	if err := json.Unmarshal(data, &rules); err != nil {
-		return nil, err
-	}
-	return rules, nil
-}
-
-// SaveLearnedRules writes rules to the local JSON store for baseDir and
-// project, creating the containing directory if needed.
-func SaveLearnedRules(baseDir, project string, rules []cga.LearnedRule) error {
-	dir := filepath.Join(baseDir, "cga", project)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(rules, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(learnedRulesPath(baseDir, project), data, 0o644)
 }
