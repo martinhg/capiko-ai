@@ -507,6 +507,162 @@ func withStubEngramSync(t *testing.T, fn func(project string, rule cga.LearnedRu
 	t.Cleanup(func() { engramSyncLearnedRule = prev })
 }
 
+func withStubEngramSaveRunner(t *testing.T, fn func(args ...string) error) {
+	t.Helper()
+	prev := engramSaveRunner
+	engramSaveRunner = fn
+	t.Cleanup(func() { engramSaveRunner = prev })
+}
+
+// TestEngramSyncLearnedRuleUsesPositionalTitleAndContent locks in the
+// correct `engram save` CLI contract (v1.20.0): `engram save <title>
+// <content> [--type T] [--project P] [--scope S] [--topic KEY]` — title and
+// content are POSITIONAL args, and the topic flag is `--topic`, not
+// `--topic-key`. Regression test for the bug where the old invocation used
+// `--content` and `--topic-key`, both of which are rejected by the real CLI.
+func TestEngramSyncLearnedRuleUsesPositionalTitleAndContent(t *testing.T) {
+	var gotArgs []string
+	withStubEngramSaveRunner(t, func(args ...string) error {
+		gotArgs = args
+		return nil
+	})
+
+	rule := cga.LearnedRule{
+		ID:            "abc123",
+		Severity:      cga.SeverityWarning,
+		Text:          "REQUIRE: missing test coverage",
+		EvidenceCount: 3,
+		ApprovedAt:    "2026-08-18T10:00:00Z",
+		Scope:         cga.ScopeProject,
+	}
+
+	if err := engramSyncLearnedRule("acme/repo", rule); err != nil {
+		t.Fatalf("engramSyncLearnedRule: %v", err)
+	}
+
+	if len(gotArgs) < 2 {
+		t.Fatalf("want at least title and content as positional args, got %v", gotArgs)
+	}
+	if !strings.HasPrefix(gotArgs[0], "CGA learned rule:") {
+		t.Errorf("title = %q, want prefix %q", gotArgs[0], "CGA learned rule:")
+	}
+	if !strings.Contains(gotArgs[0], "REQUIRE: missing test coverage") {
+		t.Errorf("title = %q, want it to contain the rule text", gotArgs[0])
+	}
+
+	var decoded cga.LearnedRule
+	if err := json.Unmarshal([]byte(gotArgs[1]), &decoded); err != nil {
+		t.Fatalf("content arg is not valid JSON: %v (%q)", err, gotArgs[1])
+	}
+	if decoded.ID != rule.ID {
+		t.Errorf("decoded content ID = %q, want %q", decoded.ID, rule.ID)
+	}
+
+	flags := gotArgs[2:]
+	flagValue := func(flag string) (string, bool) {
+		for i, a := range flags {
+			if a == flag {
+				if i+1 < len(flags) {
+					return flags[i+1], true
+				}
+				return "", false
+			}
+		}
+		return "", false
+	}
+
+	if v, ok := flagValue("--project"); !ok || v != "acme/repo" {
+		t.Errorf("--project = %q, ok=%v, want acme/repo", v, ok)
+	}
+	if v, ok := flagValue("--scope"); !ok || v != "project" {
+		t.Errorf("--scope = %q, ok=%v, want project", v, ok)
+	}
+	if v, ok := flagValue("--type"); !ok || v != "architecture" {
+		t.Errorf("--type = %q, ok=%v, want architecture", v, ok)
+	}
+	if v, ok := flagValue("--topic"); !ok || v != "cga/acme/repo/learned-rules" {
+		t.Errorf("--topic = %q, ok=%v, want cga/acme/repo/learned-rules", v, ok)
+	}
+
+	for _, a := range flags {
+		if a == "--topic-key" {
+			t.Errorf("must not use the deprecated --topic-key flag, got args %v", gotArgs)
+		}
+		if a == "--content" {
+			t.Errorf("must not use --content flag; content is positional, got args %v", gotArgs)
+		}
+	}
+}
+
+// TestCgaLearnSkipsEngramSyncForPersonalScope verifies personal-scope rules
+// stay local-only: the engram sync seam must never be invoked for them, and
+// the user must see a message explaining why.
+func TestCgaLearnSkipsEngramSyncForPersonalScope(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	calls := 0
+	withStubEngramSync(t, func(string, cga.LearnedRule) error {
+		calls++
+		return nil
+	})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"), cga.ScopePersonal)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if calls != 0 {
+		t.Errorf("want 0 engram sync calls for personal scope, got %d", calls)
+	}
+	if !strings.Contains(buf.String(), "personal") || !strings.Contains(buf.String(), "skip") {
+		t.Errorf("expected output to explain skipped personal-scope sync, got:\n%s", buf.String())
+	}
+}
+
+// TestCgaLearnSyncsProjectScopeToEngramSeam verifies project-scope rules
+// (the default) are synced through the seam with the correct project and a
+// rule stamped with ScopeProject.
+func TestCgaLearnSyncsProjectScopeToEngramSeam(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	var syncedProject string
+	var syncedRule cga.LearnedRule
+	calls := 0
+	withStubEngramSync(t, func(project string, rule cga.LearnedRule) error {
+		calls++
+		syncedProject = project
+		syncedRule = rule
+		return nil
+	})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"), cga.ScopeProject)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if calls != 1 {
+		t.Fatalf("want 1 engram sync call for project scope, got %d", calls)
+	}
+	if syncedProject != "acme/repo" {
+		t.Errorf("synced project = %q, want acme/repo", syncedProject)
+	}
+	if syncedRule.Scope != cga.ScopeProject {
+		t.Errorf("synced rule scope = %q, want %q", syncedRule.Scope, cga.ScopeProject)
+	}
+}
+
 func TestCgaLearnSyncsApprovedRuleToEngram(t *testing.T) {
 	gitDir := t.TempDir()
 	writeFindingsLog(t, gitDir, threePeatWarningLog)
