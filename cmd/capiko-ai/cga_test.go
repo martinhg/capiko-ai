@@ -46,6 +46,45 @@ func writeFindingsLog(t *testing.T, gitDir string, content string) {
 	}
 }
 
+// --- Phase 2: `parseScope` flag parsing ---
+
+func TestParseScope(t *testing.T) {
+	allowed := []string{"project", "personal", "all"}
+
+	t.Run("valid value extracted and stripped from rest", func(t *testing.T) {
+		rest, scope, err := parseScope([]string{"--verbose", "--scope", "personal", "extra"}, allowed, "project")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if scope != "personal" {
+			t.Errorf("scope = %q, want personal", scope)
+		}
+		if strings.Join(rest, ",") != "--verbose,extra" {
+			t.Errorf("rest = %v, want [--verbose extra] without --scope personal", rest)
+		}
+	})
+
+	t.Run("absent flag returns defaultScope and args unchanged", func(t *testing.T) {
+		rest, scope, err := parseScope([]string{"--verbose"}, allowed, "project")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if scope != "project" {
+			t.Errorf("scope = %q, want project (default)", scope)
+		}
+		if strings.Join(rest, ",") != "--verbose" {
+			t.Errorf("rest = %v, want unchanged", rest)
+		}
+	})
+
+	t.Run("invalid value returns error", func(t *testing.T) {
+		_, _, err := parseScope([]string{"--scope", "bogus"}, allowed, "project")
+		if err == nil {
+			t.Fatal("expected error for invalid --scope value")
+		}
+	})
+}
+
 func TestCgaCommandNotHandledForOtherName(t *testing.T) {
 	var buf bytes.Buffer
 	handled, exitCode, err := cgaCommand("backup", nil, &buf)

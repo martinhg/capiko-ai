@@ -66,8 +66,49 @@ func cgaCommand(name string, args []string, out io.Writer) (handled bool, exitCo
 // cgaUsage is the usage block printed for a missing or unknown subcommand.
 const cgaUsage = "Usage:\n" +
 	"  capiko-ai cga findings\n" +
-	"  capiko-ai cga learn\n" +
-	"  capiko-ai cga rules"
+	"  capiko-ai cga learn [--scope personal]\n" +
+	"  capiko-ai cga rules [--scope project|personal|all]"
+
+// cgaScopeValues is the set of values `--scope` accepts on `cga learn`
+// (project|personal) and `cga rules` (project|personal|all — see
+// cgaRulesScopeValues).
+var cgaScopeValues = []string{cga.ScopeProject, cga.ScopePersonal}
+
+// cgaRulesScopeValues extends cgaScopeValues with "all" — the extra display
+// mode only `cga rules` accepts (spec: cga-scope-discipline).
+var cgaRulesScopeValues = []string{cga.ScopeProject, cga.ScopePersonal, "all"}
+
+// parseScope extracts "--scope <value>" from args, validates it against
+// allowed, and returns the remaining args with the flag and its value
+// removed. When "--scope" is absent, it returns defaultScope and args
+// unchanged. Mirrors parseVerbose's manual-iteration style (design D3).
+func parseScope(args []string, allowed []string, defaultScope string) (rest []string, scope string, err error) {
+	scope = defaultScope
+	rest = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] != "--scope" {
+			rest = append(rest, args[i])
+			continue
+		}
+		if i+1 >= len(args) {
+			return nil, "", fmt.Errorf("cga: --scope requires a value (%s)", strings.Join(allowed, "|"))
+		}
+		value := args[i+1]
+		i++
+		valid := false
+		for _, a := range allowed {
+			if value == a {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return nil, "", fmt.Errorf("cga: invalid --scope value %q, want one of %s", value, strings.Join(allowed, "|"))
+		}
+		scope = value
+	}
+	return rest, scope, nil
+}
 
 // cgaFindings prints the persisted CGA findings log for the current
 // workspace. A git dir resolution failure, missing log file, or empty log
