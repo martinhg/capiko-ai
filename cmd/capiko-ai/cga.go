@@ -51,11 +51,21 @@ func cgaCommand(name string, args []string, out io.Writer) (handled bool, exitCo
 	case "findings":
 		return cgaFindings(out)
 	case "learn":
-		_, verbose := parseVerbose(args[1:])
+		rest, verbose := parseVerbose(args[1:])
+		_, scope, err := parseScope(rest, cgaScopeValues, cga.ScopeProject)
+		if err != nil {
+			fmt.Fprintln(out, err)
+			return true, 1, err
+		}
 		cgaLearnLog = newLogger("cga-learn", verbose)
-		return cgaLearn(out, cgaStdin)
+		return cgaLearn(out, cgaStdin, scope)
 	case "rules":
-		return cgaRules(out)
+		_, scope, err := parseScope(args[1:], cgaRulesScopeValues, cga.ScopeProject)
+		if err != nil {
+			fmt.Fprintln(out, err)
+			return true, 1, err
+		}
+		return cgaRules(out, scope)
 	default:
 		fmt.Fprintf(out, "cga: unknown subcommand %q\n", sub)
 		fmt.Fprintln(out, cgaUsage)
@@ -66,8 +76,49 @@ func cgaCommand(name string, args []string, out io.Writer) (handled bool, exitCo
 // cgaUsage is the usage block printed for a missing or unknown subcommand.
 const cgaUsage = "Usage:\n" +
 	"  capiko-ai cga findings\n" +
-	"  capiko-ai cga learn\n" +
-	"  capiko-ai cga rules"
+	"  capiko-ai cga learn [--scope personal]\n" +
+	"  capiko-ai cga rules [--scope project|personal|all]"
+
+// cgaScopeValues is the set of values `--scope` accepts on `cga learn`
+// (project|personal) and `cga rules` (project|personal|all — see
+// cgaRulesScopeValues).
+var cgaScopeValues = []string{cga.ScopeProject, cga.ScopePersonal}
+
+// cgaRulesScopeValues extends cgaScopeValues with "all" — the extra display
+// mode only `cga rules` accepts (spec: cga-scope-discipline).
+var cgaRulesScopeValues = []string{cga.ScopeProject, cga.ScopePersonal, "all"}
+
+// parseScope extracts "--scope <value>" from args, validates it against
+// allowed, and returns the remaining args with the flag and its value
+// removed. When "--scope" is absent, it returns defaultScope and args
+// unchanged. Mirrors parseVerbose's manual-iteration style (design D3).
+func parseScope(args []string, allowed []string, defaultScope string) (rest []string, scope string, err error) {
+	scope = defaultScope
+	rest = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] != "--scope" {
+			rest = append(rest, args[i])
+			continue
+		}
+		if i+1 >= len(args) {
+			return nil, "", fmt.Errorf("cga: --scope requires a value (%s)", strings.Join(allowed, "|"))
+		}
+		value := args[i+1]
+		i++
+		valid := false
+		for _, a := range allowed {
+			if value == a {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return nil, "", fmt.Errorf("cga: invalid --scope value %q, want one of %s", value, strings.Join(allowed, "|"))
+		}
+		scope = value
+	}
+	return rest, scope, nil
+}
 
 // cgaFindings prints the persisted CGA findings log for the current
 // workspace. A git dir resolution failure, missing log file, or empty log
@@ -172,10 +223,12 @@ var engramSyncLearnedRule = func(project string, rule cga.LearnedRule) error {
 // cgaLearn runs the learn-loop: detect recurring findings-log patterns
 // (spec F3.1), draft candidate rules (F3.2), present each for approval on
 // in/out (F3.3), and persist approved rules to the local JSON store (F3.4).
-// A git dir resolution failure or missing/empty log is treated as "no
-// patterns detected" rather than an error, matching cgaFindings' graceful
-// degradation.
-func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
+// Every rule approved in this run is stamped with scope (spec CGA Phase 4
+// Slice A: "project" by default, "personal" when the caller passed
+// --scope personal). A git dir resolution failure or missing/empty log is
+// treated as "no patterns detected" rather than an error, matching
+// cgaFindings' graceful degradation.
+func cgaLearn(out io.Writer, in io.Reader, scope string) (bool, int, error) {
 	gitDir, err := resolveGitDir()
 	if err != nil {
 		fmt.Fprintln(out, "no findings recorded — nothing to learn from")
@@ -265,6 +318,7 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 			Text:          text,
 			EvidenceCount: p.EvidenceCount,
 			ApprovedAt:    cgaNow().UTC().Format(time.RFC3339),
+			Scope:         scope,
 		}
 		cgaLearnLog.Event("rule_approved", rule.ID)
 		learned = append(learned, rule)
@@ -284,8 +338,10 @@ func cgaLearn(out io.Writer, in io.Reader) (bool, int, error) {
 }
 
 // cgaRules lists the locally persisted learned rules for the current
-// workspace's engram project (spec F3.7).
-func cgaRules(out io.Writer) (bool, int, error) {
+// workspace's engram project (spec F3.7), filtered by scope
+// (project|personal|all, default project; spec CGA Phase 4 Slice A). When no
+// rule matches the selected scope, it prints a graceful message and exits 0.
+func cgaRules(out io.Writer, scope string) (bool, int, error) {
 	baseDir, err := cgaBaseDir()
 	if err != nil {
 		return true, 1, err
@@ -294,8 +350,9 @@ func cgaRules(out io.Writer) (bool, int, error) {
 	if err != nil {
 		return true, 1, err
 	}
+	rules = cga.FilterByScope(rules, scope)
 	if len(rules) == 0 {
-		fmt.Fprintln(out, "no learned rules")
+		fmt.Fprintf(out, "no learned rules (scope: %s)\n", cga.ResolveScope(scope))
 		return true, 0, nil
 	}
 	fmt.Fprintln(out, cga.FormatLearnedRules(rules))

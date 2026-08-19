@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -44,6 +45,45 @@ func writeFindingsLog(t *testing.T, gitDir string, content string) {
 	if err := os.WriteFile(filepath.Join(logDir, cga.FindingsLogName), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// --- Phase 2: `parseScope` flag parsing ---
+
+func TestParseScope(t *testing.T) {
+	allowed := []string{"project", "personal", "all"}
+
+	t.Run("valid value extracted and stripped from rest", func(t *testing.T) {
+		rest, scope, err := parseScope([]string{"--verbose", "--scope", "personal", "extra"}, allowed, "project")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if scope != "personal" {
+			t.Errorf("scope = %q, want personal", scope)
+		}
+		if strings.Join(rest, ",") != "--verbose,extra" {
+			t.Errorf("rest = %v, want [--verbose extra] without --scope personal", rest)
+		}
+	})
+
+	t.Run("absent flag returns defaultScope and args unchanged", func(t *testing.T) {
+		rest, scope, err := parseScope([]string{"--verbose"}, allowed, "project")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if scope != "project" {
+			t.Errorf("scope = %q, want project (default)", scope)
+		}
+		if strings.Join(rest, ",") != "--verbose" {
+			t.Errorf("rest = %v, want unchanged", rest)
+		}
+	})
+
+	t.Run("invalid value returns error", func(t *testing.T) {
+		_, _, err := parseScope([]string{"--scope", "bogus"}, allowed, "project")
+		if err == nil {
+			t.Fatal("expected error for invalid --scope value")
+		}
+	})
 }
 
 func TestCgaCommandNotHandledForOtherName(t *testing.T) {
@@ -206,7 +246,7 @@ func TestCgaLearnApprovalPersists(t *testing.T) {
 	withStubEngramSync(t, func(string, cga.LearnedRule) error { return nil })
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"))
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"), cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
@@ -255,7 +295,7 @@ func TestCgaLearnRejectionDiscardsRule(t *testing.T) {
 	withStubCgaProject(t, "acme/repo")
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("n\n"))
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("n\n"), cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
@@ -288,7 +328,7 @@ func TestCgaLearnEmptyStateGracefulExit(t *testing.T) {
 	withStubCgaProject(t, "acme/repo")
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaLearn(&buf, strings.NewReader(""))
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader(""), cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
@@ -322,7 +362,7 @@ func TestCgaLearnRetiresRulesBelowThreshold(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaLearn(&buf, strings.NewReader(""))
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader(""), cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
@@ -351,7 +391,7 @@ func TestCgaRulesPrintsFormattedList(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaRules(&buf)
+	handled, exitCode, err := cgaRules(&buf, cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
@@ -366,12 +406,95 @@ func TestCgaRulesEmptyStoreMessage(t *testing.T) {
 	withStubCgaProject(t, "acme/repo")
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaRules(&buf)
+	handled, exitCode, err := cgaRules(&buf, cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
 	if !strings.Contains(buf.String(), "no learned rules") {
 		t.Errorf("expected 'no learned rules' in output:\n%s", buf.String())
+	}
+}
+
+// --- Phase 4: `cga rules --scope` ---
+
+func TestCgaRulesScopeFilters(t *testing.T) {
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	rules := []cga.LearnedRule{
+		{ID: "p1", Severity: cga.SeverityWarning, Text: "project rule 1", EvidenceCount: 4, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopeProject},
+		{ID: "p2", Severity: cga.SeverityCritical, Text: "project rule 2", EvidenceCount: 5, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopeProject},
+		{ID: "s1", Severity: cga.SeveritySuggestion, Text: "personal rule 1", EvidenceCount: 3, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopePersonal},
+	}
+	if err := SaveLearnedRules(baseDir, "acme/repo", rules); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	t.Run("default (project) shows only project-scope rules", func(t *testing.T) {
+		var buf bytes.Buffer
+		handled, exitCode, err := cgaCommand("cga", []string{"rules"}, &buf)
+		if !handled || exitCode != 0 || err != nil {
+			t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "project rule 1") || !strings.Contains(out, "project rule 2") {
+			t.Errorf("expected both project rules in output:\n%s", out)
+		}
+		if strings.Contains(out, "personal rule 1") {
+			t.Errorf("did not expect personal rule in default output:\n%s", out)
+		}
+	})
+
+	t.Run("--scope personal shows only personal rules", func(t *testing.T) {
+		var buf bytes.Buffer
+		handled, exitCode, err := cgaCommand("cga", []string{"rules", "--scope", "personal"}, &buf)
+		if !handled || exitCode != 0 || err != nil {
+			t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "personal rule 1") {
+			t.Errorf("expected personal rule in output:\n%s", out)
+		}
+		if strings.Contains(out, "project rule 1") || strings.Contains(out, "project rule 2") {
+			t.Errorf("did not expect project rules in personal-scope output:\n%s", out)
+		}
+	})
+
+	t.Run("--scope all shows every rule labeled", func(t *testing.T) {
+		var buf bytes.Buffer
+		handled, exitCode, err := cgaCommand("cga", []string{"rules", "--scope", "all"}, &buf)
+		if !handled || exitCode != 0 || err != nil {
+			t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+		}
+		out := buf.String()
+		for _, want := range []string{"project rule 1", "project rule 2", "personal rule 1"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("expected %q in --scope all output:\n%s", want, out)
+			}
+		}
+	})
+}
+
+func TestCgaRulesScopeFilterEmptyResultIsGraceful(t *testing.T) {
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	personalOnly := []cga.LearnedRule{
+		{ID: "s1", Severity: cga.SeverityWarning, Text: "personal only rule", EvidenceCount: 3, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopePersonal},
+	}
+	if err := SaveLearnedRules(baseDir, "acme/repo", personalOnly); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaCommand("cga", []string{"rules", "--scope", "project"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "no learned rules") {
+		t.Errorf("expected graceful empty message, got:\n%s", buf.String())
 	}
 }
 
@@ -404,7 +527,7 @@ func TestCgaLearnSyncsApprovedRuleToEngram(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"))
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"), cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
@@ -433,7 +556,7 @@ func TestCgaLearnEngramSyncFailureIsNonFatal(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"))
+	handled, exitCode, err := cgaLearn(&buf, strings.NewReader("y\n"), cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v, want non-fatal sync failure", handled, exitCode, err)
 	}
@@ -502,7 +625,7 @@ func TestCgaLearnEmitsMetricsEvents(t *testing.T) {
 
 	var out bytes.Buffer
 	// Approve the first candidate (WARNING), reject the second (CRITICAL).
-	handled, exitCode, err := cgaLearn(&out, strings.NewReader("y\nn\n"))
+	handled, exitCode, err := cgaLearn(&out, strings.NewReader("y\nn\n"), cga.ScopeProject)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
@@ -531,5 +654,97 @@ func TestCgaCommandRulesWiredIn(t *testing.T) {
 	handled, exitCode, err := cgaCommand("cga", []string{"rules"}, &buf)
 	if !handled || exitCode != 0 || err != nil {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+}
+
+// --- Phase 3: wire `cga learn --scope` ---
+
+func withStubCgaStdin(t *testing.T, r io.Reader) {
+	t.Helper()
+	prev := cgaStdin
+	cgaStdin = r
+	t.Cleanup(func() { cgaStdin = prev })
+}
+
+func TestCgaLearnScopePersonalPersists(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+	withStubEngramSync(t, func(string, cga.LearnedRule) error { return nil })
+	withStubCgaStdin(t, strings.NewReader("y\n"))
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaCommand("cga", []string{"learn", "--scope", "personal"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+
+	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("want 1 learned rule, got %d: %+v", len(rules), rules)
+	}
+	if rules[0].Scope != cga.ScopePersonal {
+		t.Errorf("scope = %q, want %q", rules[0].Scope, cga.ScopePersonal)
+	}
+}
+
+func TestCgaLearnDefaultScopeIsProject(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+	withStubEngramSync(t, func(string, cga.LearnedRule) error { return nil })
+	withStubCgaStdin(t, strings.NewReader("y\n"))
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaCommand("cga", []string{"learn"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+
+	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("want 1 learned rule, got %d: %+v", len(rules), rules)
+	}
+	if rules[0].Scope != cga.ScopeProject {
+		t.Errorf("scope = %q, want %q", rules[0].Scope, cga.ScopeProject)
+	}
+}
+
+func TestCgaLearnInvalidScopeRejected(t *testing.T) {
+	gitDir := t.TempDir()
+	writeFindingsLog(t, gitDir, threePeatWarningLog)
+	withStubGitDir(t, gitDir, nil)
+
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+	withStubCgaStdin(t, strings.NewReader("y\n"))
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaCommand("cga", []string{"learn", "--scope", "bogus"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+
+	rules, loadErr := LoadLearnedRules(baseDir, "acme/repo")
+	if loadErr != nil {
+		t.Fatalf("load: %v", loadErr)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("want 0 rules persisted after invalid --scope, got %d: %+v", len(rules), rules)
 	}
 }
