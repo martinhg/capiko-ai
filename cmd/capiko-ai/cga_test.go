@@ -12,8 +12,21 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/cga"
+	"github.com/martinhg/capiko-ai/internal/cgastore"
 	"github.com/martinhg/capiko-ai/internal/clilog"
 )
+
+// testLoadLearnedRules and testSaveLearnedRules mirror the cmd/capiko-ai
+// call sites' use of cgastore (baseDir + project resolved to a path), so
+// existing tests can keep asserting against baseDir/project pairs without
+// each call site re-deriving the path.
+func testLoadLearnedRules(baseDir, project string) ([]cga.LearnedRule, error) {
+	return cgastore.LoadLearnedRules(cgastore.DefaultStorePath(baseDir, project))
+}
+
+func testSaveLearnedRules(baseDir, project string, rules []cga.LearnedRule) error {
+	return cgastore.SaveLearnedRules(cgastore.DefaultStorePath(baseDir, project), rules)
+}
 
 func withStubGitDir(t *testing.T, dir string, err error) {
 	t.Helper()
@@ -194,7 +207,7 @@ func TestCgaFindingsGitDirResolutionFails(t *testing.T) {
 
 func TestLoadLearnedRulesMissingFileReturnsEmpty(t *testing.T) {
 	baseDir := t.TempDir()
-	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	rules, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,11 +223,11 @@ func TestSaveLoadLearnedRulesRoundTrip(t *testing.T) {
 		{ID: "def456", Severity: cga.SeverityCritical, Text: "REJECT if: errors swallowed silently", EvidenceCount: 3, ApprovedAt: "2026-08-17T10:00:00Z"},
 	}
 
-	if err := SaveLearnedRules(baseDir, "acme/repo", want); err != nil {
+	if err := testSaveLearnedRules(baseDir, "acme/repo", want); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	got, err := LoadLearnedRules(baseDir, "acme/repo")
+	got, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -259,7 +272,7 @@ func TestCgaLearnApprovalPersists(t *testing.T) {
 		t.Errorf("expected evidence count in output:\n%s", out)
 	}
 
-	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	rules, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -303,7 +316,7 @@ func TestCgaLearnRejectionDiscardsRule(t *testing.T) {
 		t.Errorf("expected 'rejected' in output:\n%s", buf.String())
 	}
 
-	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	rules, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -336,7 +349,7 @@ func TestCgaLearnEmptyStateGracefulExit(t *testing.T) {
 		t.Errorf("expected graceful empty-state message, got:\n%s", buf.String())
 	}
 
-	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	rules, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -357,7 +370,7 @@ func TestCgaLearnRetiresRulesBelowThreshold(t *testing.T) {
 	existing := []cga.LearnedRule{
 		{ID: "old", Severity: cga.SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 3, ApprovedAt: "2026-08-01T00:00:00Z"},
 	}
-	if err := SaveLearnedRules(baseDir, "acme/repo", existing); err != nil {
+	if err := testSaveLearnedRules(baseDir, "acme/repo", existing); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -367,7 +380,7 @@ func TestCgaLearnRetiresRulesBelowThreshold(t *testing.T) {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
 
-	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	rules, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -386,7 +399,7 @@ func TestCgaRulesPrintsFormattedList(t *testing.T) {
 	rules := []cga.LearnedRule{
 		{ID: "abc", Severity: cga.SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 4, ApprovedAt: "2026-08-18T10:00:00Z"},
 	}
-	if err := SaveLearnedRules(baseDir, "acme/repo", rules); err != nil {
+	if err := testSaveLearnedRules(baseDir, "acme/repo", rules); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -427,7 +440,7 @@ func TestCgaRulesScopeFilters(t *testing.T) {
 		{ID: "p2", Severity: cga.SeverityCritical, Text: "project rule 2", EvidenceCount: 5, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopeProject},
 		{ID: "s1", Severity: cga.SeveritySuggestion, Text: "personal rule 1", EvidenceCount: 3, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopePersonal},
 	}
-	if err := SaveLearnedRules(baseDir, "acme/repo", rules); err != nil {
+	if err := testSaveLearnedRules(baseDir, "acme/repo", rules); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -484,7 +497,7 @@ func TestCgaRulesScopeFilterEmptyResultIsGraceful(t *testing.T) {
 	personalOnly := []cga.LearnedRule{
 		{ID: "s1", Severity: cga.SeverityWarning, Text: "personal only rule", EvidenceCount: 3, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopePersonal},
 	}
-	if err := SaveLearnedRules(baseDir, "acme/repo", personalOnly); err != nil {
+	if err := testSaveLearnedRules(baseDir, "acme/repo", personalOnly); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -720,7 +733,7 @@ func TestCgaLearnEngramSyncFailureIsNonFatal(t *testing.T) {
 		t.Errorf("expected a warning mentioning engram in output:\n%s", buf.String())
 	}
 
-	rules, loadErr := LoadLearnedRules(baseDir, "acme/repo")
+	rules, loadErr := testLoadLearnedRules(baseDir, "acme/repo")
 	if loadErr != nil {
 		t.Fatalf("load: %v", loadErr)
 	}
@@ -772,7 +785,7 @@ func TestCgaLearnEmitsMetricsEvents(t *testing.T) {
 	stale := []cga.LearnedRule{
 		{ID: "stale", Severity: cga.SeverityWarning, Text: "REQUIRE: some rule with no current evidence", EvidenceCount: 3, ApprovedAt: "2026-08-01T00:00:00Z"},
 	}
-	if err := SaveLearnedRules(baseDir, "acme/repo", stale); err != nil {
+	if err := testSaveLearnedRules(baseDir, "acme/repo", stale); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -839,7 +852,7 @@ func TestCgaLearnScopePersonalPersists(t *testing.T) {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
 
-	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	rules, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -868,7 +881,7 @@ func TestCgaLearnDefaultScopeIsProject(t *testing.T) {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
 
-	rules, err := LoadLearnedRules(baseDir, "acme/repo")
+	rules, err := testLoadLearnedRules(baseDir, "acme/repo")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -896,7 +909,7 @@ func TestCgaLearnInvalidScopeRejected(t *testing.T) {
 		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
 	}
 
-	rules, loadErr := LoadLearnedRules(baseDir, "acme/repo")
+	rules, loadErr := testLoadLearnedRules(baseDir, "acme/repo")
 	if loadErr != nil {
 		t.Fatalf("load: %v", loadErr)
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/cga"
+	"github.com/martinhg/capiko-ai/internal/cgastore"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -15,15 +16,15 @@ import (
 // loadLearnedRules (CGA Phase 3 PR4 — learn-loop hook re-render wiring)
 // ---------------------------------------------------------------------------
 
-func TestLoadLearnedRulesFileMissingReturnsNilNoError(t *testing.T) {
+func TestLoadLearnedRulesFileMissingReturnsEmpty(t *testing.T) {
 	baseDir := t.TempDir()
 
-	rules, err := loadLearnedRulesFile(baseDir, "acme/repo")
+	rules, err := cgastore.LoadLearnedRules(cgastore.DefaultStorePath(baseDir, "acme/repo"))
 	if err != nil {
-		t.Fatalf("loadLearnedRulesFile: %v", err)
+		t.Fatalf("LoadLearnedRules: %v", err)
 	}
-	if rules != nil {
-		t.Errorf("expected nil rules for missing store, got %+v", rules)
+	if len(rules) != 0 {
+		t.Errorf("expected empty rules for missing store, got %+v", rules)
 	}
 }
 
@@ -35,17 +36,17 @@ func TestLoadLearnedRulesFileReturnsParsedRules(t *testing.T) {
 	}
 	writeLearnedRulesFixture(t, baseDir, project, want)
 
-	got, err := loadLearnedRulesFile(baseDir, project)
+	got, err := cgastore.LoadLearnedRules(cgastore.DefaultStorePath(baseDir, project))
 	if err != nil {
-		t.Fatalf("loadLearnedRulesFile: %v", err)
+		t.Fatalf("LoadLearnedRules: %v", err)
 	}
 	if len(got) != 1 || got[0].Text != want[0].Text || got[0].EvidenceCount != want[0].EvidenceCount {
-		t.Errorf("loadLearnedRulesFile = %+v, want %+v", got, want)
+		t.Errorf("LoadLearnedRules = %+v, want %+v", got, want)
 	}
 }
 
 // writeLearnedRulesFixture writes rules to the same local JSON store layout
-// LoadLearnedRules/SaveLearnedRules use in cmd/capiko-ai ({baseDir}/cga/{project}/learned-rules.json).
+// cgastore.LoadLearnedRules/SaveLearnedRules use ({baseDir}/cga/{project}/learned-rules.json).
 func writeLearnedRulesFixture(t *testing.T, baseDir, project string, rules []cga.LearnedRule) {
 	t.Helper()
 	dir := filepath.Join(baseDir, "cga", project)
