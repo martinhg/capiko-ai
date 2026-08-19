@@ -198,26 +198,53 @@ var cgaNow = time.Now
 // buffer-backed logger and assert on the emitted events directly.
 var cgaLearnLog = clilog.New(nil, "cga-learn")
 
+// engramSaveRunner shells out to the engram CLI. It is a package-level seam
+// (below engramSyncLearnedRule) so tests can assert on the exact argv passed
+// to `engram save` without shelling out to a real binary.
+var engramSaveRunner = func(args ...string) error {
+	return exec.Command("engram", append([]string{"save"}, args...)...).Run()
+}
+
+// engramSyncTitleMaxRuleTextLen bounds how much of a rule's text is embedded
+// in the engram save title, keeping it a scannable one-liner.
+const engramSyncTitleMaxRuleTextLen = 80
+
 // engramSyncLearnedRule is a best-effort seam that syncs an approved rule to
 // engram (topic key cga/{project}/learned-rules, spec F3.4) by shelling out
 // to the engram CLI. The local JSON store stays canonical — a sync failure
 // is non-fatal, surfaced as a warning, and never blocks persistence or the
 // exit code (design open question: local file is the sole writable store of
 // record; engram sync is best-effort durability, not a dependency).
+//
+// `engram save` takes title and content as POSITIONAL arguments (verified
+// via `engram save --help`, v1.20.0): `engram save <title> <content>
+// [--type T] [--project P] [--scope S] [--topic KEY]`. The topic flag is
+// `--topic`, not `--topic-key`.
 var engramSyncLearnedRule = func(project string, rule cga.LearnedRule) error {
 	payload, err := json.Marshal(rule)
 	if err != nil {
 		return err
 	}
+	title := fmt.Sprintf("CGA learned rule: %s", truncateRuleText(rule.Text, engramSyncTitleMaxRuleTextLen))
 	topic := fmt.Sprintf("cga/%s/learned-rules", project)
-	cmd := exec.Command("engram", "save",
+	return engramSaveRunner(
+		title,
+		string(payload),
 		"--project", project,
 		"--scope", "project",
 		"--type", "architecture",
-		"--topic-key", topic,
-		"--content", string(payload),
+		"--topic", topic,
 	)
-	return cmd.Run()
+}
+
+// truncateRuleText shortens s to at most max runes, appending an ellipsis
+// when truncated, so engram save titles stay a scannable one-liner.
+func truncateRuleText(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 // cgaLearn runs the learn-loop: detect recurring findings-log patterns
@@ -324,7 +351,10 @@ func cgaLearn(out io.Writer, in io.Reader, scope string) (bool, int, error) {
 		learned = append(learned, rule)
 		fmt.Fprintln(out, "approved")
 
-		if syncErr := engramSyncLearnedRule(project, rule); syncErr != nil {
+		if rule.Scope != cga.ScopeProject {
+			cgaLearnLog.Event("rule_sync_skipped_personal_scope", rule.ID)
+			fmt.Fprintln(out, "skipping engram sync: personal-scope rules are local-only")
+		} else if syncErr := engramSyncLearnedRule(project, rule); syncErr != nil {
 			fmt.Fprintf(out, "warning: engram sync failed: %v\n", syncErr)
 		}
 	}
