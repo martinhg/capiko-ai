@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/cga"
 	"github.com/martinhg/capiko-ai/internal/githooks"
 	"github.com/martinhg/capiko-ai/internal/instructions"
+	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -58,6 +60,45 @@ func cgaFindingsLogPath(workspace string) string {
 		return ""
 	}
 	return filepath.Join(gitDir, "capiko", cga.FindingsLogName)
+}
+
+// learnedRulesStorePath returns the local JSON store path for a project's
+// learned rules, mirroring cmd/capiko-ai's learnedRulesPath exactly (design
+// D3, spec F3.4): "{baseDir}/cga/{project}/learned-rules.json".
+func learnedRulesStorePath(baseDir, project string) string {
+	return filepath.Join(baseDir, "cga", project, "learned-rules.json")
+}
+
+// loadLearnedRulesFile reads the local JSON store of learned rules for
+// baseDir and project. A missing file is not an error — it's the "no learned
+// rules yet" steady state, matching cmd/capiko-ai's LoadLearnedRules.
+func loadLearnedRulesFile(baseDir, project string) ([]cga.LearnedRule, error) {
+	data, err := os.ReadFile(learnedRulesStorePath(baseDir, project))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var rules []cga.LearnedRule
+	if err := json.Unmarshal(data, &rules); err != nil {
+		return nil, err
+	}
+	return rules, nil
+}
+
+// loadLearnedRules resolves the local learned-rules store for workspace's
+// engram project (design D8: `sddstatus.InferEngramProject`, the same chain
+// `cmd/capiko-ai`'s cgaProject seam uses) and reads it via
+// loadLearnedRulesFile. A package-level seam so tests can stub it entirely,
+// mirroring the cgaGetwd/gitRevParseGitDir seam pattern.
+var loadLearnedRules = func(workspace string) ([]cga.LearnedRule, error) {
+	s, err := state.DefaultStore()
+	if err != nil {
+		return nil, err
+	}
+	project := sddstatus.InferEngramProject(workspace)
+	return loadLearnedRulesFile(s.Dir(), project)
 }
 
 // ggaMarkerStart/ggaMarkerEnd are the marker delimiters gga used for its
@@ -156,7 +197,17 @@ func applyCGA(workspace string, store *state.Store, bkp *backup.Store, rec *stat
 
 	persona := activePersona(store)
 	logPath := cgaFindingsLogPath(workspace)
-	script := cga.RenderPreCommitHook(cga.Rules(persona), rec.StrictMode, rec.Timeout, logPath, cgaLogRotationCap)
+
+	// The hook stays frozen at apply time — RenderPreCommitHook never reads
+	// engram or the learned-rules store live at commit time (spec "Rules
+	// Composition"). Learned rules are injected only here, when applyCGA
+	// re-renders the hook.
+	learned, err := loadLearnedRules(workspace)
+	if err != nil {
+		return fmt.Errorf("loading learned rules: %w", err)
+	}
+	rules := cga.ComposeRules(cga.Rules(persona), learned)
+	script := cga.RenderPreCommitHook(rules, rec.StrictMode, rec.Timeout, logPath, cgaLogRotationCap)
 
 	if err := backupCGAHook(bkp, workspace); err != nil {
 		return err
@@ -173,6 +224,10 @@ func applyCGA(workspace string, store *state.Store, bkp *backup.Store, rec *stat
 
 	rec.Workspace = workspace
 	rec.Checksum = state.Checksum(script)
+	rec.LearnedRulesChecksum = ""
+	if len(learned) > 0 {
+		rec.LearnedRulesChecksum = state.Checksum(cga.FormatLearnedRules(learned))
+	}
 
 	if store != nil {
 		return store.SetCGA(rec)
