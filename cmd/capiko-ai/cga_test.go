@@ -415,6 +415,89 @@ func TestCgaRulesEmptyStoreMessage(t *testing.T) {
 	}
 }
 
+// --- Phase 4: `cga rules --scope` ---
+
+func TestCgaRulesScopeFilters(t *testing.T) {
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	rules := []cga.LearnedRule{
+		{ID: "p1", Severity: cga.SeverityWarning, Text: "project rule 1", EvidenceCount: 4, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopeProject},
+		{ID: "p2", Severity: cga.SeverityCritical, Text: "project rule 2", EvidenceCount: 5, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopeProject},
+		{ID: "s1", Severity: cga.SeveritySuggestion, Text: "personal rule 1", EvidenceCount: 3, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopePersonal},
+	}
+	if err := SaveLearnedRules(baseDir, "acme/repo", rules); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	t.Run("default (project) shows only project-scope rules", func(t *testing.T) {
+		var buf bytes.Buffer
+		handled, exitCode, err := cgaCommand("cga", []string{"rules"}, &buf)
+		if !handled || exitCode != 0 || err != nil {
+			t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "project rule 1") || !strings.Contains(out, "project rule 2") {
+			t.Errorf("expected both project rules in output:\n%s", out)
+		}
+		if strings.Contains(out, "personal rule 1") {
+			t.Errorf("did not expect personal rule in default output:\n%s", out)
+		}
+	})
+
+	t.Run("--scope personal shows only personal rules", func(t *testing.T) {
+		var buf bytes.Buffer
+		handled, exitCode, err := cgaCommand("cga", []string{"rules", "--scope", "personal"}, &buf)
+		if !handled || exitCode != 0 || err != nil {
+			t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "personal rule 1") {
+			t.Errorf("expected personal rule in output:\n%s", out)
+		}
+		if strings.Contains(out, "project rule 1") || strings.Contains(out, "project rule 2") {
+			t.Errorf("did not expect project rules in personal-scope output:\n%s", out)
+		}
+	})
+
+	t.Run("--scope all shows every rule labeled", func(t *testing.T) {
+		var buf bytes.Buffer
+		handled, exitCode, err := cgaCommand("cga", []string{"rules", "--scope", "all"}, &buf)
+		if !handled || exitCode != 0 || err != nil {
+			t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+		}
+		out := buf.String()
+		for _, want := range []string{"project rule 1", "project rule 2", "personal rule 1"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("expected %q in --scope all output:\n%s", want, out)
+			}
+		}
+	})
+}
+
+func TestCgaRulesScopeFilterEmptyResultIsGraceful(t *testing.T) {
+	baseDir := t.TempDir()
+	withStubCgaBaseDir(t, baseDir)
+	withStubCgaProject(t, "acme/repo")
+
+	personalOnly := []cga.LearnedRule{
+		{ID: "s1", Severity: cga.SeverityWarning, Text: "personal only rule", EvidenceCount: 3, ApprovedAt: "2026-08-18T10:00:00Z", Scope: cga.ScopePersonal},
+	}
+	if err := SaveLearnedRules(baseDir, "acme/repo", personalOnly); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := cgaCommand("cga", []string{"rules", "--scope", "project"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "no learned rules") {
+		t.Errorf("expected graceful empty message, got:\n%s", buf.String())
+	}
+}
+
 // --- Task 3.6: engram sync (best-effort) ---
 
 func withStubEngramSync(t *testing.T, fn func(project string, rule cga.LearnedRule) error) {
