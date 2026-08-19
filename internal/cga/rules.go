@@ -11,6 +11,15 @@ import (
 // within the ~2000 token composition budget.
 const LearnedRulesCap = 25
 
+// Scope values for LearnedRule (spec CGA Phase 4 Slice A, design D1):
+// "project" rules represent team-grade quality gates, "personal" rules are
+// individual style preferences that stay visible to their author but do not
+// present as project-wide guidance.
+const (
+	ScopeProject  = "project"
+	ScopePersonal = "personal"
+)
+
 // LearnedRule is an approved rule with provenance metadata, persisted per
 // engram-project once a user approves a drafted pattern (spec F3.3/F3.4).
 type LearnedRule struct {
@@ -18,7 +27,18 @@ type LearnedRule struct {
 	Severity      Severity `json:"severity"`
 	Text          string   `json:"text"` // the rule prose line, e.g. "REQUIRE: missing test coverage"
 	EvidenceCount int      `json:"evidence_count"`
-	ApprovedAt    string   `json:"approved_at"` // RFC 3339
+	ApprovedAt    string   `json:"approved_at"`     // RFC 3339
+	Scope         string   `json:"scope,omitempty"` // "project" or "personal" (design D1); empty means legacy/unset
+}
+
+// ResolveScope normalizes a scope value, mapping "" (unset — legacy JSON
+// written before this field existed) to ScopeProject so every rule has a
+// well-defined scope with zero migration (design D1).
+func ResolveScope(s string) string {
+	if s == "" {
+		return ScopeProject
+	}
+	return s
 }
 
 // ComposeRules appends a "## Learned Rules" section to staticRules when
@@ -88,9 +108,31 @@ func CheckRetirement(rules []LearnedRule, patterns []Pattern, threshold int) (ac
 	return active, retired
 }
 
+// FilterByScope returns the subset of rules matching scope (design D4). A
+// scope of "all" or "" returns rules unchanged — no filtering. Otherwise each
+// rule's Scope is resolved via ResolveScope (so legacy rules with an empty
+// Scope are treated as project-scoped) before comparing against scope.
+// Relative order is preserved. It is a pure function: no I/O.
+func FilterByScope(rules []LearnedRule, scope string) []LearnedRule {
+	if scope == "" || scope == "all" {
+		return rules
+	}
+
+	var filtered []LearnedRule
+	for _, r := range rules {
+		if ResolveScope(r.Scope) == scope {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
 // FormatLearnedRules renders learned rules for terminal display (used by
-// `cga rules`), one line per rule as "[SEVERITY] text (evidence: N)".
-// Returns "" when rules is nil or empty. It is a pure function: no I/O.
+// `cga rules`), one line per rule as
+// "[SEVERITY] text (evidence: N, scope: project|personal)". A rule's scope
+// is resolved via ResolveScope so legacy rules with no stored scope display
+// as "project". Returns "" when rules is nil or empty. It is a pure
+// function: no I/O.
 func FormatLearnedRules(rules []LearnedRule) string {
 	if len(rules) == 0 {
 		return ""
@@ -98,7 +140,7 @@ func FormatLearnedRules(rules []LearnedRule) string {
 
 	lines := make([]string, len(rules))
 	for i, r := range rules {
-		lines[i] = fmt.Sprintf("[%s] %s (evidence: %d)", r.Severity, r.Text, r.EvidenceCount)
+		lines[i] = fmt.Sprintf("[%s] %s (evidence: %d, scope: %s)", r.Severity, r.Text, r.EvidenceCount, ResolveScope(r.Scope))
 	}
 	return strings.Join(lines, "\n")
 }

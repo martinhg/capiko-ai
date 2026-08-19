@@ -209,6 +209,83 @@ func TestCheckRetirement(t *testing.T) {
 	}
 }
 
+func TestResolveScope(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty resolves to project", in: "", want: ScopeProject},
+		{name: "project passes through", in: "project", want: ScopeProject},
+		{name: "personal passes through", in: "personal", want: ScopePersonal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ResolveScope(tt.in); got != tt.want {
+				t.Errorf("ResolveScope(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilterByScope(t *testing.T) {
+	project1 := LearnedRule{ID: "p1", Text: "project rule 1", Scope: ScopeProject}
+	project2 := LearnedRule{ID: "p2", Text: "project rule 2", Scope: ScopeProject}
+	personal1 := LearnedRule{ID: "s1", Text: "personal rule 1", Scope: ScopePersonal}
+	legacy := LearnedRule{ID: "legacy", Text: "legacy rule", Scope: ""}
+
+	tests := []struct {
+		name  string
+		rules []LearnedRule
+		scope string
+		want  []string // expected IDs, in order
+	}{
+		{
+			name:  "project scope returns only project rules",
+			rules: []LearnedRule{project1, project2, personal1},
+			scope: ScopeProject,
+			want:  []string{"p1", "p2"},
+		},
+		{
+			name:  "personal scope returns only personal rules",
+			rules: []LearnedRule{project1, project2, personal1},
+			scope: ScopePersonal,
+			want:  []string{"s1"},
+		},
+		{
+			name:  "all scope returns every rule unchanged",
+			rules: []LearnedRule{project1, personal1},
+			scope: "all",
+			want:  []string{"p1", "s1"},
+		},
+		{
+			name:  "empty scope returns every rule unchanged",
+			rules: []LearnedRule{project1, personal1},
+			scope: "",
+			want:  []string{"p1", "s1"},
+		},
+		{
+			name:  "legacy rule with empty Scope resolves to project",
+			rules: []LearnedRule{legacy, personal1},
+			scope: ScopeProject,
+			want:  []string{"legacy"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FilterByScope(tt.rules, tt.scope)
+			if len(got) != len(tt.want) {
+				t.Fatalf("FilterByScope() len = %d, want %d; got=%+v", len(got), len(tt.want), got)
+			}
+			for i, id := range tt.want {
+				if got[i].ID != id {
+					t.Errorf("FilterByScope()[%d].ID = %q, want %q", i, got[i].ID, id)
+				}
+			}
+		})
+	}
+}
+
 func TestFormatLearnedRules(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -221,20 +298,27 @@ func TestFormatLearnedRules(t *testing.T) {
 			want:  "",
 		},
 		{
-			name: "single rule renders severity, text, and evidence count",
+			name: "single rule renders severity, text, evidence count, and scope",
 			rules: []LearnedRule{
-				{Severity: SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 4},
+				{Severity: SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 4, Scope: ScopeProject},
 			},
-			want: "[WARNING] REQUIRE: missing test coverage (evidence: 4)",
+			want: "[WARNING] REQUIRE: missing test coverage (evidence: 4, scope: project)",
 		},
 		{
-			name: "multiple rules render one line each",
+			name: "multiple rules render one line each with their own scope",
 			rules: []LearnedRule{
-				{Severity: SeverityCritical, Text: "REJECT if: errors swallowed silently", EvidenceCount: 7},
-				{Severity: SeveritySuggestion, Text: "PREFER: consider a comment", EvidenceCount: 3},
+				{Severity: SeverityCritical, Text: "REJECT if: errors swallowed silently", EvidenceCount: 7, Scope: ScopeProject},
+				{Severity: SeveritySuggestion, Text: "PREFER: consider a comment", EvidenceCount: 3, Scope: ScopePersonal},
 			},
-			want: "[CRITICAL] REJECT if: errors swallowed silently (evidence: 7)\n" +
-				"[SUGGESTION] PREFER: consider a comment (evidence: 3)",
+			want: "[CRITICAL] REJECT if: errors swallowed silently (evidence: 7, scope: project)\n" +
+				"[SUGGESTION] PREFER: consider a comment (evidence: 3, scope: personal)",
+		},
+		{
+			name: "legacy rule with empty scope displays as project",
+			rules: []LearnedRule{
+				{Severity: SeverityWarning, Text: "REQUIRE: missing test coverage", EvidenceCount: 2, Scope: ""},
+			},
+			want: "[WARNING] REQUIRE: missing test coverage (evidence: 2, scope: project)",
 		},
 	}
 	for _, tt := range tests {
