@@ -156,6 +156,19 @@ func binaryUpgrade(ctx context.Context, exe, latest string) error {
 	if err != nil {
 		return fmt.Errorf("download checksums: %w", err)
 	}
+
+	sig, err := download(ctx, base+"/checksums.txt.sig")
+	if err != nil {
+		return fmt.Errorf("download signature: %w", err)
+	}
+	cert, err := download(ctx, base+"/checksums.txt.pem")
+	if err != nil {
+		return fmt.Errorf("download signing certificate: %w", err)
+	}
+	if err := verifyCosignSignature(sums, sig, cert); err != nil {
+		return fmt.Errorf("release signature: %w", err)
+	}
+
 	if err := verifyChecksum(archiveBytes, archive, sums); err != nil {
 		return err
 	}
