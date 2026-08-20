@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/release"
 	"github.com/martinhg/capiko-ai/internal/skill"
@@ -78,7 +78,7 @@ func (s *upgradeScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		s.state, s.count = upgradeSynced, msg.count
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", "esc", "n":
 			return s, back

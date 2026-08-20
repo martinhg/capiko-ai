@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -167,7 +167,7 @@ func (s *headroomScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		s.state = headroomDone
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", "esc":
 			return s, back
@@ -184,7 +184,7 @@ func (s *headroomScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			if s.cursor < headroomRows+1 {
 				s.cursor++
 			}
-		case "left", "h", "right", "l", " ":
+		case "left", "h", "right", "l", " ", "space":
 			if s.cursor == 0 {
 				s.enabled = !s.enabled
 			}

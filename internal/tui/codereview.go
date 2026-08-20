@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/cga"
@@ -346,7 +346,7 @@ func (s *cgaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.state = cgaDone
 		}
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if s.state == cgaApplying {
 			return s, nil
 		}
@@ -361,7 +361,7 @@ func (s *cgaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			if s.cursor < cgaRows-1 {
 				s.cursor++
 			}
-		case " ":
+		case " ", "space":
 			s.toggle()
 		case "left", "h":
 			if s.cursor == rowCGATimeout {

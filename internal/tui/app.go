@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/backup"
@@ -185,7 +185,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.state, a.active = appMenu, nil
 		return a, detectCmd // refresh the installed snapshot
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
 		}
@@ -205,7 +205,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a App) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a App) updateMenu(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	a.menuTouched = true
 	switch msg.String() {
 	case "q":
@@ -265,7 +265,11 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a App) View() string {
+func (a App) View() tea.View {
+	return tea.NewView(a.view())
+}
+
+func (a App) view() string {
 	switch a.state {
 	case appDetecting:
 		return head() + "Detecting Copilot CLI…\n"

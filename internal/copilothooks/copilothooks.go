@@ -46,6 +46,13 @@ const (
 	// SessionCheckFile is the filename of the rendered session-verification
 	// hook file under copilot.Host.HooksDir.
 	SessionCheckFile = "capiko-sessioncheck.json"
+	// EventSessionEnd is the hook event name fired once when a Copilot CLI
+	// session terminates, used for the session-probe hook that captures
+	// session metrics (stdin payload, env vars) for reporting.
+	EventSessionEnd = "sessionEnd"
+	// SessionProbeFile is the filename of the rendered session-probe hook
+	// file under copilot.Host.HooksDir.
+	SessionProbeFile = "capiko-sessionprobe.json"
 )
 
 // HookFile is the v1 Copilot CLI hook configuration file shape. Hooks is an

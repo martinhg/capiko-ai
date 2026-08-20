@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // reviewScreen summarizes the pending change (skills to install/remove, the
@@ -30,7 +30,7 @@ func newReview(parent *selector) screen {
 }
 
 func (s *reviewScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
+	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return s, nil
 	}

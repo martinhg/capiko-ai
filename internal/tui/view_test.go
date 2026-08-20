@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -19,16 +18,14 @@ import (
 
 var updateGolden = flag.Bool("update", false, "update golden files")
 
-// TestMain forces a plain ASCII color profile so rendered views are
-// deterministic (no ANSI escapes) and golden files stay stable across
-// terminals and CI.
-func TestMain(m *testing.M) {
-	lipgloss.SetColorProfile(termenv.Ascii)
-	os.Exit(m.Run())
-}
-
+// golden compares got (stripped of ANSI escape codes) against a stored golden
+// file. Lipgloss v2's Render() always emits full ANSI styling regardless of
+// color profile, so stripping here — rather than forcing an ASCII profile at
+// render time — is what keeps golden files deterministic across terminals
+// and CI.
 func golden(t *testing.T, name, got string) {
 	t.Helper()
+	got = ansi.Strip(got)
 	path := filepath.Join("testdata", name+".golden")
 	if *updateGolden {
 		if err := os.MkdirAll("testdata", 0o755); err != nil {
@@ -122,63 +119,63 @@ func TestViewGolden(t *testing.T) {
 		name string
 		view string
 	}{
-		{"detecting", App{state: appDetecting}.View()},
-		{"notfound", App{state: appNotFound}.View()},
-		{"failed", App{state: appFailed, err: errors.New("boom")}.View()},
-		{"menu", App{state: appMenu, catalog: testCatalog()}.View()},
-		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "9.9.9"}.View()},
-		{"menu_stale", App{state: appMenu, catalog: testCatalog(), stale: []string{"capiko-hello", "capiko-pr"}}.View()},
-		{"menu_advisory", App{state: appMenu, catalog: testCatalog(), advisory: "engram 1.17 recommended"}.View()},
-		{"detection", App{state: appScreen, active: detection}.View()},
-		{"persona", App{state: appScreen, active: newPersona(svc, testCatalog(), map[string]bool{})}.View()},
-		{"install_picking", App{state: appScreen, active: installPicking}.View()},
-		{"install_done", App{state: appScreen, active: installDone}.View()},
-		{"review", App{state: appScreen, active: reviewView}.View()},
-		{"sdd", App{state: appScreen, active: sddView}.View()},
-		{"engram", App{state: appScreen, active: engramView}.View()},
-		{"headroom", App{state: appScreen, active: &headroomScreen{svc: svc, detected: false}}.View()},
+		{"detecting", App{state: appDetecting}.View().Content},
+		{"notfound", App{state: appNotFound}.View().Content},
+		{"failed", App{state: appFailed, err: errors.New("boom")}.View().Content},
+		{"menu", App{state: appMenu, catalog: testCatalog()}.View().Content},
+		{"menu_update", App{state: appMenu, catalog: testCatalog(), latest: "9.9.9"}.View().Content},
+		{"menu_stale", App{state: appMenu, catalog: testCatalog(), stale: []string{"capiko-hello", "capiko-pr"}}.View().Content},
+		{"menu_advisory", App{state: appMenu, catalog: testCatalog(), advisory: "engram 1.17 recommended"}.View().Content},
+		{"detection", App{state: appScreen, active: detection}.View().Content},
+		{"persona", App{state: appScreen, active: newPersona(svc, testCatalog(), map[string]bool{})}.View().Content},
+		{"install_picking", App{state: appScreen, active: installPicking}.View().Content},
+		{"install_done", App{state: appScreen, active: installDone}.View().Content},
+		{"review", App{state: appScreen, active: reviewView}.View().Content},
+		{"sdd", App{state: appScreen, active: sddView}.View().Content},
+		{"engram", App{state: appScreen, active: engramView}.View().Content},
+		{"headroom", App{state: appScreen, active: &headroomScreen{svc: svc, detected: false}}.View().Content},
 		{"teamsync_editing", App{state: appScreen, active: &teamSyncScreen{
 			svc: svc, engramAvailable: true,
-		}}.View()},
+		}}.View().Content},
 		{"teamsync_ack", App{state: appScreen, active: &teamSyncScreen{
 			svc: svc, engramAvailable: true, ack: true,
-		}}.View()},
+		}}.View().Content},
 		{"teamsync_ack_hint", App{state: appScreen, active: &teamSyncScreen{
 			svc: svc, engramAvailable: true, enabled: true, ackHint: true,
-		}}.View()},
+		}}.View().Content},
 		{"teamsync_conflict", App{state: appScreen, active: &teamSyncScreen{
 			svc:             svc,
 			engramAvailable: true,
 			conflictReason:  "husky is configured (.husky/ directory found)",
 			conflictProject: "my-team",
-		}}.View()},
+		}}.View().Content},
 		{"teamsync_no_engram", App{state: appScreen, active: &teamSyncScreen{
 			svc: svc, engramAvailable: false,
-		}}.View()},
+		}}.View().Content},
 		{"teamsync_done", App{state: appScreen, active: &teamSyncScreen{
 			svc: svc, engramAvailable: true, enabled: true, state: teamSyncDone,
-		}}.View()},
+		}}.View().Content},
 		{"teamsync_failed", App{state: appScreen, active: &teamSyncScreen{
 			svc: svc, engramAvailable: true, state: teamSyncFailed, err: errTest,
-		}}.View()},
+		}}.View().Content},
 		{"copilothooks_editing_off", App{state: appScreen, active: &copilotHooksScreen{
 			svc: svc, posture: copilothooks.PostureOff,
-		}}.View()},
+		}}.View().Content},
 		{"copilothooks_editing_warn", App{state: appScreen, active: &copilotHooksScreen{
 			svc: svc, posture: copilothooks.PostureWarn,
-		}}.View()},
+		}}.View().Content},
 		{"copilothooks_editing_strict", App{state: appScreen, active: &copilotHooksScreen{
 			svc: svc, posture: copilothooks.PostureStrict,
-		}}.View()},
+		}}.View().Content},
 		{"copilothooks_done", App{state: appScreen, active: &copilotHooksScreen{
 			svc: svc, posture: copilothooks.PostureStrict, state: copilotHooksDone,
-		}}.View()},
+		}}.View().Content},
 		{"copilothooks_failed", App{state: appScreen, active: &copilotHooksScreen{
 			svc: svc, state: copilotHooksFailed, err: errTest,
-		}}.View()},
-		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View()},
-		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View()},
-		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog(), nil)}.View()},
+		}}.View().Content},
+		{"instructions", App{state: appScreen, active: newInstructions(svc)}.View().Content},
+		{"uninstall_empty", App{state: appScreen, active: uninstallEmpty}.View().Content},
+		{"sync_confirm", App{state: appScreen, active: newSync(svc, testCatalog(), nil)}.View().Content},
 		{"sync_done_agents", App{state: appScreen, active: &syncScreen{
 			catalog:      testCatalog(),
 			agentCatalog: []agent.Agent{{Name: "capiko-sdd-explore"}, {Name: "capiko-sdd-apply"}},
@@ -186,11 +183,11 @@ func TestViewGolden(t *testing.T) {
 			count:        5,
 			skillNames:   []string{"capiko-hello", "capiko-conventions", "capiko-pr"},
 			agentNames:   []string{"capiko-sdd-explore", "capiko-sdd-apply"},
-		}}.View()},
-		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View()},
+		}}.View().Content},
+		{"backups_empty", App{state: appScreen, active: newBackups(svc)}.View().Content},
 		{"code_review", App{state: appScreen, active: &cgaScreen{
 			svc: svc, strict: true, timeout: cgaTimeoutDefault,
-		}}.View()},
+		}}.View().Content},
 		{"sdd_status_list", App{state: appScreen, active: &sddStatusScreen{entries: []sddChange{
 			sddChangeFixture("add-auth", "apply", sddstatus.Dependencies{
 				Proposal: sddstatus.DependencyAllDone, Specs: sddstatus.DependencyAllDone,
@@ -201,16 +198,16 @@ func TestViewGolden(t *testing.T) {
 				Proposal: sddstatus.DependencyAllDone, Specs: sddstatus.DependencyReady,
 				Design: sddstatus.DependencyReady,
 			}, 0, 0),
-		}}}.View()},
+		}}}.View().Content},
 		{"sdd_status_detail", App{state: appScreen, active: &sddStatusScreen{detail: true, entries: []sddChange{
 			sddChangeFixture("add-auth", "apply", sddstatus.Dependencies{
 				Proposal: sddstatus.DependencyAllDone, Specs: sddstatus.DependencyAllDone,
 				Design: sddstatus.DependencyAllDone, Tasks: sddstatus.DependencyAllDone,
 				Apply: sddstatus.DependencyReady,
 			}, 2, 5),
-		}}}.View()},
-		{"update_prompt", App{state: appUpdatePrompt, latest: "9.9.9", cursor: promptDefaultCursor}.View()},
-		{"soon", App{state: appScreen, active: newSoon("Upgrade tools")}.View()},
+		}}}.View().Content},
+		{"update_prompt", App{state: appUpdatePrompt, latest: "9.9.9", cursor: promptDefaultCursor}.View().Content},
+		{"soon", App{state: appScreen, active: newSoon("Upgrade tools")}.View().Content},
 	}
 
 	for _, tc := range cases {

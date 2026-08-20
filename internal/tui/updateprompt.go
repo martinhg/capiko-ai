@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/release"
 )
@@ -34,7 +34,7 @@ func defaultBrowserOpen(url string) error {
 	return cmd.Start()
 }
 
-func (a App) updatePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a App) updatePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
 		if a.cursor > 0 {

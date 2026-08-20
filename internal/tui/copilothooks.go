@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -68,6 +68,20 @@ func applyCopilotHooks(host *copilot.Host, store *state.Store, bkp *backup.Store
 		}
 	}
 
+	// Session probe hook — captures stdin + env vars at session end for reporting.
+	spHf := copilothooks.RenderSessionProbe()
+	spData, err := copilothooks.Marshal(spHf)
+	if err != nil {
+		return err
+	}
+	spTarget := filepath.Join(host.HooksDir, copilothooks.SessionProbeFile)
+	spWant := state.Checksum(string(spData))
+	if copilothooks.HookFileChecksum(spTarget) != spWant {
+		if err := copilothooks.WriteHookFile(host.HooksDir, copilothooks.SessionProbeFile, spData); err != nil {
+			return err
+		}
+	}
+
 	rec.Checksum = copilothooks.CombinedChecksum(host.HooksDir)
 	if len(rec.Presets) == 0 {
 		rec.Presets = []string{"guardrails"}
@@ -93,6 +107,9 @@ func disableCopilotHooks(host *copilot.Host, store *state.Store, bkp *backup.Sto
 		return err
 	}
 	if err := copilothooks.RemoveHookFile(host.HooksDir, copilothooks.SessionCheckFile); err != nil {
+		return err
+	}
+	if err := copilothooks.RemoveHookFile(host.HooksDir, copilothooks.SessionProbeFile); err != nil {
 		return err
 	}
 	if store != nil {
@@ -194,7 +211,7 @@ func (s *copilotHooksScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		s.state = copilotHooksDone
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if s.state == copilotHooksApplying {
 			return s, nil
 		}
@@ -218,7 +235,7 @@ func (s *copilotHooksScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			if s.cursor == rowCopilotHooksPosture {
 				s.posture = cyclePosture(s.posture, -1)
 			}
-		case "right", "l", " ":
+		case "right", "l", " ", "space":
 			if s.cursor == rowCopilotHooksPosture {
 				s.posture = cyclePosture(s.posture, +1)
 			}

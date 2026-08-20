@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -66,7 +66,7 @@ func TestSDDCustomEntryBackspace(t *testing.T) {
 	for _, r := range "abx" {
 		s.Update(key(string(r)))
 	}
-	s.Update(tea.KeyMsg{Type: tea.KeyBackspace}) // drop the x
+	s.Update(tea.KeyPressMsg{Code: tea.KeyBackspace}) // drop the x
 	s.Update(key("enter"))
 	if s.models["orchestrator"] != "ab" {
 		t.Errorf("model = %q, want ab after backspace", s.models["orchestrator"])
@@ -80,7 +80,7 @@ func TestSDDCustomEntryEscCancels(t *testing.T) {
 	for _, r := range "discarded" {
 		s.Update(key(string(r)))
 	}
-	s.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	s.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if s.editing {
 		t.Error("esc should stop editing")
 	}

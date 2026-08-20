@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
@@ -97,13 +97,13 @@ func (s *selector) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		s.state, s.result = selDone, msg.result
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return s.handleKey(msg)
 	}
 	return s, nil
 }
 
-func (s *selector) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
+func (s *selector) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 	if k := msg.String(); k == "q" || k == "esc" {
 		return s, back
 	}
@@ -127,7 +127,7 @@ func (s *selector) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		if s.cursor < len(s.items)-1 {
 			s.cursor++
 		}
-	case " ":
+	case " ", "space":
 		s.desired[s.cursor] = !s.desired[s.cursor]
 	case "a":
 		s.toggleAll()

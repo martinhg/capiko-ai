@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -85,7 +85,7 @@ func (s *personaScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		// Persona applied — continue to the SDD model config, then skills.
 		return newSDD(s.svc, s.catalog, s.installed, true), nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", "esc":
 			return s, back
