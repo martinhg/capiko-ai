@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.26.0](https://github.com/martinhg/capiko-ai/compare/v1.25.0...v1.26.0) (2026-08-20)
+
+
+### Features
+
+* **tui:** migrate to bubbletea v2 + lipgloss v2, add session probe hook, bump versions ([36a8a9b](https://github.com/martinhg/capiko-ai/commit/36a8a9becefc8e23ec5a53a3ebd7d48fdf0c6127))
+
 ## [1.25.0](https://github.com/martinhg/capiko-ai/compare/v1.24.0...v1.25.0) (2026-08-20)
 
 
