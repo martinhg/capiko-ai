@@ -33,6 +33,16 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    args:
+      - "sign-blob"
+      - "--yes"
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+
 changelog:
   sort: asc
   filters:

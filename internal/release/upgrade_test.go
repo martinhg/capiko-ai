@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -142,23 +143,39 @@ func TestReplaceExecutable(t *testing.T) {
 	}
 }
 
-func TestBinaryUpgradeEndToEnd(t *testing.T) {
-	newBinary := []byte("FRESH-CAPIKO-BINARY")
-	archive := makeTarGz(t, "capiko-ai", newBinary)
-	archiveName := fmt.Sprintf("capiko-ai_1.2.3_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
-	checksums := fmt.Sprintf("%s  %s\n", sha256hex(archive), archiveName)
+func signedReleaseServer(t *testing.T, archiveName string, archive []byte, checksums string) (*httptest.Server, testPKI) {
+	t.Helper()
+	pki := newTestPKI(t, expectedOIDCIssuer, testWorkflowURI)
+	withTestRoots(t, pki)
+
+	sig := signBlob(t, pki.leafKey, []byte(checksums))
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, archiveName):
 			_, _ = w.Write(archive)
+		case strings.HasSuffix(r.URL.Path, "checksums.txt.sig"):
+			_, _ = w.Write([]byte(sigB64))
+		case strings.HasSuffix(r.URL.Path, "checksums.txt.pem"):
+			_, _ = w.Write(pki.chainPEM)
 		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
 			_, _ = w.Write([]byte(checksums))
 		default:
 			http.NotFound(w, r)
 		}
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
+	return srv, pki
+}
+
+func TestBinaryUpgradeEndToEnd(t *testing.T) {
+	newBinary := []byte("FRESH-CAPIKO-BINARY")
+	archive := makeTarGz(t, "capiko-ai", newBinary)
+	archiveName := fmt.Sprintf("capiko-ai_1.2.3_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	checksums := fmt.Sprintf("%s  %s\n", sha256hex(archive), archiveName)
+
+	srv, _ := signedReleaseServer(t, archiveName, archive, checksums)
 
 	restore := releaseBaseURL
 	releaseBaseURL = srv.URL
@@ -182,15 +199,9 @@ func TestBinaryUpgradeEndToEnd(t *testing.T) {
 func TestBinaryUpgradeRejectsBadChecksum(t *testing.T) {
 	archive := makeTarGz(t, "capiko-ai", []byte("whatever"))
 	archiveName := fmt.Sprintf("capiko-ai_1.2.3_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	badChecksums := "deadbeef  " + archiveName + "\n"
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, archiveName) {
-			_, _ = w.Write(archive)
-			return
-		}
-		_, _ = w.Write([]byte("deadbeef  " + archiveName + "\n"))
-	}))
-	defer srv.Close()
+	srv, _ := signedReleaseServer(t, archiveName, archive, badChecksums)
 
 	restore := releaseBaseURL
 	releaseBaseURL = srv.URL
@@ -201,6 +212,49 @@ func TestBinaryUpgradeRejectsBadChecksum(t *testing.T) {
 
 	if err := binaryUpgrade(context.Background(), exe, "1.2.3"); err == nil {
 		t.Error("expected checksum mismatch to abort the upgrade")
+	}
+	if got, _ := os.ReadFile(exe); string(got) != "OLD" {
+		t.Errorf("binary should be untouched on failure, got %q", got)
+	}
+}
+
+func TestBinaryUpgradeRejectsBadSignature(t *testing.T) {
+	archive := makeTarGz(t, "capiko-ai", []byte("legit-binary"))
+	archiveName := fmt.Sprintf("capiko-ai_1.2.3_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	checksums := fmt.Sprintf("%s  %s\n", sha256hex(archive), archiveName)
+
+	pki := newTestPKI(t, expectedOIDCIssuer, testWorkflowURI)
+	withTestRoots(t, pki)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, archiveName):
+			_, _ = w.Write(archive)
+		case strings.HasSuffix(r.URL.Path, "checksums.txt.sig"):
+			_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString([]byte("forged"))))
+		case strings.HasSuffix(r.URL.Path, "checksums.txt.pem"):
+			_, _ = w.Write(pki.chainPEM)
+		case strings.HasSuffix(r.URL.Path, "checksums.txt"):
+			_, _ = w.Write([]byte(checksums))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	restore := releaseBaseURL
+	releaseBaseURL = srv.URL
+	defer func() { releaseBaseURL = restore }()
+
+	exe := filepath.Join(t.TempDir(), "capiko-ai")
+	_ = os.WriteFile(exe, []byte("OLD"), 0o755)
+
+	err := binaryUpgrade(context.Background(), exe, "1.2.3")
+	if err == nil {
+		t.Fatal("forged signature should abort the upgrade")
+	}
+	if !strings.Contains(err.Error(), "release signature") {
+		t.Errorf("error should mention release signature, got: %v", err)
 	}
 	if got, _ := os.ReadFile(exe); string(got) != "OLD" {
 		t.Errorf("binary should be untouched on failure, got %q", got)
