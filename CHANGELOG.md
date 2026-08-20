@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.25.0](https://github.com/martinhg/capiko-ai/compare/v1.24.0...v1.25.0) (2026-08-20)
+
+
+### Features
+
+* **cga:** add applyCGA/cleanupGGA backend, remove GGA ([#193](https://github.com/martinhg/capiko-ai/issues/193)) ([84ae30c](https://github.com/martinhg/capiko-ai/commit/84ae30cc5c70ac806236acdca282fc25c8f6c45b))
+* **cga:** add cga learn/rules CLI and JSON persistence (Phase 3 PR3) ([#204](https://github.com/martinhg/capiko-ai/issues/204)) ([2ddab79](https://github.com/martinhg/capiko-ai/commit/2ddab79207a5d4aae4996802e41f99d1a598e89c))
+* **cga:** add findings CLI subcommand (Phase 2 PR4) ([#201](https://github.com/martinhg/capiko-ai/issues/201)) ([714b66e](https://github.com/martinhg/capiko-ai/commit/714b66edca883e4bb380a561cb07783e8354f98d))
+* **cga:** add findings log parser (Phase 2 PR1) ([#198](https://github.com/martinhg/capiko-ai/issues/198)) ([8b05c3b](https://github.com/martinhg/capiko-ai/commit/8b05c3bef0d2b900d3cfce043238899dda414cc1))
+* **cga:** add findings-log append and post-commit SHA patch (Phase 2 PR2) ([#199](https://github.com/martinhg/capiko-ai/issues/199)) ([1d65929](https://github.com/martinhg/capiko-ai/commit/1d659291077a9e121444dec95349770c63d09c30))
+* **cga:** add pattern detection for learn-loop (Phase 3 PR1) ([#202](https://github.com/martinhg/capiko-ai/issues/202)) ([6e91197](https://github.com/martinhg/capiko-ai/commit/6e91197fd59f99ef0f3897837731ff6a562b253a))
+* **cga:** add pure CGA package (prompt, verdict, hook) ([#190](https://github.com/martinhg/capiko-ai/issues/190)) ([7c4d9ea](https://github.com/martinhg/capiko-ai/commit/7c4d9eabce275f813059d6038e0528ca135fd59e))
+* **cga:** add rule composition and bounded growth (Phase 3 PR2) ([#203](https://github.com/martinhg/capiko-ai/issues/203)) ([f8dde6b](https://github.com/martinhg/capiko-ai/commit/f8dde6bd7fdccef262eedfb936add57b96eba05c))
+* **cga:** add scope discipline to learned rules (Phase 4) ([#206](https://github.com/martinhg/capiko-ai/issues/206)) ([377581b](https://github.com/martinhg/capiko-ai/commit/377581b82be34d88eb5d6bc6ccae827c9d5bd245))
+* **cga:** re-apply pre-commit hook in RunSync (CGA Phase 0 PR5) ([#195](https://github.com/martinhg/capiko-ai/issues/195)) ([6d3ec70](https://github.com/martinhg/capiko-ai/commit/6d3ec70c203ad5d57e3ad440a796c924bb32dd78))
+* **cga:** rename screen to cgaScreen, add Timeout row ([#194](https://github.com/martinhg/capiko-ai/issues/194)) ([fde62f8](https://github.com/martinhg/capiko-ai/commit/fde62f83b763e4dba1877303196533b85c3fcb9e))
+* **cga:** structured verdict with per-file findings (CGA Phase 1) ([#197](https://github.com/martinhg/capiko-ai/issues/197)) ([9589454](https://github.com/martinhg/capiko-ai/commit/95894543ea061e6468a7a183e0c2b261c270b0ba))
+* **cga:** wire post-commit hook lifecycle (Phase 2 PR3) ([#200](https://github.com/martinhg/capiko-ai/issues/200)) ([d75725a](https://github.com/martinhg/capiko-ai/commit/d75725addcb59fce4951ed2849d955bb7d5e10db))
+* **state:** add CGARecord and SetCGA ([#192](https://github.com/martinhg/capiko-ai/issues/192)) ([90bd540](https://github.com/martinhg/capiko-ai/commit/90bd540d277d92d261053f4905138974916f0970))
+
+
+### Bug Fixes
+
+* **cga:** correct engram save CLI flags and add scope filter ([#207](https://github.com/martinhg/capiko-ai/issues/207)) ([671af47](https://github.com/martinhg/capiko-ai/commit/671af4703a293d6eed16fb4ee195c5c295e68aa6))
+* **cga:** harden GGA cleanup, add recursion guard, drop GGA from sysinfo ([#196](https://github.com/martinhg/capiko-ai/issues/196)) ([a857705](https://github.com/martinhg/capiko-ai/commit/a8577057a69c49354d3cc6de082dde6458b6e3e6))
+
 ## [1.24.0](https://github.com/martinhg/capiko-ai/compare/v1.23.0...v1.24.0) (2026-08-13)
 
 
