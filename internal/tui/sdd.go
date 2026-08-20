@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -119,7 +119,7 @@ func (s *sddScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			return newInstall(s.svc, s.catalog, s.installed), nil
 		}
 		return s, back
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if s.editing {
 			return s.handleEdit(msg)
 		}
@@ -164,8 +164,8 @@ func (s *sddScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	return s, nil
 }
 
-func (s *sddScreen) handleEdit(msg tea.KeyMsg) (screen, tea.Cmd) {
-	switch msg.Type {
+func (s *sddScreen) handleEdit(msg tea.KeyPressMsg) (screen, tea.Cmd) {
+	switch msg.Code {
 	case tea.KeyEnter:
 		v := strings.TrimSpace(s.editBuf)
 		if v == "" {
@@ -179,8 +179,12 @@ func (s *sddScreen) handleEdit(msg tea.KeyMsg) (screen, tea.Cmd) {
 		if len(s.editBuf) > 0 {
 			s.editBuf = s.editBuf[:len(s.editBuf)-1]
 		}
-	case tea.KeyRunes, tea.KeySpace:
-		s.editBuf += string(msg.Runes)
+	default:
+		if len(msg.Text) > 0 {
+			s.editBuf += msg.Text
+		} else if msg.Code == ' ' {
+			s.editBuf += " "
+		}
 	}
 	return s, nil
 }

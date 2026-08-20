@@ -204,6 +204,73 @@ exit 0
 `
 }
 
+// RenderSessionProbe renders the v1 session-probe hook file. It fires on
+// EventSessionEnd (once when a Copilot CLI session terminates) and captures
+// the full stdin payload and environment variables to a timestamped JSON
+// file under ~/.capiko/session-probes/. This is an exploratory/diagnostic
+// hook: its output reveals what session metrics Copilot CLI exposes at
+// session close, informing the design of a proper reporting feature.
+func RenderSessionProbe() HookFile {
+	return HookFile{
+		Version: SchemaVersion,
+		Hooks: map[string][]Hook{
+			EventSessionEnd: {{
+				Type:       "command",
+				Matcher:    "",
+				Bash:       renderSessionProbeBashScript(),
+				PowerShell: renderSessionProbePowerShellScript(),
+				TimeoutSec: TimeoutSeconds,
+			}},
+		},
+	}
+}
+
+func renderSessionProbeBashScript() string {
+	return `probe_dir="$HOME/.capiko/session-probes"
+mkdir -p "$probe_dir"
+ts="$(date -u +%Y%m%dT%H%M%SZ)"
+stdin_payload="$(cat)"
+env_json="{"
+first=true
+while IFS='=' read -r key value; do
+  case "$key" in
+    ''|*[!A-Za-z0-9_]*) continue ;;
+  esac
+  escaped_val="$(printf '%s' "$value" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g')"
+  if [ "$first" = true ]; then
+    first=false
+  else
+    env_json="$env_json,"
+  fi
+  env_json="$env_json\"$key\":\"$escaped_val\""
+done <<EOF
+$(env)
+EOF
+env_json="$env_json}"
+escaped_stdin="$(printf '%s' "$stdin_payload" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g')"
+printf '{"timestamp":"%s","cwd":"%s","stdin_payload":"%s","env":%s}\n' "$ts" "$PWD" "$escaped_stdin" "$env_json" > "$probe_dir/session-$ts.json"
+exit 0
+`
+}
+
+func renderSessionProbePowerShellScript() string {
+	return `$probeDir = Join-Path $env:USERPROFILE ".capiko" "session-probes"
+if (-not (Test-Path $probeDir)) { New-Item -ItemType Directory -Path $probeDir -Force | Out-Null }
+$ts = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+$stdinPayload = [Console]::In.ReadToEnd()
+$envVars = @{}
+Get-ChildItem Env: | ForEach-Object { $envVars[$_.Name] = $_.Value }
+$report = [ordered]@{
+  timestamp = $ts
+  cwd = (Get-Location).Path
+  stdin_payload = $stdinPayload
+  env = $envVars
+}
+$report | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $probeDir "session-$ts.json")
+exit 0
+`
+}
+
 // renderPowerShellScript is the PowerShell-syntax equivalent of
 // renderBashScript, implementing the same four patterns and the same
 // permissionDecision contract (REQ-5.2). It is always rendered alongside the

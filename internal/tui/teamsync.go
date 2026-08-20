@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/engram"
@@ -341,7 +341,7 @@ func (s *teamSyncScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		return s, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// While applying, ignore all keys.
 		if s.state == teamSyncApplying {
 			return s, nil
@@ -361,7 +361,7 @@ func (s *teamSyncScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			if s.cursor < teamSyncRows-1 {
 				s.cursor++
 			}
-		case " ":
+		case " ", "space":
 			s.toggle()
 		case "enter":
 			switch s.cursor {

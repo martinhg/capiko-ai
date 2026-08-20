@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
@@ -213,7 +213,7 @@ func (s *engramScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		s.state = engramDone
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if s.editing {
 			return s.handleEdit(msg)
 		}
@@ -233,7 +233,7 @@ func (s *engramScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			if s.cursor < engramRows+1 {
 				s.cursor++
 			}
-		case "left", "h", "right", "l", " ":
+		case "left", "h", "right", "l", " ", "space":
 			s.adjust(msg.String())
 		case "c":
 			if s.cursor == 2 {
@@ -299,8 +299,8 @@ func (s *engramScreen) cycleMode(back bool) {
 	s.mode = engram.Modes[((idx+delta)%n+n)%n]
 }
 
-func (s *engramScreen) handleEdit(msg tea.KeyMsg) (screen, tea.Cmd) {
-	switch msg.Type {
+func (s *engramScreen) handleEdit(msg tea.KeyPressMsg) (screen, tea.Cmd) {
+	switch msg.Code {
 	case tea.KeyEnter:
 		s.server = strings.TrimSpace(s.editBuf)
 		s.editing = false
@@ -310,8 +310,12 @@ func (s *engramScreen) handleEdit(msg tea.KeyMsg) (screen, tea.Cmd) {
 		if len(s.editBuf) > 0 {
 			s.editBuf = s.editBuf[:len(s.editBuf)-1]
 		}
-	case tea.KeyRunes, tea.KeySpace:
-		s.editBuf += string(msg.Runes)
+	default:
+		if len(msg.Text) > 0 {
+			s.editBuf += msg.Text
+		} else if msg.Code == ' ' {
+			s.editBuf += " "
+		}
 	}
 	return s, nil
 }

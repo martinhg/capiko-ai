@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/release"
 	"github.com/martinhg/capiko-ai/internal/state"

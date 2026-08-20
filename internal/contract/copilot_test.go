@@ -373,6 +373,7 @@ func TestHookFiles_CopilotCLIContract(t *testing.T) {
 		{"guardrails-strict", mustRenderGuardrails(t, copilothooks.PostureStrict)},
 		{"guardrails-warn", mustRenderGuardrails(t, copilothooks.PostureWarn)},
 		{"session-check", copilothooks.RenderSessionCheck()},
+		{"session-probe", copilothooks.RenderSessionProbe()},
 	}
 
 	for _, tc := range hookFiles {

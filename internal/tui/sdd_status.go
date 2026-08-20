@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/sddstatus"
 )
@@ -69,7 +69,7 @@ func (s *sddStatusScreen) reload() {
 }
 
 func (s *sddStatusScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
+	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return s, nil
 	}

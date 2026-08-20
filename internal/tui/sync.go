@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/backup"
@@ -189,7 +189,7 @@ func (s *syncScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.agentNames = msg.agentNames
 		s.engramWarning = msg.engramWarning
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "q", "esc", "n":
 			return s, back

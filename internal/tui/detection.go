@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
@@ -83,7 +83,7 @@ func (s *detectionScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.report = sysinfo.Detect() // refresh after installing
 		s.cursor = 0
 		return s, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if s.installing {
 			return s, nil
 		}

@@ -1,6 +1,6 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // soonScreen is a placeholder for menu options whose engine is not built yet.
 type soonScreen struct{ title string }
@@ -8,7 +8,7 @@ type soonScreen struct{ title string }
 func newSoon(title string) screen { return soonScreen{title: title} }
 
 func (s soonScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
-	if _, ok := msg.(tea.KeyMsg); ok {
+	if _, ok := msg.(tea.KeyPressMsg); ok {
 		return s, back
 	}
 	return s, nil

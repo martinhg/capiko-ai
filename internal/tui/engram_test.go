@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/engram"
@@ -232,7 +232,7 @@ func TestEngramScreenEditServer(t *testing.T) {
 	if !s.editing {
 		t.Fatal("c should start editing the server")
 	}
-	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("https://e.example.com")})
+	s.Update(tea.KeyPressMsg{Text: "https://e.example.com"})
 	s.Update(key("enter"))
 	if s.server != "https://e.example.com" {
 		t.Errorf("server = %q after edit", s.server)
@@ -244,9 +244,9 @@ func TestEngramScreenEditBackspaceAndSpace(t *testing.T) {
 	s.cursor = 2
 	s.Update(key("c")) // start editing the server
 
-	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("abc")})
-	s.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")})
-	s.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	s.Update(tea.KeyPressMsg{Text: "abc"})
+	s.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
+	s.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if s.editBuf != "abc" {
 		t.Errorf("editBuf = %q, want %q (space added then backspaced)", s.editBuf, "abc")
 	}
@@ -257,8 +257,8 @@ func TestEngramScreenEditEscCancels(t *testing.T) {
 	s.cursor = 2
 	s.server = "original"
 	s.Update(key("c"))
-	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("typed-but-discarded")})
-	s.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	s.Update(tea.KeyPressMsg{Text: "typed-but-discarded"})
+	s.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 
 	if s.editing {
 		t.Error("esc should stop editing")
