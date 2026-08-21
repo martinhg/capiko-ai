@@ -76,6 +76,17 @@ func main() {
 				os.Exit(exitCode)
 			}
 			return
+		case "review":
+			// Headless RDD kill-switch: enable/disable/status the review
+			// mode record without launching the TUI.
+			_, exitCode, err := reviewCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		case "doctor":
 			// Ecosystem health check: print pass/warn/fail diagnostics without
 			// launching the TUI. A failed check exits non-zero so the command is
