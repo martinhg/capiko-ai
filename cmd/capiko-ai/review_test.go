@@ -40,12 +40,12 @@ func withStubUserHomeDir(t *testing.T, dir string, err error) {
 	t.Cleanup(func() { userHomeDirFn = prev })
 }
 
-// withStubGitCommonDirFn stubs gitCommonDirFn to return dir (or err).
+// withStubGitCommonDirFn stubs reviewstore.GitCommonDir to return dir (or err).
 func withStubGitCommonDirFn(t *testing.T, dir string, err error) {
 	t.Helper()
-	prev := gitCommonDirFn
-	gitCommonDirFn = func(string) (string, error) { return dir, err }
-	t.Cleanup(func() { gitCommonDirFn = prev })
+	prev := reviewstore.GitCommonDir
+	reviewstore.GitCommonDir = func(string) (string, error) { return dir, err }
+	t.Cleanup(func() { reviewstore.GitCommonDir = prev })
 }
 
 // withStubReviewNow stubs reviewNow to a fixed instant for deterministic
