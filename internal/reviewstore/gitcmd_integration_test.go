@@ -51,9 +51,9 @@ func writeFile(t *testing.T, dir, name, content string) error {
 func TestGitCommonDir_RealRepo(t *testing.T) {
 	dir := initTestRepo(t)
 
-	got, err := gitCommonDir(dir)
+	got, err := GitCommonDir(dir)
 	if err != nil {
-		t.Fatalf("gitCommonDir() error = %v, want nil", err)
+		t.Fatalf("GitCommonDir() error = %v, want nil", err)
 	}
 	want, err := filepath.EvalSymlinks(filepath.Join(dir, ".git"))
 	if err != nil {
@@ -61,10 +61,10 @@ func TestGitCommonDir_RealRepo(t *testing.T) {
 	}
 	gotResolved, err := filepath.EvalSymlinks(got)
 	if err != nil {
-		t.Fatalf("failed to resolve gitCommonDir() result %q: %v", got, err)
+		t.Fatalf("failed to resolve GitCommonDir() result %q: %v", got, err)
 	}
 	if gotResolved != want {
-		t.Errorf("gitCommonDir() = %q, want %q", gotResolved, want)
+		t.Errorf("GitCommonDir() = %q, want %q", gotResolved, want)
 	}
 }
 

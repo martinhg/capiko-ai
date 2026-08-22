@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/martinhg/capiko-ai/internal/rdd"
@@ -33,26 +31,6 @@ var resolveWorkspace = func() (string, error) {
 // global-scope kill-switch record at ~/.capiko/review-mode.json.
 // Package-level var seam (design "cmd/capiko-ai | userHomeDirFn").
 var userHomeDirFn = os.UserHomeDir
-
-// gitCommonDirFn resolves workspace's shared git directory via
-// `git -C workspace rev-parse --git-common-dir`, returning an absolute
-// path. Mirrors reviewstore's unexported gitCommonDir seam (design
-// "gitCommonDirFn (reuses reviewstore.gitCommonDir or wraps it)") — kept as
-// its own seam here, rather than importing the unexported symbol, since
-// cmd/capiko-ai cannot reach an unexported package-level var in another
-// package; this follows cga.go's resolveGitDir precedent of shelling out
-// directly instead of depending on reviewstore internals.
-var gitCommonDirFn = func(workspace string) (string, error) {
-	out, err := exec.Command("git", "-C", workspace, "rev-parse", "--git-common-dir").Output()
-	if err != nil {
-		return "", fmt.Errorf("git rev-parse --git-common-dir failed: %w", err)
-	}
-	dir := strings.TrimSpace(string(out))
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(workspace, dir)
-	}
-	return dir, nil
-}
 
 // reviewNow is a seam over time.Now for deterministic ModeRecord.UpdatedAt
 // timestamps in tests, mirroring cga.go's cgaNow.
@@ -127,7 +105,7 @@ func reviewModeSet(mode rdd.ReviewMode, out io.Writer) (bool, int, error) {
 		return true, 1, fmt.Errorf("review: resolving workspace: %w", err)
 	}
 
-	commonDir, err := gitCommonDirFn(workspace)
+	commonDir, err := reviewstore.GitCommonDir(workspace)
 	if err != nil {
 		return true, 1, fmt.Errorf("review: resolving git common dir: %w", err)
 	}
@@ -160,7 +138,7 @@ func reviewModeStatus(out io.Writer) (bool, int, error) {
 		return true, 1, fmt.Errorf("review: resolving workspace: %w", err)
 	}
 
-	commonDir, err := gitCommonDirFn(workspace)
+	commonDir, err := reviewstore.GitCommonDir(workspace)
 	if err != nil {
 		return true, 1, fmt.Errorf("review: resolving git common dir: %w", err)
 	}

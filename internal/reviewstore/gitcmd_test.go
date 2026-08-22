@@ -119,12 +119,12 @@ func TestParseDiffTree(t *testing.T) {
 func TestGitSeams_Swappable(t *testing.T) {
 	wantErr := errors.New("boom")
 
-	t.Run("gitCommonDir", func(t *testing.T) {
-		original := gitCommonDir
-		t.Cleanup(func() { gitCommonDir = original })
-		gitCommonDir = func(string) (string, error) { return "", wantErr }
-		if _, err := gitCommonDir("x"); !errors.Is(err, wantErr) {
-			t.Errorf("gitCommonDir() error = %v, want %v", err, wantErr)
+	t.Run("GitCommonDir", func(t *testing.T) {
+		original := GitCommonDir
+		t.Cleanup(func() { GitCommonDir = original })
+		GitCommonDir = func(string) (string, error) { return "", wantErr }
+		if _, err := GitCommonDir("x"); !errors.Is(err, wantErr) {
+			t.Errorf("GitCommonDir() error = %v, want %v", err, wantErr)
 		}
 	})
 

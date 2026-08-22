@@ -29,14 +29,14 @@ func runGit(workspace string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// gitCommonDir resolves workspace's shared git directory via
+// GitCommonDir resolves workspace's shared git directory via
 // `git -C workspace rev-parse --git-common-dir`, returning an absolute
 // path. Unlike --git-dir, --git-common-dir resolves to the SAME directory
 // across every worktree of a repository, which is exactly what worktree-
 // shared authority storage needs (design "Worktree-shared storage",
 // spec rdd-authority-store "Shared across worktrees"). Package-level var
-// seam so callers (e.g. Store, added in a later PR) can stub it in tests.
-var gitCommonDir = func(workspace string) (string, error) {
+// seam so callers can stub it in tests.
+var GitCommonDir = func(workspace string) (string, error) {
 	dir, err := runGit(workspace, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return "", err
