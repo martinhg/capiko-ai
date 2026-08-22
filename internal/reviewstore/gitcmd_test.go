@@ -190,4 +190,65 @@ func TestGitSeams_Swappable(t *testing.T) {
 			t.Errorf("gitIsShallowRepo() error = %v, want %v", err, wantErr)
 		}
 	})
+
+	t.Run("gitMergeBase", func(t *testing.T) {
+		original := gitMergeBase
+		t.Cleanup(func() { gitMergeBase = original })
+		gitMergeBase = func(string, string, string) (string, error) { return "", wantErr }
+		if _, err := gitMergeBase("x", "a", "b"); !errors.Is(err, wantErr) {
+			t.Errorf("gitMergeBase() error = %v, want %v", err, wantErr)
+		}
+	})
+
+	t.Run("gitPatchID", func(t *testing.T) {
+		original := gitPatchID
+		t.Cleanup(func() { gitPatchID = original })
+		gitPatchID = func(string, string, string) (string, error) { return "", wantErr }
+		if _, err := gitPatchID("x", "base", "candidate"); !errors.Is(err, wantErr) {
+			t.Errorf("gitPatchID() error = %v, want %v", err, wantErr)
+		}
+	})
+}
+
+// --- Seam-stub success tests: confirm each new seam returns the stubbed
+// value on the happy path, not just propagating errors. ---
+
+func TestGitMergeBase_StubReturnsExpectedHash(t *testing.T) {
+	original := gitMergeBase
+	t.Cleanup(func() { gitMergeBase = original })
+
+	gitMergeBase = func(workspace, commitA, commitB string) (string, error) {
+		if workspace != "ws" || commitA != "base-a" || commitB != "base-b" {
+			t.Fatalf("gitMergeBase called with unexpected args: %q %q %q", workspace, commitA, commitB)
+		}
+		return "merge-base-hash", nil
+	}
+
+	got, err := gitMergeBase("ws", "base-a", "base-b")
+	if err != nil {
+		t.Fatalf("gitMergeBase() error = %v, want nil", err)
+	}
+	if got != "merge-base-hash" {
+		t.Errorf("gitMergeBase() = %q, want %q", got, "merge-base-hash")
+	}
+}
+
+func TestGitPatchID_StubReturnsExpectedPatchID(t *testing.T) {
+	original := gitPatchID
+	t.Cleanup(func() { gitPatchID = original })
+
+	gitPatchID = func(workspace, base, candidate string) (string, error) {
+		if workspace != "ws" || base != "merge-base-hash" || candidate != "commit-a" {
+			t.Fatalf("gitPatchID called with unexpected args: %q %q %q", workspace, base, candidate)
+		}
+		return "patch-id-a", nil
+	}
+
+	got, err := gitPatchID("ws", "merge-base-hash", "commit-a")
+	if err != nil {
+		t.Fatalf("gitPatchID() error = %v, want nil", err)
+	}
+	if got != "patch-id-a" {
+		t.Errorf("gitPatchID() = %q, want %q", got, "patch-id-a")
+	}
 }
