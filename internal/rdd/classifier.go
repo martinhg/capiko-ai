@@ -20,6 +20,16 @@ const (
 	RiskTierElevated
 )
 
+const (
+	// RiskTierCritical is the highest classification tier: at least one
+	// changed path matched a hot-path pattern (auth/security, webhook,
+	// payments, or review-system code). Values 2 and 3 are reserved for
+	// future intermediate tiers and are intentionally unused (spec
+	// risk-classifier-extension). RiskTierCritical always sets Lenses to
+	// 4 — all canonical review lenses apply.
+	RiskTierCritical RiskTier = 4
+)
+
 // RiskClassification is the result of Classify: the assigned tier, the
 // named reasons that justified it (empty for tier 0), and how many review
 // lenses apply (0 for tier 0, 1 for tier 1 in R-1; R-2 extends this for its
@@ -50,6 +60,19 @@ var riskPatterns = []riskPattern{
 	{category: "secrets-sensitive", substrings: []string{"secret", "credential"}},
 }
 
+// tier4Patterns is the hardcoded evidence table for tier 4 (critical)
+// classification (spec risk-classifier-extension). It is deliberately
+// separate from riskPatterns: a tier-4 hot-path match takes precedence over
+// any tier-1 match, and a single tier-4 match is sufficient — there is no
+// accumulation. Order is fixed and does not affect Classify's output.
+var tier4Patterns = []riskPattern{
+	{category: "auth-critical", substrings: []string{"auth"}},
+	{category: "security-critical", substrings: []string{"security"}},
+	{category: "webhook-critical", substrings: []string{"webhook"}},
+	{category: "payments-critical", substrings: []string{"payment"}},
+	{category: "review-system-code", substrings: []string{"internal/rdd/", "internal/reviewstore/"}},
+}
+
 // Classify assigns a RiskTier to a set of changed paths using only
 // hardcoded path-pattern evidence (spec rdd-risk-classifier) — never file
 // count, diff size, or any other size-based signal. Unmatched paths default
@@ -58,6 +81,10 @@ var riskPatterns = []riskPattern{
 // triggered it. Reasons are sorted by category for deterministic output
 // regardless of input path order. It is a pure function: no I/O.
 func Classify(changedPaths []string) RiskClassification {
+	if classification, matched := classifyTier4(changedPaths); matched {
+		return classification
+	}
+
 	reasonByCategory := make(map[string]string)
 
 	for _, path := range changedPaths {
@@ -89,6 +116,47 @@ func Classify(changedPaths []string) RiskClassification {
 	}
 
 	return RiskClassification{Tier: RiskTierElevated, Reasons: reasons, Lenses: 1}
+}
+
+// classifyTier4 checks changedPaths against tier4Patterns first, before any
+// tier-1 evidence is considered (spec risk-classifier-extension: tier 4
+// precedence). A single match against any tier-4 category is sufficient —
+// there is no accumulation requirement, unlike tier 1. When matched is
+// true, the returned RiskClassification has Tier=RiskTierCritical and
+// Lenses=4 (all canonical lenses), with reasons sorted by category for
+// deterministic output.
+func classifyTier4(changedPaths []string) (classification RiskClassification, matched bool) {
+	reasonByCategory := make(map[string]string)
+
+	for _, path := range changedPaths {
+		for _, p := range tier4Patterns {
+			if _, ok := reasonByCategory[p.category]; ok {
+				continue
+			}
+			if matchesAny(path, p.substrings) {
+				reasonByCategory[p.category] = fmt.Sprintf(
+					"changed path matches %s pattern: %s", p.category, path,
+				)
+			}
+		}
+	}
+
+	if len(reasonByCategory) == 0 {
+		return RiskClassification{}, false
+	}
+
+	categories := make([]string, 0, len(reasonByCategory))
+	for category := range reasonByCategory {
+		categories = append(categories, category)
+	}
+	sort.Strings(categories)
+
+	reasons := make([]string, len(categories))
+	for i, category := range categories {
+		reasons[i] = reasonByCategory[category]
+	}
+
+	return RiskClassification{Tier: RiskTierCritical, Reasons: reasons, Lenses: 4}, true
 }
 
 // matchesAny reports whether path contains any of substrings.
