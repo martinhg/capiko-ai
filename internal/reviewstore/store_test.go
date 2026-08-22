@@ -428,8 +428,21 @@ func TestStore_SaveState_NewFields_RoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("LoadState().LensResults[LensRisk] missing, want round-tripped entry")
 	}
-	if lr.LensID != rdd.LensRisk || lr.SubjectHash != "subject-sha" || string(lr.Findings) != `{"issues":[]}` || lr.CapturedAt != "2026-08-21T00:00:00Z" {
+	if lr.LensID != rdd.LensRisk || lr.SubjectHash != "subject-sha" || lr.CapturedAt != "2026-08-21T00:00:00Z" {
 		t.Errorf("LoadState().LensResults[LensRisk] = %+v, want matching round-trip", lr)
+	}
+	// Findings is compared semantically, not byte-for-byte: SaveState persists
+	// via json.MarshalIndent, which re-indents embedded json.RawMessage —
+	// the round-tripped bytes are legitimately reformatted, not corrupted.
+	var gotFindings, wantFindings map[string]any
+	if err := json.Unmarshal(lr.Findings, &gotFindings); err != nil {
+		t.Fatalf("LoadState().LensResults[LensRisk].Findings is not valid JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(`{"issues":[]}`), &wantFindings); err != nil {
+		t.Fatalf("failed to parse expected findings: %v", err)
+	}
+	if !reflect.DeepEqual(gotFindings, wantFindings) {
+		t.Errorf("LoadState().LensResults[LensRisk].Findings = %s, want semantically equal to %s", lr.Findings, `{"issues":[]}`)
 	}
 	if got.Consent == nil {
 		t.Fatal("LoadState().Consent = nil, want round-tripped consent")

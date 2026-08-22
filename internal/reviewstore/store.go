@@ -37,9 +37,32 @@ type ReviewState struct {
 	Candidate     rdd.CandidateIdentity `json:"candidate"`
 	Tier          rdd.RiskTier          `json:"tier"`
 	Lenses        int                   `json:"lenses"`
-	State         string                `json:"state"`
-	CreatedAt     string                `json:"created_at"`
-	UpdatedAt     string                `json:"updated_at"`
+	State         rdd.LifecycleState    `json:"state"`
+
+	// SubjectHash, SelectedLenses, LensResults, and Consent are additive R-2
+	// fields (spec review-lifecycle, lens-mandates, review-consent). They are
+	// omitempty so pre-R-2 records serialize and deserialize unchanged, and
+	// SchemaVersion stays 1 (design #780 "Migration": additive fields only).
+	SubjectHash    string                  `json:"subject_hash,omitempty"`
+	SelectedLenses []rdd.Lens              `json:"selected_lenses,omitempty"`
+	LensResults    map[rdd.Lens]LensResult `json:"lens_results,omitempty"`
+	Consent        *rdd.ConsentResult      `json:"consent,omitempty"`
+
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// LensResult is one lens's captured findings, bound to the subject hash that
+// was frozen when the review started (spec review-cli-commands:
+// "capture-result ... reject unmandated lens IDs; reject duplicate
+// submission per lens"). Findings is opaque JSON — the reviewstore package
+// persists it without interpreting its shape; internal/rdd/cmd own the
+// findings schema.
+type LensResult struct {
+	LensID      rdd.Lens        `json:"lens_id"`
+	SubjectHash string          `json:"subject_hash"`
+	Findings    json.RawMessage `json:"findings"`
+	CapturedAt  string          `json:"captured_at"`
 }
 
 // ReviewReceipt is the immutable terminal record issued once a review
@@ -100,6 +123,13 @@ func (s *Store) LoadState() (*ReviewState, error) {
 	var st ReviewState
 	if err := json.Unmarshal(data, &st); err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrCorruptState, s.statePath(), err)
+	}
+	// Pre-R-2 records have no "state" field. Backfill to the initial
+	// lifecycle state rather than leaving the zero value (empty string),
+	// which is not itself a valid rdd.LifecycleState (design #780 "State
+	// Field Type": "empty backfills as unreviewed").
+	if st.State == "" {
+		st.State = rdd.StateUnreviewed
 	}
 	return &st, nil
 }
