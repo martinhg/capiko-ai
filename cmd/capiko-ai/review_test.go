@@ -694,6 +694,265 @@ func TestReviewCaptureResult_SubjectHashMismatch_Rejected(t *testing.T) {
 	}
 }
 
+// --- review finalize / schema reviewer (PR6) ---
+
+// withStubFinalizeRequiresFix stubs finalizeRequiresFix to return
+// requiresFix, mirroring the other seam-var stub helpers above so tests can
+// drive `review finalize` down the fix_required path without real evidence
+// classification (R-2 has none yet).
+func withStubFinalizeRequiresFix(t *testing.T, requiresFix bool) {
+	t.Helper()
+	prev := finalizeRequiresFix
+	finalizeRequiresFix = func(*reviewstore.ReviewState) bool { return requiresFix }
+	t.Cleanup(func() { finalizeRequiresFix = prev })
+}
+
+// withStubFinalizeVerificationOutcome stubs finalizeVerificationOutcome to
+// return outcome, so tests can drive `review finalize` to a specific final
+// verification result without real lens-result failure detection (R-2 has
+// none yet).
+func withStubFinalizeVerificationOutcome(t *testing.T, outcome rdd.LifecycleState) {
+	t.Helper()
+	prev := finalizeVerificationOutcome
+	finalizeVerificationOutcome = func(*reviewstore.ReviewState) rdd.LifecycleState { return outcome }
+	t.Cleanup(func() { finalizeVerificationOutcome = prev })
+}
+
+// seedStateAt directly writes a review-state.json with the given lifecycle
+// state and lens results for every selected lens, bypassing the state
+// machine, so finalize tests can start from an arbitrary state without
+// driving `review start`/`review capture-result` first.
+func seedStateAt(t *testing.T, authorityDir string, identity rdd.CandidateIdentity, state rdd.LifecycleState, selected []rdd.Lens) *reviewstore.ReviewState {
+	t.Helper()
+	store := reviewstore.NewStore(authorityDir)
+	results := make(map[rdd.Lens]reviewstore.LensResult, len(selected))
+	for _, l := range selected {
+		results[l] = reviewstore.LensResult{
+			LensID:      l,
+			SubjectHash: computeSubjectHash(identity),
+			Findings:    json.RawMessage(`{"issues":[]}`),
+			CapturedAt:  "2026-08-21T00:00:00Z",
+		}
+	}
+	st := &reviewstore.ReviewState{
+		SchemaVersion:  1,
+		Candidate:      identity,
+		Tier:           rdd.RiskTierElevated,
+		Lenses:         len(selected),
+		State:          state,
+		SubjectHash:    computeSubjectHash(identity),
+		SelectedLenses: selected,
+		LensResults:    results,
+		CreatedAt:      "2026-08-21T00:00:00Z",
+		UpdatedAt:      "2026-08-21T00:00:00Z",
+	}
+	if err := store.SaveState(st); err != nil {
+		t.Fatalf("seedStateAt: SaveState: %v", err)
+	}
+	return st
+}
+
+func TestReviewFinalize_FromFindingsFrozen_DrivesToApprovedAndWritesReceipt(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 14, 0, 0, 0, time.UTC))
+
+	seedStateAt(t, authorityDir, identity, rdd.StateFindingsFrozen, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateApproved {
+		t.Errorf("State = %q, want %q", state.State, rdd.StateApproved)
+	}
+	if !rdd.IsTerminal(state.State) {
+		t.Errorf("State = %q, want a terminal state", state.State)
+	}
+
+	receipt, receiptErr := store.LoadReceipt()
+	if receiptErr != nil {
+		t.Fatalf("LoadReceipt: %v", receiptErr)
+	}
+	if receipt == nil {
+		t.Fatal("LoadReceipt() = nil, want a terminal receipt")
+	}
+	if receipt.Outcome != string(rdd.StateApproved) {
+		t.Errorf("receipt.Outcome = %q, want %q", receipt.Outcome, rdd.StateApproved)
+	}
+}
+
+func TestReviewFinalize_FixRequiredPath_EscalatesWithoutFixCLI(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 14, 0, 0, 0, time.UTC))
+	withStubFinalizeRequiresFix(t, true)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateFindingsFrozen, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateEscalated {
+		t.Errorf("State = %q, want %q (no fix CLI in R-2, fix_required must auto-escalate)", state.State, rdd.StateEscalated)
+	}
+
+	receipt, receiptErr := store.LoadReceipt()
+	if receiptErr != nil {
+		t.Fatalf("LoadReceipt: %v", receiptErr)
+	}
+	if receipt == nil {
+		t.Fatal("LoadReceipt() = nil, want a terminal receipt")
+	}
+	if receipt.Outcome != string(rdd.StateEscalated) {
+		t.Errorf("receipt.Outcome = %q, want %q", receipt.Outcome, rdd.StateEscalated)
+	}
+}
+
+func TestReviewFinalize_FinalVerificationFailure_Escalates(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 14, 0, 0, 0, time.UTC))
+	withStubFinalizeVerificationOutcome(t, rdd.StateEscalated)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateFindingsFrozen, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateEscalated {
+		t.Errorf("State = %q, want %q", state.State, rdd.StateEscalated)
+	}
+}
+
+func TestReviewFinalize_ReviewingState_Rejected(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedReviewingState(t, authorityDir, identity, []rdd.Lens{rdd.LensRisk}, nil)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "findings_frozen") {
+		t.Errorf("err = %v, want it to mention the required findings_frozen state", err)
+	}
+}
+
+func TestReviewFinalize_TerminalState_Rejected(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateApproved, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewFinalize_NoState_Rejected(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	// No `review start` has run: no state file exists at all.
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewSchemaReviewer_OutputsValidJSONSchema(t *testing.T) {
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"schema", "reviewer"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	if !json.Valid(buf.Bytes()) {
+		t.Fatalf("output is not valid JSON: %q", buf.String())
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &schema); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if _, ok := schema["properties"]; !ok {
+		t.Errorf("schema = %v, want a \"properties\" key describing the findings shape", schema)
+	}
+}
+
+func TestReviewSchemaReviewer_WorksInAnyStateWithoutMutatingState(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	// No review state exists at all — schema reviewer must still succeed.
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"schema", "reviewer"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state != nil {
+		t.Errorf("LoadState() = %+v, want nil (schema reviewer must not mutate state)", state)
+	}
+}
+
 func TestReviewCaptureResult_StateNotReviewing_Rejected(t *testing.T) {
 	workspace := t.TempDir()
 	commonDir := filepath.Join(workspace, ".git")
