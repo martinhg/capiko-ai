@@ -2,6 +2,7 @@ package reviewstore
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/rdd"
@@ -179,5 +180,44 @@ func TestBuildIdentity_NoChangedPaths(t *testing.T) {
 	wantDigest := rdd.ComputeDigest(nil)
 	if got.ChangedPathsModesDigest != wantDigest {
 		t.Errorf("BuildIdentity() ChangedPathsModesDigest = %q, want %q", got.ChangedPathsModesDigest, wantDigest)
+	}
+}
+
+// TestChangedPaths_ReturnsPlainPathList covers the new ChangedPaths helper
+// (PR5 support addition): cmd/capiko-ai needs the raw changed-path list for
+// rdd.Classify, which BuildIdentity does not expose — it only returns a
+// stable digest over the paths and modes.
+func TestChangedPaths_ReturnsPlainPathList(t *testing.T) {
+	orig := gitDiffTree
+	t.Cleanup(func() { gitDiffTree = orig })
+	gitDiffTree = func(_, base, candidate string) ([]rdd.PathMode, error) {
+		if base != "base-tree-hash" || candidate != "candidate-tree-hash" {
+			t.Fatalf("gitDiffTree() base=%q candidate=%q, want base-tree-hash/candidate-tree-hash", base, candidate)
+		}
+		return []rdd.PathMode{
+			{Path: "internal/rdd/identity.go", Mode: "100644"},
+			{Path: "internal/reviewstore/identity.go", Mode: "100644"},
+		}, nil
+	}
+
+	got, err := ChangedPaths("/workspace/repo", "base-tree-hash", "candidate-tree-hash")
+	if err != nil {
+		t.Fatalf("ChangedPaths() error = %v, want nil", err)
+	}
+	want := []string{"internal/rdd/identity.go", "internal/reviewstore/identity.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ChangedPaths() = %v, want %v", got, want)
+	}
+}
+
+func TestChangedPaths_PropagatesGitDiffTreeError(t *testing.T) {
+	orig := gitDiffTree
+	t.Cleanup(func() { gitDiffTree = orig })
+	wantErr := errors.New("git diff-tree failed")
+	gitDiffTree = func(string, string, string) ([]rdd.PathMode, error) { return nil, wantErr }
+
+	_, err := ChangedPaths("/workspace/repo", "base", "candidate")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("ChangedPaths() error = %v, want errors.Is(err, wantErr)", err)
 	}
 }
