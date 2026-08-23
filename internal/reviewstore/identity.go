@@ -75,3 +75,21 @@ func BuildIdentity(workspace string) (rdd.CandidateIdentity, error) {
 		PolicyHash:              "",
 	}, nil
 }
+
+// ChangedPaths returns the plain changed-path list (without file modes)
+// between baseTree and candidateTree. BuildIdentity only exposes a stable
+// digest over changed paths and modes (CandidateIdentity.ChangedPathsModesDigest);
+// callers that need the raw path list — e.g. cmd/capiko-ai's `review start`,
+// which feeds it into rdd.Classify — use ChangedPaths instead (spec
+// review-cli-commands "run Classify").
+func ChangedPaths(workspace, baseTree, candidateTree string) ([]string, error) {
+	entries, err := gitDiffTree(workspace, baseTree, candidateTree)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, len(entries))
+	for i, e := range entries {
+		paths[i] = e.Path
+	}
+	return paths, nil
+}
