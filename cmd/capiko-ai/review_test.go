@@ -470,7 +470,7 @@ func TestReviewStart_Granted_FreezesClassifiesAndTransitions(t *testing.T) {
 	withStubGitCommonDirFn(t, commonDir, nil)
 	withStubUserHomeDir(t, home, nil)
 	withStubReviewNow(t, time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC))
-	withStubBuildCandidate(t, identity, []string{"internal/authz/handler.go"}, nil)
+	withStubBuildCandidate(t, identity, []string{"internal/permissions/handler.go"}, nil)
 
 	var buf bytes.Buffer
 	handled, exitCode, err := reviewCommand("review", []string{"start", "--consent", "granted"}, &buf)
@@ -544,9 +544,27 @@ func TestReviewCaptureResult_ValidLens_StaysReviewingWhenLensesRemain(t *testing
 	if lr.SubjectHash != state.SubjectHash {
 		t.Errorf("LensResults[R1].SubjectHash = %q, want %q", lr.SubjectHash, state.SubjectHash)
 	}
-	if string(lr.Findings) != `{"issues":[]}` {
+	if !jsonEqual(t, lr.Findings, []byte(`{"issues":[]}`)) {
 		t.Errorf("LensResults[R1].Findings = %s, want the file contents", lr.Findings)
 	}
+}
+
+// jsonEqual reports whether a and b marshal to the same JSON value,
+// ignoring whitespace — SaveState re-indents nested json.RawMessage
+// content, so byte-exact comparison against the original file contents is
+// not meaningful.
+func jsonEqual(t *testing.T, a, b []byte) bool {
+	t.Helper()
+	var av, bv interface{}
+	if err := json.Unmarshal(a, &av); err != nil {
+		t.Fatalf("jsonEqual: invalid JSON a: %v", err)
+	}
+	if err := json.Unmarshal(b, &bv); err != nil {
+		t.Fatalf("jsonEqual: invalid JSON b: %v", err)
+	}
+	aBytes, _ := json.Marshal(av)
+	bBytes, _ := json.Marshal(bv)
+	return string(aBytes) == string(bBytes)
 }
 
 func TestReviewCaptureResult_LastMandatedLens_TransitionsToFindingsFrozen(t *testing.T) {
@@ -620,7 +638,7 @@ func TestReviewCaptureResult_DuplicateLens_RejectedStateUnchanged(t *testing.T) 
 	if state.Version != seeded.Version {
 		t.Errorf("Version = %d, want %d (duplicate submission must not mutate state)", state.Version, seeded.Version)
 	}
-	if string(state.LensResults[rdd.LensRisk].Findings) != `{"issues":[]}` {
+	if !jsonEqual(t, state.LensResults[rdd.LensRisk].Findings, []byte(`{"issues":[]}`)) {
 		t.Errorf("LensResults[R1].Findings changed, want original preserved")
 	}
 }
@@ -679,7 +697,6 @@ func TestReviewCaptureResult_SubjectHashMismatch_Rejected(t *testing.T) {
 func TestReviewCaptureResult_StateNotReviewing_Rejected(t *testing.T) {
 	workspace := t.TempDir()
 	commonDir := filepath.Join(workspace, ".git")
-	authorityDir := reviewAuthorityDir(commonDir)
 	identity := testCandidateIdentity()
 	withStubResolveWorkspace(t, workspace, nil)
 	withStubGitCommonDirFn(t, commonDir, nil)

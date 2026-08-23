@@ -1,11 +1,15 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/martinhg/capiko-ai/internal/rdd"
@@ -17,7 +21,9 @@ import (
 const reviewUsage = "Usage:\n" +
 	"  capiko-ai review mode enable\n" +
 	"  capiko-ai review mode disable\n" +
-	"  capiko-ai review mode status"
+	"  capiko-ai review mode status\n" +
+	"  capiko-ai review start --consent relay|granted|declined\n" +
+	"  capiko-ai review capture-result --lens <id> <result-file>"
 
 // resolveWorkspace resolves the current workspace root for RDD kill-switch
 // scoping, defaulting to the process's current working directory.
@@ -36,6 +42,77 @@ var userHomeDirFn = os.UserHomeDir
 // timestamps in tests, mirroring cga.go's cgaNow.
 var reviewNow = time.Now
 
+// buildCandidate resolves a frozen CandidateIdentity for workspace together
+// with the raw changed-path list rdd.Classify needs (BuildIdentity only
+// exposes a stable digest over paths+modes, not the paths themselves — see
+// reviewstore.ChangedPaths). Package-level var seam so `review start` and
+// `review capture-result` tests never need a real git repository.
+var buildCandidate = func(workspace string) (rdd.CandidateIdentity, []string, error) {
+	identity, err := reviewstore.BuildIdentity(workspace)
+	if err != nil {
+		return rdd.CandidateIdentity{}, nil, err
+	}
+	changedPaths, err := reviewstore.ChangedPaths(workspace, identity.BaseTree, identity.CandidateTree)
+	if err != nil {
+		return rdd.CandidateIdentity{}, nil, err
+	}
+	return identity, changedPaths, nil
+}
+
+// readFile is a seam over os.ReadFile for reading a `review capture-result`
+// result file, so tests can stub read failures without needing real files.
+var readFile = os.ReadFile
+
+// reviewAuthorityDir resolves the CAS-protected authority store directory
+// under commonDir (design "Storage Layout": <git-common-dir>/capiko/rdd/),
+// shared by review-state.json and review-receipt.json.
+func reviewAuthorityDir(commonDir string) string {
+	return filepath.Join(commonDir, "capiko", "rdd")
+}
+
+// computeSubjectHash derives a stable digest that binds a frozen candidate
+// identity, so `review capture-result` can detect workspace drift between
+// `review start` and each lens submission (spec review-cli-commands: "Bind
+// to the frozen subject hash").
+func computeSubjectHash(identity rdd.CandidateIdentity) string {
+	h := sha256.New()
+	h.Write([]byte(identity.RepositoryID))
+	h.Write([]byte{0})
+	h.Write([]byte(identity.BaseTree))
+	h.Write([]byte{0})
+	h.Write([]byte(identity.CandidateTree))
+	h.Write([]byte{0})
+	h.Write([]byte(identity.ChangedPathsModesDigest))
+	h.Write([]byte{0})
+	h.Write([]byte(identity.PolicyHash))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// extractFlagValue scans args for flag followed by its value, returning the
+// value and the remaining args with both removed. It fails closed: a
+// missing flag or a flag with no following value is an error rather than an
+// empty-string default (spec review-consent: "Flag required").
+func extractFlagValue(args []string, flag string) (value string, rest []string, err error) {
+	rest = make([]string, 0, len(args))
+	found := false
+	for i := 0; i < len(args); i++ {
+		if args[i] == flag {
+			if i+1 >= len(args) {
+				return "", nil, fmt.Errorf("%s flag requires a value", flag)
+			}
+			value = args[i+1]
+			found = true
+			i++
+			continue
+		}
+		rest = append(rest, args[i])
+	}
+	if !found || value == "" {
+		return "", nil, fmt.Errorf("%s flag required", flag)
+	}
+	return value, rest, nil
+}
+
 // reviewCommand handles headless RDD kill-switch operations.
 //
 //	capiko-ai review mode enable|disable|status
@@ -53,6 +130,10 @@ func reviewCommand(name string, args []string, out io.Writer) (handled bool, exi
 	switch sub {
 	case "mode":
 		return reviewMode(args[1:], out)
+	case "start":
+		return reviewStart(args[1:], out)
+	case "capture-result":
+		return reviewCaptureResult(args[1:], out)
 	default:
 		fmt.Fprintf(out, "review: unknown subcommand %q\n", sub)
 		fmt.Fprintln(out, reviewUsage)
@@ -189,4 +270,278 @@ func formatModeRecord(rec *rdd.ModeRecord, err error) string {
 		return "not set"
 	}
 	return string(rec.Mode)
+}
+
+// resolveEffectiveMode loads the clone- and global-scope kill-switch
+// records for commonDir/home and returns the precedence-resolved effective
+// mode. Corrupt records resolve as absent at that scope — same fail-closed
+// treatment reviewModeStatus applies (design "Corruption fails closed").
+func resolveEffectiveMode(commonDir, home string) (rdd.ReviewMode, error) {
+	clonePath := cloneModePath(commonDir)
+	cloneRec, cloneErr := reviewstore.LoadModeRecord(clonePath)
+	if cloneErr != nil && !errors.Is(cloneErr, reviewstore.ErrCorruptMode) {
+		return "", fmt.Errorf("loading clone mode record: %w", cloneErr)
+	}
+	if cloneErr != nil {
+		cloneRec = nil
+	}
+
+	globalPath := globalModePath(home)
+	globalRec, globalErr := reviewstore.LoadModeRecord(globalPath)
+	if globalErr != nil && !errors.Is(globalErr, reviewstore.ErrCorruptMode) {
+		return "", fmt.Errorf("loading global mode record: %w", globalErr)
+	}
+	if globalErr != nil {
+		globalRec = nil
+	}
+
+	return rdd.ResolveMode(globalRec, cloneRec), nil
+}
+
+// lensSelected reports whether lens is present in selected.
+func lensSelected(selected []rdd.Lens, lens rdd.Lens) bool {
+	for _, l := range selected {
+		if l == lens {
+			return true
+		}
+	}
+	return false
+}
+
+// allMandatedCaptured reports whether results has an entry for every lens in
+// selected.
+func allMandatedCaptured(selected []rdd.Lens, results map[rdd.Lens]reviewstore.LensResult) bool {
+	for _, l := range selected {
+		if _, ok := results[l]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// reviewStart handles `review start --consent relay|granted|declined`
+// (spec review-cli-commands, review-consent; design "Data Flow"):
+// resolves the workspace, requires the kill switch to be managed, builds
+// and classifies the candidate identity, selects mandated lenses, then
+// branches on --consent: relay outputs a ConsentResult envelope without
+// freezing anything; declined fails closed without freezing or
+// transitioning; granted freezes the candidate, selected lenses, and
+// consent evidence into review-state.json and transitions
+// unreviewed -> reviewing.
+func reviewStart(args []string, out io.Writer) (bool, int, error) {
+	consentValue, _, err := extractFlagValue(args, "--consent")
+	if err != nil {
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, fmt.Errorf("review start: %w", err)
+	}
+	consent, err := rdd.ParseConsentFlag(consentValue)
+	if err != nil {
+		return true, 1, fmt.Errorf("review start: %w", err)
+	}
+
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review start: resolving workspace: %w", err)
+	}
+
+	commonDir, err := reviewstore.GitCommonDir(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review start: resolving git common dir: %w", err)
+	}
+
+	home, err := userHomeDirFn()
+	if err != nil {
+		return true, 1, fmt.Errorf("review start: resolving home dir: %w", err)
+	}
+
+	effective, err := resolveEffectiveMode(commonDir, home)
+	if err != nil {
+		return true, 1, fmt.Errorf("review start: %w", err)
+	}
+	if effective != rdd.ModeManaged {
+		return true, 1, fmt.Errorf("review start: review mode is %q, not managed; run `review mode enable` first", effective)
+	}
+
+	identity, changedPaths, err := buildCandidate(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review start: building candidate identity: %w", err)
+	}
+	classification := rdd.Classify(changedPaths)
+	lenses := rdd.SelectLenses(classification.Tier)
+
+	if consent == rdd.ConsentDeclined {
+		return true, 1, fmt.Errorf("review start: consent declined; review not started")
+	}
+
+	if consent == rdd.ConsentRelay {
+		envelope := rdd.ConsentResult{
+			Headline: "Consent required to start review",
+			Reason: fmt.Sprintf(
+				"Candidate classified at risk tier %d; %d lens(es) mandated",
+				classification.Tier, classification.Lenses,
+			),
+			Evidence: strings.Join(classification.Reasons, "; "),
+			Granted:  false,
+		}
+		data, err := json.MarshalIndent(envelope, "", "  ")
+		if err != nil {
+			return true, 1, fmt.Errorf("review start: encoding consent result: %w", err)
+		}
+		fmt.Fprintln(out, string(data))
+		return true, 0, nil
+	}
+
+	// consent == granted
+	authorityDir := reviewAuthorityDir(commonDir)
+	store := reviewstore.NewStore(authorityDir)
+	current, err := store.LoadState()
+	if err != nil {
+		return true, 1, fmt.Errorf("review start: loading review state: %w", err)
+	}
+
+	currentState := rdd.StateUnreviewed
+	version := 0
+	createdAt := reviewNow().UTC().Format(time.RFC3339)
+	if current != nil {
+		currentState = current.State
+		version = current.Version
+		if current.CreatedAt != "" {
+			createdAt = current.CreatedAt
+		}
+	}
+
+	if err := rdd.ValidateTransition(currentState, rdd.StateReviewing); err != nil {
+		return true, 1, fmt.Errorf("review start: %w", err)
+	}
+
+	consentResult := rdd.ConsentResult{
+		Headline: "Consent granted",
+		Reason: fmt.Sprintf(
+			"Candidate classified at risk tier %d; %d lens(es) mandated",
+			classification.Tier, classification.Lenses,
+		),
+		Evidence: strings.Join(classification.Reasons, "; "),
+		Granted:  true,
+	}
+
+	newState := &reviewstore.ReviewState{
+		SchemaVersion:  1,
+		Version:        version,
+		Candidate:      identity,
+		Tier:           classification.Tier,
+		Lenses:         classification.Lenses,
+		State:          rdd.StateReviewing,
+		SubjectHash:    computeSubjectHash(identity),
+		SelectedLenses: lenses,
+		Consent:        &consentResult,
+		CreatedAt:      createdAt,
+		UpdatedAt:      reviewNow().UTC().Format(time.RFC3339),
+	}
+
+	if err := store.SaveState(newState); err != nil {
+		return true, 1, fmt.Errorf("review start: saving review state: %w", err)
+	}
+
+	fmt.Fprintf(out, "review started: tier=%d lenses=%d subject_hash=%s state=%s\n",
+		classification.Tier, classification.Lenses, newState.SubjectHash, newState.State)
+	return true, 0, nil
+}
+
+// reviewCaptureResult handles
+// `review capture-result --lens <id> <result-file>` (spec
+// review-cli-commands; design "Data Flow"): loads the current review state,
+// requires it to be reviewing, requires the lens to be mandated and not yet
+// captured, requires the workspace to still match the frozen subject hash,
+// then stores the lens's findings. When every mandated lens has been
+// captured, it transitions reviewing -> findings_frozen.
+func reviewCaptureResult(args []string, out io.Writer) (bool, int, error) {
+	lensValue, rest, err := extractFlagValue(args, "--lens")
+	if err != nil {
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, fmt.Errorf("review capture-result: %w", err)
+	}
+	if len(rest) == 0 {
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, fmt.Errorf("review capture-result: result file path required")
+	}
+	filePath := rest[0]
+
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review capture-result: resolving workspace: %w", err)
+	}
+
+	commonDir, err := reviewstore.GitCommonDir(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review capture-result: resolving git common dir: %w", err)
+	}
+
+	store := reviewstore.NewStore(reviewAuthorityDir(commonDir))
+	current, err := store.LoadState()
+	if err != nil {
+		return true, 1, fmt.Errorf("review capture-result: loading review state: %w", err)
+	}
+	if current == nil || current.State != rdd.StateReviewing {
+		state := rdd.StateUnreviewed
+		if current != nil {
+			state = current.State
+		}
+		return true, 1, fmt.Errorf(
+			"review capture-result: review state is %q, want %q (run `review start` first)",
+			state, rdd.StateReviewing,
+		)
+	}
+
+	lens := rdd.Lens(lensValue)
+	if _, err := rdd.LookupMandate(lens); err != nil {
+		return true, 1, fmt.Errorf("review capture-result: %w", err)
+	}
+	if !lensSelected(current.SelectedLenses, lens) {
+		return true, 1, fmt.Errorf("review capture-result: lens %q is not mandated for this review", lens)
+	}
+	if _, exists := current.LensResults[lens]; exists {
+		return true, 1, fmt.Errorf("review capture-result: lens %q already captured", lens)
+	}
+
+	identity, _, err := buildCandidate(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review capture-result: building candidate identity: %w", err)
+	}
+	if computeSubjectHash(identity) != current.SubjectHash {
+		return true, 1, fmt.Errorf("review capture-result: workspace no longer matches the frozen review subject; run `review start` again")
+	}
+
+	data, err := readFile(filePath)
+	if err != nil {
+		return true, 1, fmt.Errorf("review capture-result: reading result file: %w", err)
+	}
+	if !json.Valid(data) {
+		return true, 1, fmt.Errorf("review capture-result: result file %q is not valid JSON", filePath)
+	}
+
+	result := reviewstore.LensResult{
+		LensID:      lens,
+		SubjectHash: current.SubjectHash,
+		Findings:    json.RawMessage(data),
+		CapturedAt:  reviewNow().UTC().Format(time.RFC3339),
+	}
+	if current.LensResults == nil {
+		current.LensResults = make(map[rdd.Lens]reviewstore.LensResult)
+	}
+	current.LensResults[lens] = result
+
+	if allMandatedCaptured(current.SelectedLenses, current.LensResults) {
+		if err := rdd.ValidateTransition(current.State, rdd.StateFindingsFrozen); err != nil {
+			return true, 1, fmt.Errorf("review capture-result: %w", err)
+		}
+		current.State = rdd.StateFindingsFrozen
+	}
+	current.UpdatedAt = reviewNow().UTC().Format(time.RFC3339)
+
+	if err := store.SaveState(current); err != nil {
+		return true, 1, fmt.Errorf("review capture-result: saving review state: %w", err)
+	}
+
+	fmt.Fprintf(out, "captured lens %s (state=%s)\n", lens, current.State)
+	return true, 0, nil
 }
