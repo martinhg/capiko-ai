@@ -23,7 +23,9 @@ const reviewUsage = "Usage:\n" +
 	"  capiko-ai review mode disable\n" +
 	"  capiko-ai review mode status\n" +
 	"  capiko-ai review start --consent relay|granted|declined\n" +
-	"  capiko-ai review capture-result --lens <id> <result-file>"
+	"  capiko-ai review capture-result --lens <id> <result-file>\n" +
+	"  capiko-ai review finalize\n" +
+	"  capiko-ai review schema reviewer"
 
 // resolveWorkspace resolves the current workspace root for RDD kill-switch
 // scoping, defaulting to the process's current working directory.
@@ -134,6 +136,10 @@ func reviewCommand(name string, args []string, out io.Writer) (handled bool, exi
 		return reviewStart(args[1:], out)
 	case "capture-result":
 		return reviewCaptureResult(args[1:], out)
+	case "finalize":
+		return reviewFinalize(args[1:], out)
+	case "schema":
+		return reviewSchema(args[1:], out)
 	default:
 		fmt.Fprintf(out, "review: unknown subcommand %q\n", sub)
 		fmt.Fprintln(out, reviewUsage)
@@ -543,5 +549,202 @@ func reviewCaptureResult(args []string, out io.Writer) (bool, int, error) {
 	}
 
 	fmt.Fprintf(out, "captured lens %s (state=%s)\n", lens, current.State)
+	return true, 0, nil
+}
+
+// finalizeRequiresFix decides, once frozen findings have been evaluated
+// (state evidence_classified), whether the candidate needs a fix before
+// final verification. R-2 has no automated evidence-classification logic —
+// that determination requires external input (e.g. a human evaluating lens
+// findings) `review finalize` does not yet have access to — so the default
+// always proceeds to ready_final_verification (design "review finalize"
+// heuristic: "always route to ready_final_verification ... since fix
+// determination requires external input not yet available"). Package-level
+// var seam (design pattern established by buildCandidate/readFile) so tests
+// can exercise the fix_required path without real evidence-classification
+// logic; a real implementation is an extension point for R-3.
+var finalizeRequiresFix = func(*reviewstore.ReviewState) bool {
+	return false
+}
+
+// finalizeVerificationOutcome decides the terminal outcome of final
+// verification (state final_verifying): approved by default, unless a lens
+// result signals failure. R-2 has no automated lens-result failure detection
+// yet (extension point for R-3), so the default always approves.
+// Package-level var seam so tests can drive the escalated outcome.
+var finalizeVerificationOutcome = func(*reviewstore.ReviewState) rdd.LifecycleState {
+	return rdd.StateApproved
+}
+
+// advanceState validates the transition from current.State to next via
+// rdd.ValidateTransition, then persists it via SaveState. On success it
+// mutates current.State/UpdatedAt in place; on failure current.State is left
+// unchanged, so a failed multi-step finalize never leaves the in-memory or
+// on-disk state at an intermediate, half-applied value (design "review
+// finalize is multi-step: ... If ANY intermediate transition fails, the
+// state stays at the last valid state (no partial corruption)").
+func advanceState(store *reviewstore.Store, current *reviewstore.ReviewState, next rdd.LifecycleState) error {
+	if err := rdd.ValidateTransition(current.State, next); err != nil {
+		return err
+	}
+	prev := current.State
+	current.State = next
+	current.UpdatedAt = reviewNow().UTC().Format(time.RFC3339)
+	if err := store.SaveState(current); err != nil {
+		current.State = prev
+		return err
+	}
+	return nil
+}
+
+// reviewFinalize handles `review finalize` (spec review-cli-commands;
+// design "Data Flow"): loads the current review state, requires it to be
+// findings_frozen, then drives a multi-step atomic transition through
+// evidence_classified -> (ready_final_verification -> final_verifying ->
+// approved|escalated) or, when finalizeRequiresFix says a fix is needed,
+// evidence_classified -> fix_required -> fixing -> fix_validating ->
+// escalated (no fix CLI exists in R-2, so finalize itself walks the fix
+// states straight to escalated rather than invoking any unbuilt fix verb —
+// design notes "No fix CLI in R-2"). Each step is validated individually via
+// advanceState, so a failure partway through leaves the state at its last
+// successfully committed value. Reaching a terminal state issues the review's
+// one and only ReviewReceipt.
+func reviewFinalize(args []string, out io.Writer) (bool, int, error) {
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review finalize: resolving workspace: %w", err)
+	}
+
+	commonDir, err := reviewstore.GitCommonDir(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review finalize: resolving git common dir: %w", err)
+	}
+
+	store := reviewstore.NewStore(reviewAuthorityDir(commonDir))
+	current, err := store.LoadState()
+	if err != nil {
+		return true, 1, fmt.Errorf("review finalize: loading review state: %w", err)
+	}
+	if current == nil {
+		return true, 1, fmt.Errorf("review finalize: no review state found; run `review start` first")
+	}
+	if current.State != rdd.StateFindingsFrozen {
+		return true, 1, fmt.Errorf(
+			"review finalize: review state is %q, want %q (run `review capture-result` for all mandated lenses first)",
+			current.State, rdd.StateFindingsFrozen,
+		)
+	}
+
+	if err := advanceState(store, current, rdd.StateEvidenceClassified); err != nil {
+		return true, 1, fmt.Errorf("review finalize: %w", err)
+	}
+
+	if finalizeRequiresFix(current) {
+		fixPath := []rdd.LifecycleState{
+			rdd.StateFixRequired,
+			rdd.StateFixing,
+			rdd.StateFixValidating,
+			rdd.StateEscalated,
+		}
+		for _, next := range fixPath {
+			if err := advanceState(store, current, next); err != nil {
+				return true, 1, fmt.Errorf("review finalize: %w", err)
+			}
+		}
+	} else {
+		if err := advanceState(store, current, rdd.StateReadyFinalVerification); err != nil {
+			return true, 1, fmt.Errorf("review finalize: %w", err)
+		}
+		if err := advanceState(store, current, rdd.StateFinalVerifying); err != nil {
+			return true, 1, fmt.Errorf("review finalize: %w", err)
+		}
+		outcome := finalizeVerificationOutcome(current)
+		if err := advanceState(store, current, outcome); err != nil {
+			return true, 1, fmt.Errorf("review finalize: %w", err)
+		}
+	}
+
+	if rdd.IsTerminal(current.State) {
+		receipt := &reviewstore.ReviewReceipt{
+			SchemaVersion: 1,
+			Candidate:     current.Candidate,
+			Tier:          current.Tier,
+			Outcome:       string(current.State),
+			IssuedAt:      reviewNow().UTC().Format(time.RFC3339),
+		}
+		if err := store.WriteReceipt(receipt); err != nil {
+			return true, 1, fmt.Errorf("review finalize: writing receipt: %w", err)
+		}
+	}
+
+	fmt.Fprintf(out, "review finalized: state=%s\n", current.State)
+	return true, 0, nil
+}
+
+// reviewSchema dispatches `review schema <verb>`.
+func reviewSchema(args []string, out io.Writer) (bool, int, error) {
+	if len(args) == 0 {
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, fmt.Errorf("review schema: verb required (reviewer)")
+	}
+
+	verb := args[0]
+	switch verb {
+	case "reviewer":
+		return reviewSchemaReviewer(out)
+	default:
+		fmt.Fprintf(out, "review: unknown schema verb %q\n", verb)
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, nil
+	}
+}
+
+// reviewFindingsSchema is the fixed JSON schema describing a valid
+// LensResult.Findings submission for `review capture-result` (spec
+// review-cli-commands: "review schema reviewer outputs the JSON schema a
+// reviewer must produce"). It documents the findings envelope a reviewer
+// writes to a result file, not reviewstore.LensResult itself — LensResult
+// wraps Findings with bookkeeping fields (lens ID, subject hash, captured
+// timestamp) the reviewer never supplies.
+const reviewFindingsSchema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LensResult.Findings",
+  "description": "Expected JSON shape for a reviewer's findings submission, as passed to \"review capture-result --lens <id> <file>\".",
+  "type": "object",
+  "properties": {
+    "issues": {
+      "type": "array",
+      "description": "Findings raised by this lens. An empty array means no issues found.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "critical"],
+            "description": "Severity of the finding."
+          },
+          "path": {
+            "type": "string",
+            "description": "File path the finding applies to."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable description of the finding."
+          }
+        },
+        "required": ["severity", "message"]
+      }
+    }
+  },
+  "required": ["issues"]
+}
+`
+
+// reviewSchemaReviewer handles `review schema reviewer` (spec
+// review-cli-commands; design "CLI -> State Mapping"): prints the fixed JSON
+// schema for a reviewer's findings submission. It is read-only and works in
+// any review state — it performs no LoadState/SaveState call at all.
+func reviewSchemaReviewer(out io.Writer) (bool, int, error) {
+	fmt.Fprintln(out, strings.TrimSpace(reviewFindingsSchema))
 	return true, 0, nil
 }
