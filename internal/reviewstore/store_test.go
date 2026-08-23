@@ -1,9 +1,12 @@
 package reviewstore
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -316,6 +319,156 @@ func TestStore_LoadReceipt_CorruptJSON(t *testing.T) {
 	}
 	if !errors.Is(err, ErrCorruptState) {
 		t.Errorf("LoadReceipt() error = %v, want errors.Is(err, ErrCorruptState)", err)
+	}
+}
+
+// --- R-2 lifecycle state + additive field tests ---
+
+func TestStore_LoadState_BackfillsEmptyStateToUnreviewed(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("failed to seed dir: %v", err)
+	}
+	// Pre-R-2 record: no "state" field at all.
+	preR2 := `{"schema_version":1,"version":1,"candidate":{"repository_id":"capiko-ai"},"tier":0,"lenses":0,"created_at":"2026-08-21T00:00:00Z","updated_at":"2026-08-21T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(dir, "review-state.json"), []byte(preR2), 0o644); err != nil {
+		t.Fatalf("failed to seed pre-R-2 record: %v", err)
+	}
+
+	got, err := s.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v, want nil", err)
+	}
+	if got == nil {
+		t.Fatal("LoadState() = nil, want backfilled state")
+	}
+	if got.State != rdd.StateUnreviewed {
+		t.Errorf("LoadState().State = %q, want %q (backfilled)", got.State, rdd.StateUnreviewed)
+	}
+}
+
+func TestStore_LoadState_PreR2Record_ZeroValueDefaultsForNewFields(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("failed to seed dir: %v", err)
+	}
+	preR2 := `{"schema_version":1,"version":1,"candidate":{"repository_id":"capiko-ai"},"tier":0,"lenses":0,"state":"approved","created_at":"2026-08-21T00:00:00Z","updated_at":"2026-08-21T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(dir, "review-state.json"), []byte(preR2), 0o644); err != nil {
+		t.Fatalf("failed to seed pre-R-2 record: %v", err)
+	}
+
+	got, err := s.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v, want nil", err)
+	}
+	if got.State != rdd.StateApproved {
+		t.Errorf("LoadState().State = %q, want %q (present, no backfill)", got.State, rdd.StateApproved)
+	}
+	if got.SubjectHash != "" {
+		t.Errorf("LoadState().SubjectHash = %q, want zero value for pre-R-2 record", got.SubjectHash)
+	}
+	if got.SelectedLenses != nil {
+		t.Errorf("LoadState().SelectedLenses = %v, want nil for pre-R-2 record", got.SelectedLenses)
+	}
+	if got.LensResults != nil {
+		t.Errorf("LoadState().LensResults = %v, want nil for pre-R-2 record", got.LensResults)
+	}
+	if got.Consent != nil {
+		t.Errorf("LoadState().Consent = %v, want nil for pre-R-2 record", got.Consent)
+	}
+}
+
+func TestStore_SaveState_NewFields_RoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	state := &ReviewState{
+		Version:        0,
+		Candidate:      testCandidate(),
+		State:          rdd.StateReviewing,
+		SubjectHash:    "subject-sha",
+		SelectedLenses: []rdd.Lens{rdd.LensRisk, rdd.LensReadability},
+		LensResults: map[rdd.Lens]LensResult{
+			rdd.LensRisk: {
+				LensID:      rdd.LensRisk,
+				SubjectHash: "subject-sha",
+				Findings:    json.RawMessage(`{"issues":[]}`),
+				CapturedAt:  "2026-08-21T00:00:00Z",
+			},
+		},
+		Consent: &rdd.ConsentResult{
+			Headline: "consent granted",
+			Reason:   "user approved via --consent granted",
+			Evidence: "cli flag --consent=granted",
+			Granted:  true,
+		},
+	}
+
+	if err := s.SaveState(state); err != nil {
+		t.Fatalf("SaveState() error = %v, want nil", err)
+	}
+
+	got, err := s.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v, want nil", err)
+	}
+	if got.State != rdd.StateReviewing {
+		t.Errorf("LoadState().State = %q, want %q", got.State, rdd.StateReviewing)
+	}
+	if got.SubjectHash != "subject-sha" {
+		t.Errorf("LoadState().SubjectHash = %q, want %q", got.SubjectHash, "subject-sha")
+	}
+	if !reflect.DeepEqual(got.SelectedLenses, state.SelectedLenses) {
+		t.Errorf("LoadState().SelectedLenses = %v, want %v", got.SelectedLenses, state.SelectedLenses)
+	}
+	lr, ok := got.LensResults[rdd.LensRisk]
+	if !ok {
+		t.Fatal("LoadState().LensResults[LensRisk] missing, want round-tripped entry")
+	}
+	if lr.LensID != rdd.LensRisk || lr.SubjectHash != "subject-sha" || lr.CapturedAt != "2026-08-21T00:00:00Z" {
+		t.Errorf("LoadState().LensResults[LensRisk] = %+v, want matching round-trip", lr)
+	}
+	// Findings is compared semantically, not byte-for-byte: SaveState persists
+	// via json.MarshalIndent, which re-indents embedded json.RawMessage —
+	// the round-tripped bytes are legitimately reformatted, not corrupted.
+	var gotFindings, wantFindings map[string]any
+	if err := json.Unmarshal(lr.Findings, &gotFindings); err != nil {
+		t.Fatalf("LoadState().LensResults[LensRisk].Findings is not valid JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(`{"issues":[]}`), &wantFindings); err != nil {
+		t.Fatalf("failed to parse expected findings: %v", err)
+	}
+	if !reflect.DeepEqual(gotFindings, wantFindings) {
+		t.Errorf("LoadState().LensResults[LensRisk].Findings = %s, want semantically equal to %s", lr.Findings, `{"issues":[]}`)
+	}
+	if got.Consent == nil {
+		t.Fatal("LoadState().Consent = nil, want round-tripped consent")
+	}
+	if !got.Consent.Granted || got.Consent.Headline != "consent granted" {
+		t.Errorf("LoadState().Consent = %+v, want Granted=true and matching Headline", got.Consent)
+	}
+}
+
+func TestStore_SaveState_NewFields_OmittedWhenZeroValue(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+
+	state := &ReviewState{Version: 0, Candidate: testCandidate(), State: rdd.StateUnreviewed}
+	if err := s.SaveState(state); err != nil {
+		t.Fatalf("SaveState() error = %v, want nil", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "review-state.json"))
+	if err != nil {
+		t.Fatalf("failed to read persisted state: %v", err)
+	}
+	for _, field := range []string{"subject_hash", "selected_lenses", "lens_results", "consent"} {
+		if strings.Contains(string(data), field) {
+			t.Errorf("persisted state contains %q with zero value, want omitempty to drop it", field)
+		}
 	}
 }
 

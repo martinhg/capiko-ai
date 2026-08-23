@@ -114,6 +114,69 @@ var gitIsShallowRepo = func(workspace string) (bool, error) {
 	return out == "true", nil
 }
 
+// gitMergeBase resolves the merge-base commit of commitA and commitB via
+// `git -C workspace merge-base commitA commitB` (spec relation-algebra;
+// design "Seam Catalog"). BuildAncestryEvidence (below) uses the result as
+// the common ancestor both candidates' patch-ids are diffed against.
+// Package-level var seam.
+var gitMergeBase = func(workspace, commitA, commitB string) (string, error) {
+	return runGit(workspace, "merge-base", commitA, commitB)
+}
+
+// gitPatchID computes the stable patch-id of the diff from base to candidate
+// via `git -C workspace diff base candidate | git -C workspace patch-id
+// --stable` (spec relation-algebra; design "Seam Catalog"). Unlike the other
+// seams, patch-id reads its diff from stdin rather than accepting a ref pair
+// directly, so this wires two exec.Commands together with a pipe instead of
+// using runGit's single-command helper. Package-level var seam.
+var gitPatchID = func(workspace, base, candidate string) (string, error) {
+	diffCmd := exec.Command("git", "-C", workspace, "diff", base, candidate)
+	patchIDCmd := exec.Command("git", "-C", workspace, "patch-id", "--stable")
+
+	pipe, err := diffCmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("git patch-id: failed to wire diff pipe: %v", err)
+	}
+	patchIDCmd.Stdin = pipe
+
+	var patchIDOut, diffErr, patchIDErr bytes.Buffer
+	diffCmd.Stderr = &diffErr
+	patchIDCmd.Stdout = &patchIDOut
+	patchIDCmd.Stderr = &patchIDErr
+
+	if err := patchIDCmd.Start(); err != nil {
+		return "", fmt.Errorf("git patch-id: failed to start: %v", err)
+	}
+	if err := diffCmd.Run(); err != nil {
+		msg := strings.TrimSpace(diffErr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		_ = patchIDCmd.Wait()
+		return "", fmt.Errorf("git diff %s %s failed: %s", base, candidate, msg)
+	}
+	if err := patchIDCmd.Wait(); err != nil {
+		msg := strings.TrimSpace(patchIDErr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("git patch-id failed: %s", msg)
+	}
+
+	out := strings.TrimSpace(patchIDOut.String())
+	if out == "" {
+		// An empty diff (candidate identical to base) produces no patch-id
+		// output. This is a meaningful signal, not an error: rdd.Compare
+		// treats an empty patch-id as "no changes relative to base", which
+		// is exactly what a provable contraction looks like.
+		return "", nil
+	}
+	// patch-id output is "<patch-id> <commit-or-blank>"; only the first
+	// field is the stable patch-id.
+	fields := strings.Fields(out)
+	return fields[0], nil
+}
+
 // parseLsTree parses `git ls-tree -r --full-tree` output — lines of the
 // form "<mode> <type> <object>\t<path>" — into path/mode pairs.
 func parseLsTree(out string) ([]rdd.PathMode, error) {
