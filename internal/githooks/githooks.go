@@ -34,7 +34,7 @@ func WriteBlock(workspace, hookName, markerStart, markerEnd, block string) error
 		existing = "#!/bin/sh\n"
 	}
 
-	updated := instructions.Inject(existing, markerStart, markerEnd, strings.TrimRight(block, "\n"))
+	updated := instructions.Inject(existing, markerStart, markerEnd, wrapSubshell(block))
 
 	tmp := hookPath + ".tmp"
 	if err := os.WriteFile(tmp, []byte(updated), 0o644); err != nil {
@@ -47,6 +47,34 @@ func WriteBlock(workspace, hookName, markerStart, markerEnd, block string) error
 		return err
 	}
 	return os.Rename(tmp, hookPath)
+}
+
+// wrapSubshell wraps block in a subshell that captures its own exit code and
+// propagates only a non-zero result. This fixes a multi-block dead-code
+// hazard: a bare `exit N` inside one managed block (e.g. capiko-guardian-
+// angel's `[ "$CGA_RUNNING" = "1" ] && exit 0`) would otherwise terminate the
+// entire hook script and skip every block written after it. Wrapped in a
+// subshell, that `exit` only terminates its own subshell; the outer script
+// resumes right after it, checks `$?`, and re-exits only when the block
+// actually failed. Block order becomes a preference (e.g. "run RDD first to
+// fail fast"), not a correctness constraint. An empty block wraps to an empty
+// string so RemoveBlock's "clear the section" semantics are unaffected.
+//
+// The trailing `|| true` is load-bearing, not decoration: without it, the
+// guard line `[ "$rc" -ne 0 ] && exit "$rc"` becomes a *false* (exit-status-1)
+// command whenever the block succeeded (the `-ne 0` test fails, so `&&` never
+// runs `exit`). If that guard line is the last statement in the hook file —
+// true for the last managed block — its own falsy status silently becomes
+// the whole script's exit code, rejecting every commit even though every
+// block passed. `|| true` absorbs that falsy status while `exit "$rc"` (which
+// terminates the process immediately) never reaches the `|| true` at all.
+func wrapSubshell(block string) string {
+	block = strings.TrimRight(block, "\n")
+	if block == "" {
+		return ""
+	}
+	return "(\n" + block + "\n)\n" +
+		`__capiko_rc=$?; [ "$__capiko_rc" -ne 0 ] && exit "$__capiko_rc" || true`
 }
 
 // RemoveBlock removes the marker-delimited block from
