@@ -472,6 +472,195 @@ func TestStore_SaveState_NewFields_OmittedWhenZeroValue(t *testing.T) {
 	}
 }
 
+// --- Freeze invariant tests (W-1/S-1) ---
+//
+// Once ReviewState.State has left rdd.StateUnreviewed, Tier, SelectedLenses,
+// and SubjectHash are frozen (spec review-lifecycle, design #780 "Freeze
+// invariant"). SaveState is the last line of defense for this invariant: the
+// R-2 verify report (W-1) flagged that it was previously enforced only at
+// the CLI layer (cmd/capiko-ai/review.go), so a direct store consumer could
+// violate it. These tests pin store-layer enforcement.
+
+func TestStore_SaveState_FreezeInvariant_TierChangeBlockedAfterUnreviewed(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:   0,
+		Candidate: testCandidate(),
+		State:     rdd.StateReviewing,
+		Tier:      rdd.RiskTierStandard,
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	attempt := &ReviewState{
+		Version:   first.Version,
+		Candidate: testCandidate(),
+		State:     rdd.StateFindingsFrozen,
+		Tier:      rdd.RiskTierElevated,
+	}
+	err := s.SaveState(attempt)
+	if !errors.Is(err, ErrFreezeViolation) {
+		t.Fatalf("SaveState() error = %v, want errors.Is(err, ErrFreezeViolation)", err)
+	}
+
+	got, loadErr := s.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState() error = %v", loadErr)
+	}
+	if got.Tier != rdd.RiskTierStandard {
+		t.Errorf("LoadState().Tier = %v after rejected write, want %v (unchanged)", got.Tier, rdd.RiskTierStandard)
+	}
+	if got.Version != first.Version {
+		t.Errorf("LoadState().Version = %d after rejected write, want %d (unchanged)", got.Version, first.Version)
+	}
+}
+
+func TestStore_SaveState_FreezeInvariant_SelectedLensesChangeBlockedAfterUnreviewed(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:        0,
+		Candidate:      testCandidate(),
+		State:          rdd.StateReviewing,
+		SelectedLenses: []rdd.Lens{rdd.LensRisk, rdd.LensReadability},
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	attempt := &ReviewState{
+		Version:        first.Version,
+		Candidate:      testCandidate(),
+		State:          rdd.StateFindingsFrozen,
+		SelectedLenses: []rdd.Lens{rdd.LensRisk},
+	}
+	err := s.SaveState(attempt)
+	if !errors.Is(err, ErrFreezeViolation) {
+		t.Fatalf("SaveState() error = %v, want errors.Is(err, ErrFreezeViolation)", err)
+	}
+
+	got, loadErr := s.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState() error = %v", loadErr)
+	}
+	if !reflect.DeepEqual(got.SelectedLenses, first.SelectedLenses) {
+		t.Errorf("LoadState().SelectedLenses = %v after rejected write, want %v (unchanged)", got.SelectedLenses, first.SelectedLenses)
+	}
+}
+
+func TestStore_SaveState_FreezeInvariant_SubjectHashChangeBlockedAfterUnreviewed(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:     0,
+		Candidate:   testCandidate(),
+		State:       rdd.StateReviewing,
+		SubjectHash: "subject-sha-1",
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	attempt := &ReviewState{
+		Version:     first.Version,
+		Candidate:   testCandidate(),
+		State:       rdd.StateFindingsFrozen,
+		SubjectHash: "subject-sha-2",
+	}
+	err := s.SaveState(attempt)
+	if !errors.Is(err, ErrFreezeViolation) {
+		t.Fatalf("SaveState() error = %v, want errors.Is(err, ErrFreezeViolation)", err)
+	}
+
+	got, loadErr := s.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState() error = %v", loadErr)
+	}
+	if got.SubjectHash != "subject-sha-1" {
+		t.Errorf("LoadState().SubjectHash = %q after rejected write, want %q (unchanged)", got.SubjectHash, "subject-sha-1")
+	}
+}
+
+func TestStore_SaveState_FreezeInvariant_ChangeAllowedWhileStillUnreviewed(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:     0,
+		Candidate:   testCandidate(),
+		State:       rdd.StateUnreviewed,
+		Tier:        rdd.RiskTierStandard,
+		SubjectHash: "subject-sha-1",
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	// Still unreviewed: freeze fields are not yet frozen, any value is
+	// allowed (spec review-lifecycle: candidate identity and tier/lenses
+	// freeze only on entering "reviewing").
+	second := &ReviewState{
+		Version:     first.Version,
+		Candidate:   testCandidate(),
+		State:       rdd.StateUnreviewed,
+		Tier:        rdd.RiskTierElevated,
+		SubjectHash: "subject-sha-2",
+	}
+	if err := s.SaveState(second); err != nil {
+		t.Fatalf("SaveState() error = %v, want nil while state is still unreviewed", err)
+	}
+
+	got, err := s.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	if got.Tier != rdd.RiskTierElevated || got.SubjectHash != "subject-sha-2" {
+		t.Errorf("LoadState() = %+v, want updated Tier/SubjectHash allowed pre-freeze", got)
+	}
+}
+
+func TestStore_SaveState_FreezeInvariant_UnchangedFreezeFieldsSucceedAfterUnreviewed(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:        0,
+		Candidate:      testCandidate(),
+		State:          rdd.StateReviewing,
+		Tier:           rdd.RiskTierElevated,
+		SelectedLenses: []rdd.Lens{rdd.LensRisk, rdd.LensReadability},
+		SubjectHash:    "subject-sha-1",
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	// Advances lifecycle state and touches an unrelated field (LensResults)
+	// but leaves all three frozen fields byte-for-byte identical.
+	second := &ReviewState{
+		Version:        first.Version,
+		Candidate:      testCandidate(),
+		State:          rdd.StateFindingsFrozen,
+		Tier:           rdd.RiskTierElevated,
+		SelectedLenses: []rdd.Lens{rdd.LensRisk, rdd.LensReadability},
+		SubjectHash:    "subject-sha-1",
+		LensResults: map[rdd.Lens]LensResult{
+			rdd.LensRisk: {LensID: rdd.LensRisk, SubjectHash: "subject-sha-1"},
+		},
+	}
+	if err := s.SaveState(second); err != nil {
+		t.Fatalf("SaveState() error = %v, want nil when frozen fields are unchanged", err)
+	}
+
+	got, err := s.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	if got.State != rdd.StateFindingsFrozen {
+		t.Errorf("LoadState().State = %q, want %q", got.State, rdd.StateFindingsFrozen)
+	}
+}
+
 func TestStore_WriteReceipt_AtomicWrite_NoTempFileLeftBehind(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
