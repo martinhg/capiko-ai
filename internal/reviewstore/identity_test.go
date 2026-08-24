@@ -221,3 +221,145 @@ func TestChangedPaths_PropagatesGitDiffTreeError(t *testing.T) {
 		t.Fatalf("ChangedPaths() error = %v, want errors.Is(err, wantErr)", err)
 	}
 }
+
+// --- BuildIdentityFromCommit tests: stub gitRevParseTree/gitDiffTree/
+// gitRemoteOriginURL seams, no real git binary invoked (R-3 PR2b). ---
+
+// stubDefaultIdentityFromCommitSeams stubs every seam
+// BuildIdentityFromCommit calls with a non-error, "happy path" behavior
+// (parent commit resolves normally) and restores the originals on cleanup.
+// Individual tests override just the seam(s) they need to exercise.
+func stubDefaultIdentityFromCommitSeams(t *testing.T) {
+	t.Helper()
+
+	origRemote := gitRemoteOriginURL
+	origRevParseTree := gitRevParseTree
+	origDiffTree := gitDiffTree
+	t.Cleanup(func() {
+		gitRemoteOriginURL = origRemote
+		gitRevParseTree = origRevParseTree
+		gitDiffTree = origDiffTree
+	})
+
+	gitRemoteOriginURL = func(string) (string, error) { return "git@example.com:org/repo.git", nil }
+	gitRevParseTree = func(_, ref string) (string, error) {
+		switch ref {
+		case "abc123":
+			return "candidate-tree-hash", nil
+		case "abc123^":
+			return "parent-tree-hash", nil
+		default:
+			t.Fatalf("gitRevParseTree() ref = %q, want abc123 or abc123^", ref)
+			return "", nil
+		}
+	}
+	gitDiffTree = func(_, base, candidate string) ([]rdd.PathMode, error) {
+		if base != "parent-tree-hash" || candidate != "candidate-tree-hash" {
+			t.Fatalf("gitDiffTree() base=%q candidate=%q, want parent-tree-hash/candidate-tree-hash", base, candidate)
+		}
+		return []rdd.PathMode{
+			{Path: "internal/reviewstore/identity.go", Mode: "100644"},
+		}, nil
+	}
+}
+
+func TestBuildIdentityFromCommit_HappyPath(t *testing.T) {
+	stubDefaultIdentityFromCommitSeams(t)
+
+	got, err := BuildIdentityFromCommit("/workspace/repo", "abc123")
+	if err != nil {
+		t.Fatalf("BuildIdentityFromCommit() error = %v, want nil", err)
+	}
+
+	want := rdd.CandidateIdentity{
+		RepositoryID:  "git@example.com:org/repo.git",
+		BaseTree:      "parent-tree-hash",
+		CandidateTree: "candidate-tree-hash",
+		ChangedPathsModesDigest: rdd.ComputeDigest([]rdd.PathMode{
+			{Path: "internal/reviewstore/identity.go", Mode: "100644"},
+		}),
+		PolicyHash: "",
+	}
+	if got != want {
+		t.Errorf("BuildIdentityFromCommit() = %+v, want %+v", got, want)
+	}
+}
+
+// TestBuildIdentityFromCommit_InitialCommitFallsBackToEmptyTree covers the
+// initial-commit edge case: a commit with no parent has no "<sha>^" to
+// resolve, so BuildIdentityFromCommit must fall back to the well-known
+// empty-tree hash as the base tree instead of propagating the git error
+// (design "Pre-Push Identity Building").
+func TestBuildIdentityFromCommit_InitialCommitFallsBackToEmptyTree(t *testing.T) {
+	stubDefaultIdentityFromCommitSeams(t)
+	gitRevParseTree = func(_, ref string) (string, error) {
+		switch ref {
+		case "abc123":
+			return "candidate-tree-hash", nil
+		case "abc123^":
+			return "", errors.New("fatal: ambiguous argument 'abc123^': unknown revision")
+		default:
+			t.Fatalf("gitRevParseTree() ref = %q, want abc123 or abc123^", ref)
+			return "", nil
+		}
+	}
+	gitDiffTree = func(_, base, candidate string) ([]rdd.PathMode, error) {
+		if base != emptyTreeHash || candidate != "candidate-tree-hash" {
+			t.Fatalf("gitDiffTree() base=%q candidate=%q, want emptyTreeHash/candidate-tree-hash", base, candidate)
+		}
+		return []rdd.PathMode{{Path: "README.md", Mode: "100644"}}, nil
+	}
+
+	got, err := BuildIdentityFromCommit("/workspace/repo", "abc123")
+	if err != nil {
+		t.Fatalf("BuildIdentityFromCommit() error = %v, want nil", err)
+	}
+	if got.BaseTree != emptyTreeHash {
+		t.Errorf("BuildIdentityFromCommit() BaseTree = %q, want emptyTreeHash %q", got.BaseTree, emptyTreeHash)
+	}
+	if got.CandidateTree != "candidate-tree-hash" {
+		t.Errorf("BuildIdentityFromCommit() CandidateTree = %q, want %q", got.CandidateTree, "candidate-tree-hash")
+	}
+}
+
+func TestBuildIdentityFromCommit_CandidateTreeResolutionFails(t *testing.T) {
+	stubDefaultIdentityFromCommitSeams(t)
+	wantErr := errors.New("git rev-parse abc123^{tree} failed")
+	gitRevParseTree = func(_, ref string) (string, error) {
+		if ref == "abc123" {
+			return "", wantErr
+		}
+		return "parent-tree-hash", nil
+	}
+
+	_, err := BuildIdentityFromCommit("/workspace/repo", "abc123")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("BuildIdentityFromCommit() error = %v, want errors.Is(err, wantErr)", err)
+	}
+}
+
+func TestBuildIdentityFromCommit_DiffTreeFails(t *testing.T) {
+	stubDefaultIdentityFromCommitSeams(t)
+	wantErr := errors.New("git diff-tree failed")
+	gitDiffTree = func(string, string, string) ([]rdd.PathMode, error) { return nil, wantErr }
+
+	_, err := BuildIdentityFromCommit("/workspace/repo", "abc123")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("BuildIdentityFromCommit() error = %v, want errors.Is(err, wantErr)", err)
+	}
+}
+
+func TestBuildIdentityFromCommit_RemoteOriginFallsBackToWorkspaceBasename(t *testing.T) {
+	stubDefaultIdentityFromCommitSeams(t)
+	gitRemoteOriginURL = func(string) (string, error) {
+		return "", errors.New("no such remote 'origin'")
+	}
+
+	got, err := BuildIdentityFromCommit("/workspace/my-repo", "abc123")
+	if err != nil {
+		t.Fatalf("BuildIdentityFromCommit() error = %v, want nil", err)
+	}
+	if got.RepositoryID != "my-repo" {
+		t.Errorf("BuildIdentityFromCommit() RepositoryID = %q, want %q (workspace basename fallback)", got.RepositoryID, "my-repo")
+	}
+}

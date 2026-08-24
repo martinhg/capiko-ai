@@ -42,3 +42,44 @@ func BuildAncestryEvidence(workspace, baseA, commitA, baseB, commitB string) (*r
 
 	return evidence, nil
 }
+
+// gateAncestrySentinel is the value BuildGateAncestryEvidence sets
+// AncestryEvidence.MergeBaseHash to. Gate validation has no commit SHAs to
+// resolve a real merge-base from — the receipt only persists tree hashes —
+// so there is no genuine merge-base to report. rdd.Compare only ever checks
+// MergeBaseHash for emptiness (to short-circuit to RelationUnknown when
+// ancestry evidence is entirely absent); it never reads the hash's value.
+// A non-empty sentinel therefore signals "ancestry evidence is present"
+// without claiming a specific commit as the merge-base.
+const gateAncestrySentinel = "gate-evidence"
+
+// BuildGateAncestryEvidence computes ancestry evidence for gate validation
+// (pre-commit/pre-push) directly from two rdd.CandidateIdentity values,
+// without any commit SHAs or a gitMergeBase call (design "Gate Ancestry
+// Evidence"). BuildAncestryEvidence (above) needs commit SHAs to resolve a
+// real merge-base via gitMergeBase, but a receipt's stored Candidate and a
+// gate's freshly built CandidateIdentity only carry tree hashes — there is
+// no commit to look up a merge-base from.
+//
+// Instead, BuildGateAncestryEvidence computes each side's patch-id directly
+// from its own BaseTree -> CandidateTree diff (git diff accepts tree
+// hashes directly, so no merge-base is needed to anchor the comparison),
+// and sets MergeBaseHash to a non-empty sentinel so rdd.Compare's
+// emptiness check treats this as present evidence.
+//
+// Like BuildAncestryEvidence, a failed gitPatchID call for one side leaves
+// that side's patch-id as the empty string rather than fabricating a
+// relation the evidence doesn't support (spec relation-algebra: "Compare
+// MUST NOT guess").
+func BuildGateAncestryEvidence(workspace string, a, b rdd.CandidateIdentity) (*rdd.AncestryEvidence, error) {
+	evidence := &rdd.AncestryEvidence{MergeBaseHash: gateAncestrySentinel}
+
+	if aPatchID, err := gitPatchID(workspace, a.BaseTree, a.CandidateTree); err == nil {
+		evidence.APatchID = aPatchID
+	}
+	if bPatchID, err := gitPatchID(workspace, b.BaseTree, b.CandidateTree); err == nil {
+		evidence.BPatchID = bPatchID
+	}
+
+	return evidence, nil
+}
