@@ -1,6 +1,10 @@
 package rdd
 
-import "testing"
+import (
+	"reflect"
+	"sort"
+	"testing"
+)
 
 // allLifecycleStates lists every LifecycleState in a fixed order so tests can
 // build the exhaustive 12x11 transition matrix deterministically.
@@ -177,6 +181,67 @@ func TestValidateTransition_SelfTransitionRejected(t *testing.T) {
 				t.Fatalf("ValidateTransition(%q, %q) = nil, want error: self-transitions are not in the table", s, s)
 			}
 		})
+	}
+}
+
+// TestAvailableTransitions_MatchesValidTransitionSet covers every state
+// (spec bounded-correction / review-status-cli "Transition lookup"; design
+// "AvailableTransitions": exported, sorted `[]LifecycleState`). Output must
+// be sorted and must exactly match the set of true entries in
+// validTransitionSet for that state.
+func TestAvailableTransitions_MatchesValidTransitionSet(t *testing.T) {
+	for _, state := range allLifecycleStates {
+		t.Run(string(state), func(t *testing.T) {
+			var want []LifecycleState
+			for to, ok := range validTransitionSet[state] {
+				if ok {
+					want = append(want, to)
+				}
+			}
+			sort.Slice(want, func(i, j int) bool { return want[i] < want[j] })
+
+			got := AvailableTransitions(state)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("AvailableTransitions(%q) = %v, want %v", state, got, want)
+			}
+		})
+	}
+}
+
+// TestAvailableTransitions_TerminalStatesReturnEmpty covers terminal states
+// explicitly: they have zero outbound transitions, so AvailableTransitions
+// must return an empty (nil or zero-length) slice, not error.
+func TestAvailableTransitions_TerminalStatesReturnEmpty(t *testing.T) {
+	for _, state := range []LifecycleState{StateApproved, StateEscalated, StateInvalidated} {
+		t.Run(string(state), func(t *testing.T) {
+			got := AvailableTransitions(state)
+			if len(got) != 0 {
+				t.Errorf("AvailableTransitions(%q) = %v, want empty", state, got)
+			}
+		})
+	}
+}
+
+// TestAvailableTransitions_UnknownStateReturnsNil covers the fail-closed
+// contract for an unrecognized state: nil, not a panic or a fabricated
+// transition set.
+func TestAvailableTransitions_UnknownStateReturnsNil(t *testing.T) {
+	got := AvailableTransitions(LifecycleState("bogus"))
+	if got != nil {
+		t.Errorf("AvailableTransitions(%q) = %v, want nil for unknown state", "bogus", got)
+	}
+}
+
+// TestAvailableTransitions_Sorted pins the deterministic-ordering contract
+// directly on a state with multiple outbound transitions (design
+// "AvailableTransitions": "sorted output gives deterministic CLI/JSON
+// rendering").
+func TestAvailableTransitions_Sorted(t *testing.T) {
+	got := AvailableTransitions(StateFinalVerifying)
+	want := []LifecycleState{StateApproved, StateEscalated, StateInvalidated}
+	sort.Slice(want, func(i, j int) bool { return want[i] < want[j] })
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("AvailableTransitions(%q) = %v, want sorted %v", StateFinalVerifying, got, want)
 	}
 }
 
