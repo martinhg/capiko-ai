@@ -212,7 +212,7 @@ func TestWriteBlock_WrapsBlockInSubshell(t *testing.T) {
 		"(\n" +
 		testBlock + "\n" +
 		")\n" +
-		`__capiko_rc=$?; [ "$__capiko_rc" -ne 0 ] && exit "$__capiko_rc"` + "\n" +
+		`__capiko_rc=$?; [ "$__capiko_rc" -ne 0 ] && exit "$__capiko_rc" || true` + "\n" +
 		testEnd
 	if !strings.Contains(got, wantWrapped) {
 		t.Errorf("WriteBlock output missing subshell-wrapped block.\nwant substring:\n%s\ngot:\n%s", wantWrapped, got)
