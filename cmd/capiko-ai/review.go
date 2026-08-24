@@ -27,6 +27,7 @@ const reviewUsage = "Usage:\n" +
 	"  capiko-ai review start --consent relay|granted|declined\n" +
 	"  capiko-ai review capture-result --lens <id> <result-file>\n" +
 	"  capiko-ai review finalize\n" +
+	"  capiko-ai review correct\n" +
 	"  capiko-ai review schema reviewer\n" +
 	"  capiko-ai review validate --gate pre-commit|pre-push\n" +
 	"  capiko-ai review gate install\n" +
@@ -80,6 +81,16 @@ var buildCandidate = func(workspace string) (rdd.CandidateIdentity, []string, er
 // readFile is a seam over os.ReadFile for reading a `review capture-result`
 // result file, so tests can stub read failures without needing real files.
 var readFile = os.ReadFile
+
+// changedPathsFn is a seam over reviewstore.ChangedPaths, used by
+// `review correct` to diff the frozen candidate's tree against the
+// corrected candidate's tree (design "Correction paths computation": "Diff
+// between frozen CandidateTree and corrected CandidateTree via
+// reviewstore.ChangedPaths"), and as the fallback source of finding paths
+// when frozen findings carry none (design "Path fallback when findings lack
+// path fields"). Package-level var seam so `review correct` tests never
+// need a real git repository.
+var changedPathsFn = reviewstore.ChangedPaths
 
 // buildIdentity is a seam over reviewstore.BuildIdentity, used by the
 // pre-commit gate to build the staged candidate identity (design "Data
@@ -184,6 +195,8 @@ func reviewCommand(name string, args []string, out io.Writer) (handled bool, exi
 		return reviewCaptureResult(args[1:], out)
 	case "finalize":
 		return reviewFinalize(args[1:], out)
+	case "correct":
+		return reviewCorrect(args[1:], out)
 	case "schema":
 		return reviewSchema(args[1:], out)
 	case "validate":
@@ -670,9 +683,9 @@ func advanceState(store *reviewstore.Store, current *reviewstore.ReviewState, ne
 
 // writeTerminalReceiptIfNeeded issues current's ReviewReceipt when
 // current.State is terminal, shared by reviewFinalize's several
-// terminal-reaching exits (design "Receipt finality" #8: terminal receipts
-// remain immutable and write-once regardless of which decision point
-// reaches the terminal state).
+// terminal-reaching exits and reviewCorrect's invalidation path (design
+// "Receipt finality" #8: terminal receipts remain immutable and write-once
+// regardless of which verb reaches the terminal state).
 func writeTerminalReceiptIfNeeded(store *reviewstore.Store, current *reviewstore.ReviewState) error {
 	if !rdd.IsTerminal(current.State) {
 		return nil
@@ -693,10 +706,10 @@ func writeTerminalReceiptIfNeeded(store *reviewstore.Store, current *reviewstore
 // (spec review-lifecycle MODIFIED "Finalize entry states").
 //
 // From findings_frozen, it advances to evidence_classified, then either
-// stops at fix_required — the fix lane is completed by a separate fix CLI
-// verb, finalize itself no longer auto-walks it (spec review-lifecycle
-// MODIFIED "Finalize stops at fix_required") — or continues straight toward
-// final verification when finalizeRequiresFix says no fix is needed.
+// stops at fix_required — R-4a's `review correct` completes the fix lane,
+// finalize itself no longer auto-walks it (spec review-lifecycle MODIFIED
+// "Finalize stops at fix_required") — or continues straight toward final
+// verification when finalizeRequiresFix says no fix is needed.
 //
 // From fix_validating, finalizeVerificationOutcome decides whether the
 // validated fix advances to ready_final_verification or is
@@ -775,6 +788,125 @@ func reviewFinalize(args []string, out io.Writer) (bool, int, error) {
 	}
 
 	fmt.Fprintf(out, "review finalized: state=%s\n", current.State)
+	return true, 0, nil
+}
+
+// reviewCorrect handles `review correct` (spec bounded-correction; design
+// "Data Flow"): admits a bounded, single-consumption correction attempt
+// while state=fix_required.
+//
+// It loads state and requires exactly state=fix_required before any
+// mutation (spec bounded-correction "Preconditions"), then requires the
+// kill switch to be managed — normal polarity, like reviewStart (spec
+// bounded-correction "Kill-switch (normal polarity)").
+//
+// It builds the corrected candidate identity and computes its subject hash
+// via the same computeSubjectHash reviewStart/reviewCaptureResult use
+// (design "CorrectionAttemptHash inputs"): an exact byte-identical replay
+// (same hash, already consumed) is a no-op success (spec bounded-correction
+// "Exact-replay idempotency").
+//
+// Otherwise it diffs the frozen candidate's tree against the corrected
+// candidate's tree via changedPathsFn to find what the author actually
+// changed (correctionPaths), extracts the paths the frozen findings
+// reported via rdd.ExtractFindingPaths (findingPaths, falling back to the
+// frozen candidate's own changed-path set when findings carry no path
+// data), and admits the correction only if every correctionPath is in
+// scope (rdd.PathScopeCheck). The correction budget (CorrectionConsumed,
+// CorrectionAttemptHash) is set on current before either outcome, so an
+// out-of-scope correction still consumes the budget and transitions
+// straight to invalidated (spec bounded-correction "Budget consumed on
+// invalidation too"); an in-scope correction consumes the budget and
+// advances fix_required -> fixing -> fix_validating (spec bounded-correction
+// "In-scope correction advances the fix lane").
+func reviewCorrect(args []string, out io.Writer) (bool, int, error) {
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review correct: resolving workspace: %w", err)
+	}
+
+	commonDir, err := reviewstore.GitCommonDir(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review correct: resolving git common dir: %w", err)
+	}
+
+	store := reviewstore.NewStore(reviewAuthorityDir(commonDir))
+	current, err := store.LoadState()
+	if err != nil {
+		return true, 1, fmt.Errorf("review correct: loading review state: %w", err)
+	}
+	if current == nil || current.State != rdd.StateFixRequired {
+		state := rdd.StateUnreviewed
+		if current != nil {
+			state = current.State
+		}
+		return true, 1, fmt.Errorf(
+			"review correct: review state is %q, want %q (run `review finalize` first)",
+			state, rdd.StateFixRequired,
+		)
+	}
+
+	home, err := userHomeDirFn()
+	if err != nil {
+		return true, 1, fmt.Errorf("review correct: resolving home dir: %w", err)
+	}
+	effective, err := resolveEffectiveMode(commonDir, home)
+	if err != nil {
+		return true, 1, fmt.Errorf("review correct: %w", err)
+	}
+	if effective != rdd.ModeManaged {
+		return true, 1, fmt.Errorf("review correct: review mode is %q, not managed; run `review mode enable` first", effective)
+	}
+
+	correctionIdentity, _, err := buildCandidate(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review correct: building candidate identity: %w", err)
+	}
+	attemptHash := computeSubjectHash(correctionIdentity)
+
+	if attemptHash == current.CorrectionAttemptHash && current.CorrectionConsumed {
+		fmt.Fprintf(out, "review correct: replay of already-consumed correction; no-op (state=%s)\n", current.State)
+		return true, 0, nil
+	}
+
+	correctionPaths, err := changedPathsFn(workspace, current.Candidate.CandidateTree, correctionIdentity.CandidateTree)
+	if err != nil {
+		return true, 1, fmt.Errorf("review correct: diffing correction paths: %w", err)
+	}
+
+	var findingPaths []string
+	for _, lr := range current.LensResults {
+		findingPaths = append(findingPaths, rdd.ExtractFindingPaths(lr.Findings)...)
+	}
+	if len(findingPaths) == 0 {
+		findingPaths, err = changedPathsFn(workspace, current.Candidate.BaseTree, current.Candidate.CandidateTree)
+		if err != nil {
+			return true, 1, fmt.Errorf("review correct: resolving fallback finding paths: %w", err)
+		}
+	}
+
+	current.CorrectionConsumed = true
+	current.CorrectionAttemptHash = attemptHash
+
+	if !rdd.PathScopeCheck(correctionPaths, findingPaths) {
+		if err := advanceState(store, current, rdd.StateInvalidated); err != nil {
+			return true, 1, fmt.Errorf("review correct: %w", err)
+		}
+		if err := writeTerminalReceiptIfNeeded(store, current); err != nil {
+			return true, 1, fmt.Errorf("review correct: %w", err)
+		}
+		fmt.Fprintln(out, "review correct: correction touches paths outside the frozen findings' scope; review invalidated")
+		return true, 1, fmt.Errorf("review correct: correction touches paths outside the frozen findings' scope")
+	}
+
+	if err := advanceState(store, current, rdd.StateFixing); err != nil {
+		return true, 1, fmt.Errorf("review correct: %w", err)
+	}
+	if err := advanceState(store, current, rdd.StateFixValidating); err != nil {
+		return true, 1, fmt.Errorf("review correct: %w", err)
+	}
+
+	fmt.Fprintf(out, "review corrected: state=%s\n", current.State)
 	return true, 0, nil
 }
 
