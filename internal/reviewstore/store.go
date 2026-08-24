@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/martinhg/capiko-ai/internal/rdd"
 )
@@ -27,6 +28,15 @@ var ErrStaleWrite = errors.New("reviewstore: stale write rejected")
 // been written for this store. Terminal receipts are immutable and
 // write-once (spec rdd-authority-store "Receipt write-once").
 var ErrReceiptExists = errors.New("reviewstore: receipt already exists")
+
+// ErrFreezeViolation is returned by SaveState when a write attempts to
+// change Tier, SelectedLenses, or SubjectHash after the review has left
+// rdd.StateUnreviewed. These fields freeze once review starts (spec
+// review-lifecycle: candidate identity and tier/lenses freeze on entering
+// "reviewing"; design #780 "Freeze invariant"). SaveState is the
+// store-layer enforcement point so a direct store consumer cannot bypass
+// the CLI-layer check in cmd/capiko-ai/review.go (R-2 verify report W-1).
+var ErrFreezeViolation = errors.New("reviewstore: cannot change frozen field after leaving unreviewed")
 
 // ReviewState is the mutable authority record for an in-progress review. It
 // is CAS-protected: every write must present the Version it read, and
@@ -143,10 +153,15 @@ func (s *Store) LoadState() (*ReviewState, error) {
 //  2. Read the current on-disk version (0 if no state file exists yet).
 //  3. Compare state.Version against the current version. If they differ,
 //     the caller's read was stale: return ErrStaleWrite without writing.
-//  4. Increment state.Version to the new committed version.
-//  5. Write the new state to a temp file and atomically rename it into
+//  4. If the current on-disk state has left rdd.StateUnreviewed, compare
+//     Tier, SelectedLenses, and SubjectHash against the new state. Any
+//     difference returns ErrFreezeViolation without writing (spec
+//     review-lifecycle "Freeze invariant"; R-2 verify report W-1: this must
+//     be enforced at the store layer, not only in the CLI).
+//  5. Increment state.Version to the new committed version.
+//  6. Write the new state to a temp file and atomically rename it into
 //     place, so a crash mid-write can never corrupt the prior state.
-//  6. Release the flock.
+//  7. Release the flock.
 //
 // On success, state.Version is mutated in place to reflect the newly
 // committed version.
@@ -175,6 +190,10 @@ func (s *Store) SaveState(state *ReviewState) error {
 		return ErrStaleWrite
 	}
 
+	if err := checkFreezeInvariant(current, state); err != nil {
+		return err
+	}
+
 	state.Version = currentVersion + 1
 
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -187,6 +206,31 @@ func (s *Store) SaveState(state *ReviewState) error {
 		return err
 	}
 	return os.Rename(tmp, s.statePath())
+}
+
+// checkFreezeInvariant enforces that Tier, SelectedLenses, and SubjectHash
+// are immutable once current.State has left rdd.StateUnreviewed. current is
+// nil (no prior state) or has an unreviewed/empty State on the write that
+// first leaves unreviewed, and in both cases any values are allowed —
+// LoadState always backfills an empty State to rdd.StateUnreviewed, so the
+// empty check exists only as defense against a future LoadState change.
+func checkFreezeInvariant(current, next *ReviewState) error {
+	if current == nil {
+		return nil
+	}
+	if current.State == "" || current.State == rdd.StateUnreviewed {
+		return nil
+	}
+	if current.Tier != next.Tier {
+		return fmt.Errorf("%w: tier changed from %v to %v", ErrFreezeViolation, current.Tier, next.Tier)
+	}
+	if current.SubjectHash != next.SubjectHash {
+		return fmt.Errorf("%w: subject_hash changed from %q to %q", ErrFreezeViolation, current.SubjectHash, next.SubjectHash)
+	}
+	if !reflect.DeepEqual(current.SelectedLenses, next.SelectedLenses) {
+		return fmt.Errorf("%w: selected_lenses changed from %v to %v", ErrFreezeViolation, current.SelectedLenses, next.SelectedLenses)
+	}
+	return nil
 }
 
 // LoadReceipt reads review-receipt.json. A missing file returns (nil, nil)
