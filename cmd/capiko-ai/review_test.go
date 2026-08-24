@@ -795,7 +795,12 @@ func TestReviewFinalize_FromFindingsFrozen_DrivesToApprovedAndWritesReceipt(t *t
 	}
 }
 
-func TestReviewFinalize_FixRequiredPath_EscalatesWithoutFixCLI(t *testing.T) {
+// TestReviewFinalize_FixRequiredPath_StopsAtFixRequired_NoAutoWalk replaces
+// the R-2-era "auto-escalate" test: R-4a wires a real `review correct` CLI
+// for the fix lane, so finalize no longer walks fix_required all the way to
+// escalated on its own (spec review-lifecycle MODIFIED: "Finalize stops at
+// fix_required"; design "Finalize fix-path behavior").
+func TestReviewFinalize_FixRequiredPath_StopsAtFixRequired_NoAutoWalk(t *testing.T) {
 	workspace := t.TempDir()
 	commonDir := filepath.Join(workspace, ".git")
 	authorityDir := reviewAuthorityDir(commonDir)
@@ -818,19 +823,129 @@ func TestReviewFinalize_FixRequiredPath_EscalatesWithoutFixCLI(t *testing.T) {
 	if loadErr != nil {
 		t.Fatalf("LoadState: %v", loadErr)
 	}
-	if state.State != rdd.StateEscalated {
-		t.Errorf("State = %q, want %q (no fix CLI in R-2, fix_required must auto-escalate)", state.State, rdd.StateEscalated)
+	if state.State != rdd.StateFixRequired {
+		t.Errorf("State = %q, want %q (finalize must stop at fix_required, not auto-walk)", state.State, rdd.StateFixRequired)
 	}
 
 	receipt, receiptErr := store.LoadReceipt()
 	if receiptErr != nil {
 		t.Fatalf("LoadReceipt: %v", receiptErr)
 	}
-	if receipt == nil {
-		t.Fatal("LoadReceipt() = nil, want a terminal receipt")
+	if receipt != nil {
+		t.Errorf("LoadReceipt() = %+v, want nil (fix_required is not terminal, no receipt yet)", receipt)
 	}
-	if receipt.Outcome != string(rdd.StateEscalated) {
-		t.Errorf("receipt.Outcome = %q, want %q", receipt.Outcome, rdd.StateEscalated)
+}
+
+// TestReviewFinalize_FromFixValidating_DefaultAdvancesToApproved exercises
+// the new fix_validating entry state (spec review-lifecycle MODIFIED:
+// "Finalize entry states" accepts both findings_frozen and fix_validating).
+// With the real (non-stubbed) finalizeVerificationOutcome, a fix_validating
+// review always advances to ready_final_verification (path scope was
+// already checked by `review correct`) and then default-approves at
+// final_verifying, exactly like the pre-existing no-fix path.
+func TestReviewFinalize_FromFixValidating_DefaultAdvancesToApproved(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 15, 0, 0, 0, time.UTC))
+
+	seedStateAt(t, authorityDir, identity, rdd.StateFixValidating, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateApproved {
+		t.Errorf("State = %q, want %q (fix_validating default advances through ready_final_verification/final_verifying to approved)", state.State, rdd.StateApproved)
+	}
+
+	receipt, receiptErr := store.LoadReceipt()
+	if receiptErr != nil {
+		t.Fatalf("LoadReceipt: %v", receiptErr)
+	}
+	if receipt == nil || receipt.Outcome != string(rdd.StateApproved) {
+		t.Errorf("LoadReceipt() = %+v, want outcome=approved", receipt)
+	}
+}
+
+// TestReviewFinalize_FromFixValidating_StubbedEscalated_StopsWithoutFinalVerifying
+// drives finalizeVerificationOutcome's fix_validating decision point to
+// escalated (spec review-lifecycle MODIFIED: "Fix-validation outcome ...
+// resolve fix_validating to ready_final_verification on compliance or
+// escalated/invalidated otherwise") and confirms finalize stops there
+// instead of continuing into final_verifying.
+func TestReviewFinalize_FromFixValidating_StubbedEscalated_StopsWithoutFinalVerifying(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 15, 0, 0, 0, time.UTC))
+	withStubFinalizeVerificationOutcome(t, rdd.StateEscalated)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateFixValidating, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateEscalated {
+		t.Errorf("State = %q, want %q", state.State, rdd.StateEscalated)
+	}
+
+	receipt, receiptErr := store.LoadReceipt()
+	if receiptErr != nil {
+		t.Fatalf("LoadReceipt: %v", receiptErr)
+	}
+	if receipt == nil || receipt.Outcome != string(rdd.StateEscalated) {
+		t.Errorf("LoadReceipt() = %+v, want outcome=escalated", receipt)
+	}
+}
+
+// TestFinalizeRequiresFix_Default_TrueWhenLensFindingsHavePaths exercises
+// the rewired finalizeRequiresFix default (spec review-lifecycle MODIFIED:
+// "Fix-required decision ... true when frozen LensResults contain at least
+// one non-empty finding set"; design seam catalog: "iterate LensResults,
+// call ExtractFindingPaths, check non-empty").
+func TestFinalizeRequiresFix_Default_TrueWhenLensFindingsHavePaths(t *testing.T) {
+	state := &reviewstore.ReviewState{
+		LensResults: map[rdd.Lens]reviewstore.LensResult{
+			rdd.LensRisk: {Findings: json.RawMessage(`{"issues":[{"severity":"warning","path":"a.go","message":"x"}]}`)},
+		},
+	}
+	if !finalizeRequiresFix(state) {
+		t.Errorf("finalizeRequiresFix(...) = false, want true when a lens finding has a path")
+	}
+}
+
+// TestFinalizeRequiresFix_Default_FalseWhenNoFindingPaths covers both the
+// no-findings and empty-issues cases: neither should require a fix.
+func TestFinalizeRequiresFix_Default_FalseWhenNoFindingPaths(t *testing.T) {
+	state := &reviewstore.ReviewState{
+		LensResults: map[rdd.Lens]reviewstore.LensResult{
+			rdd.LensRisk: {Findings: json.RawMessage(`{"issues":[]}`)},
+		},
+	}
+	if finalizeRequiresFix(state) {
+		t.Errorf("finalizeRequiresFix(...) = true, want false when findings carry no paths")
 	}
 }
 

@@ -604,25 +604,46 @@ func reviewCaptureResult(args []string, out io.Writer) (bool, int, error) {
 
 // finalizeRequiresFix decides, once frozen findings have been evaluated
 // (state evidence_classified), whether the candidate needs a fix before
-// final verification. R-2 has no automated evidence-classification logic —
-// that determination requires external input (e.g. a human evaluating lens
-// findings) `review finalize` does not yet have access to — so the default
-// always proceeds to ready_final_verification (design "review finalize"
-// heuristic: "always route to ready_final_verification ... since fix
-// determination requires external input not yet available"). Package-level
+// final verification. The R-4a default heuristic returns true when any
+// captured LensResult has at least one finding path — extracted via
+// rdd.ExtractFindingPaths — and false otherwise (spec review-lifecycle
+// MODIFIED "Fix-required decision": "true when frozen LensResults contain
+// at least one non-empty finding set (v1 heuristic; full
+// evidence-classification is out of scope)"; design seam catalog "iterate
+// LensResults, call ExtractFindingPaths, check non-empty"). Package-level
 // var seam (design pattern established by buildCandidate/readFile) so tests
-// can exercise the fix_required path without real evidence-classification
-// logic; a real implementation is an extension point for R-3.
-var finalizeRequiresFix = func(*reviewstore.ReviewState) bool {
+// can exercise both paths without a full evidence-classification engine.
+var finalizeRequiresFix = func(state *reviewstore.ReviewState) bool {
+	for _, lr := range state.LensResults {
+		if len(rdd.ExtractFindingPaths(lr.Findings)) > 0 {
+			return true
+		}
+	}
 	return false
 }
 
-// finalizeVerificationOutcome decides the terminal outcome of final
-// verification (state final_verifying): approved by default, unless a lens
-// result signals failure. R-2 has no automated lens-result failure detection
-// yet (extension point for R-3), so the default always approves.
-// Package-level var seam so tests can drive the escalated outcome.
-var finalizeVerificationOutcome = func(*reviewstore.ReviewState) rdd.LifecycleState {
+// finalizeVerificationOutcome decides the terminal-ward outcome at finalize's
+// two decision points, distinguished by state.State (spec review-lifecycle
+// MODIFIED):
+//
+//   - From fix_validating: whether the validated fix advances to
+//     ready_final_verification or is escalated/invalidated ("Fix-validation
+//     outcome"). The R-4a default always advances — `review correct` already
+//     enforced path-scope admission before a review can ever reach
+//     fix_validating (an out-of-scope correction goes straight to
+//     invalidated instead), so by construction any review at fix_validating
+//     is already path-compliant.
+//   - From final_verifying: whether the candidate is approved or escalated
+//     ("Final-verification outcome unchanged" — same R-2 default-approve
+//     behavior, since there is still no automated lens-result failure
+//     detection).
+//
+// Package-level var seam so tests can drive either decision point to any
+// outcome without real verification logic.
+var finalizeVerificationOutcome = func(state *reviewstore.ReviewState) rdd.LifecycleState {
+	if state.State == rdd.StateFixValidating {
+		return rdd.StateReadyFinalVerification
+	}
 	return rdd.StateApproved
 }
 
@@ -647,18 +668,46 @@ func advanceState(store *reviewstore.Store, current *reviewstore.ReviewState, ne
 	return nil
 }
 
-// reviewFinalize handles `review finalize` (spec review-cli-commands;
-// design "Data Flow"): loads the current review state, requires it to be
-// findings_frozen, then drives a multi-step atomic transition through
-// evidence_classified -> (ready_final_verification -> final_verifying ->
-// approved|escalated) or, when finalizeRequiresFix says a fix is needed,
-// evidence_classified -> fix_required -> fixing -> fix_validating ->
-// escalated (no fix CLI exists in R-2, so finalize itself walks the fix
-// states straight to escalated rather than invoking any unbuilt fix verb —
-// design notes "No fix CLI in R-2"). Each step is validated individually via
-// advanceState, so a failure partway through leaves the state at its last
-// successfully committed value. Reaching a terminal state issues the review's
-// one and only ReviewReceipt.
+// writeTerminalReceiptIfNeeded issues current's ReviewReceipt when
+// current.State is terminal, shared by reviewFinalize's several
+// terminal-reaching exits (design "Receipt finality" #8: terminal receipts
+// remain immutable and write-once regardless of which decision point
+// reaches the terminal state).
+func writeTerminalReceiptIfNeeded(store *reviewstore.Store, current *reviewstore.ReviewState) error {
+	if !rdd.IsTerminal(current.State) {
+		return nil
+	}
+	receipt := &reviewstore.ReviewReceipt{
+		SchemaVersion: 1,
+		Candidate:     current.Candidate,
+		Tier:          current.Tier,
+		Outcome:       string(current.State),
+		IssuedAt:      reviewNow().UTC().Format(time.RFC3339),
+	}
+	return store.WriteReceipt(receipt)
+}
+
+// reviewFinalize handles `review finalize` (spec review-cli-commands,
+// review-lifecycle MODIFIED; design "Data Flow"): loads the current review
+// state and requires it to be either findings_frozen or fix_validating
+// (spec review-lifecycle MODIFIED "Finalize entry states").
+//
+// From findings_frozen, it advances to evidence_classified, then either
+// stops at fix_required — the fix lane is completed by a separate fix CLI
+// verb, finalize itself no longer auto-walks it (spec review-lifecycle
+// MODIFIED "Finalize stops at fix_required") — or continues straight toward
+// final verification when finalizeRequiresFix says no fix is needed.
+//
+// From fix_validating, finalizeVerificationOutcome decides whether the
+// validated fix advances to ready_final_verification or is
+// escalated/invalidated (spec review-lifecycle MODIFIED "Fix-validation
+// outcome"); a non-advancing outcome stops immediately as a terminal state.
+//
+// Both paths converge on the same final_verifying -> approved|escalated
+// step, driven by the same finalizeVerificationOutcome seam. Each step is
+// validated individually via advanceState, so a failure partway through
+// leaves the state at its last successfully committed value. Reaching a
+// terminal state issues the review's one and only ReviewReceipt.
 func reviewFinalize(args []string, out io.Writer) (bool, int, error) {
 	workspace, err := resolveWorkspace()
 	if err != nil {
@@ -678,53 +727,51 @@ func reviewFinalize(args []string, out io.Writer) (bool, int, error) {
 	if current == nil {
 		return true, 1, fmt.Errorf("review finalize: no review state found; run `review start` first")
 	}
-	if current.State != rdd.StateFindingsFrozen {
-		return true, 1, fmt.Errorf(
-			"review finalize: review state is %q, want %q (run `review capture-result` for all mandated lenses first)",
-			current.State, rdd.StateFindingsFrozen,
-		)
-	}
 
-	if err := advanceState(store, current, rdd.StateEvidenceClassified); err != nil {
-		return true, 1, fmt.Errorf("review finalize: %w", err)
-	}
-
-	if finalizeRequiresFix(current) {
-		fixPath := []rdd.LifecycleState{
-			rdd.StateFixRequired,
-			rdd.StateFixing,
-			rdd.StateFixValidating,
-			rdd.StateEscalated,
+	switch current.State {
+	case rdd.StateFindingsFrozen:
+		if err := advanceState(store, current, rdd.StateEvidenceClassified); err != nil {
+			return true, 1, fmt.Errorf("review finalize: %w", err)
 		}
-		for _, next := range fixPath {
-			if err := advanceState(store, current, next); err != nil {
+		if finalizeRequiresFix(current) {
+			if err := advanceState(store, current, rdd.StateFixRequired); err != nil {
 				return true, 1, fmt.Errorf("review finalize: %w", err)
 			}
+			fmt.Fprintf(out, "review finalized: state=%s (fix required; run `review correct` next)\n", current.State)
+			return true, 0, nil
 		}
-	} else {
 		if err := advanceState(store, current, rdd.StateReadyFinalVerification); err != nil {
 			return true, 1, fmt.Errorf("review finalize: %w", err)
 		}
-		if err := advanceState(store, current, rdd.StateFinalVerifying); err != nil {
-			return true, 1, fmt.Errorf("review finalize: %w", err)
-		}
+	case rdd.StateFixValidating:
 		outcome := finalizeVerificationOutcome(current)
 		if err := advanceState(store, current, outcome); err != nil {
 			return true, 1, fmt.Errorf("review finalize: %w", err)
 		}
+		if outcome != rdd.StateReadyFinalVerification {
+			if err := writeTerminalReceiptIfNeeded(store, current); err != nil {
+				return true, 1, fmt.Errorf("review finalize: %w", err)
+			}
+			fmt.Fprintf(out, "review finalized: state=%s\n", current.State)
+			return true, 0, nil
+		}
+	default:
+		return true, 1, fmt.Errorf(
+			"review finalize: review state is %q, want %q or %q",
+			current.State, rdd.StateFindingsFrozen, rdd.StateFixValidating,
+		)
 	}
 
-	if rdd.IsTerminal(current.State) {
-		receipt := &reviewstore.ReviewReceipt{
-			SchemaVersion: 1,
-			Candidate:     current.Candidate,
-			Tier:          current.Tier,
-			Outcome:       string(current.State),
-			IssuedAt:      reviewNow().UTC().Format(time.RFC3339),
-		}
-		if err := store.WriteReceipt(receipt); err != nil {
-			return true, 1, fmt.Errorf("review finalize: writing receipt: %w", err)
-		}
+	if err := advanceState(store, current, rdd.StateFinalVerifying); err != nil {
+		return true, 1, fmt.Errorf("review finalize: %w", err)
+	}
+	outcome := finalizeVerificationOutcome(current)
+	if err := advanceState(store, current, outcome); err != nil {
+		return true, 1, fmt.Errorf("review finalize: %w", err)
+	}
+
+	if err := writeTerminalReceiptIfNeeded(store, current); err != nil {
+		return true, 1, fmt.Errorf("review finalize: writing receipt: %w", err)
 	}
 
 	fmt.Fprintf(out, "review finalized: state=%s\n", current.State)
