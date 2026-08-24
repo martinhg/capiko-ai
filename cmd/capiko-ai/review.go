@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/martinhg/capiko-ai/internal/githooks"
 	"github.com/martinhg/capiko-ai/internal/rdd"
+	"github.com/martinhg/capiko-ai/internal/rddgate"
 	"github.com/martinhg/capiko-ai/internal/reviewstore"
 )
 
@@ -25,7 +27,21 @@ const reviewUsage = "Usage:\n" +
 	"  capiko-ai review start --consent relay|granted|declined\n" +
 	"  capiko-ai review capture-result --lens <id> <result-file>\n" +
 	"  capiko-ai review finalize\n" +
-	"  capiko-ai review schema reviewer"
+	"  capiko-ai review schema reviewer\n" +
+	"  capiko-ai review validate --gate pre-commit|pre-push\n" +
+	"  capiko-ai review gate install\n" +
+	"  capiko-ai review gate uninstall"
+
+// RDD gate hook markers, distinct from CGA's and team-sync's so
+// githooks.WriteBlock/RemoveBlock can manage the gate block independently
+// of any other managed hook block in the same file (spec delivery-gates
+// "Hook install/uninstall CLI").
+const (
+	rddPreCommitMarkerStart = "# >>> capiko:rdd:pre-commit >>>"
+	rddPreCommitMarkerEnd   = "# <<< capiko:rdd:pre-commit <<<"
+	rddPrePushMarkerStart   = "# >>> capiko:rdd:pre-push >>>"
+	rddPrePushMarkerEnd     = "# <<< capiko:rdd:pre-push <<<"
+)
 
 // resolveWorkspace resolves the current workspace root for RDD kill-switch
 // scoping, defaulting to the process's current working directory.
@@ -64,6 +80,36 @@ var buildCandidate = func(workspace string) (rdd.CandidateIdentity, []string, er
 // readFile is a seam over os.ReadFile for reading a `review capture-result`
 // result file, so tests can stub read failures without needing real files.
 var readFile = os.ReadFile
+
+// buildIdentity is a seam over reviewstore.BuildIdentity, used by the
+// pre-commit gate to build the staged candidate identity (design "Data
+// Flow": "BuildIdentity(workspace) -> currentCandidate"). Distinct from
+// buildCandidate above: buildCandidate additionally resolves the raw
+// changed-path list for rdd.Classify, which the gate path never needs — a
+// gate re-running that extra git diff-tree call on every commit/push would
+// be wasted work.
+var buildIdentity = reviewstore.BuildIdentity
+
+// buildIdentityFromCommit is a seam over reviewstore.BuildIdentityFromCommit,
+// used by the pre-push gate to build each pushed ref's candidate identity
+// from its commit SHA rather than the staged index (design "Pre-Push
+// Identity Building").
+var buildIdentityFromCommit = reviewstore.BuildIdentityFromCommit
+
+// buildGateAncestryEvidence is a seam over reviewstore.BuildGateAncestryEvidence,
+// used by both gates to resolve the ancestry evidence rdd.Compare needs to
+// distinguish a genuine change from a compatible base advance (design "Gate
+// Ancestry Evidence").
+var buildGateAncestryEvidence = reviewstore.BuildGateAncestryEvidence
+
+// readPrePushStdin is a seam over os.Stdin reading for pre-push gate
+// validation (design "Interfaces / Contracts"). In production it reads
+// from os.Stdin, which git populates with the push ref protocol
+// (<local-ref> <local-sha> <remote-ref> <remote-sha> per line) when it
+// invokes the pre-push hook; in tests it is stubbed to return fixture data.
+var readPrePushStdin = func() ([]rddgate.PushRef, error) {
+	return rddgate.ParsePushRefs(os.Stdin)
+}
 
 // reviewAuthorityDir resolves the CAS-protected authority store directory
 // under commonDir (design "Storage Layout": <git-common-dir>/capiko/rdd/),
@@ -140,6 +186,10 @@ func reviewCommand(name string, args []string, out io.Writer) (handled bool, exi
 		return reviewFinalize(args[1:], out)
 	case "schema":
 		return reviewSchema(args[1:], out)
+	case "validate":
+		return reviewValidate(args[1:], out)
+	case "gate":
+		return reviewGate(args[1:], out)
 	default:
 		fmt.Fprintf(out, "review: unknown subcommand %q\n", sub)
 		fmt.Fprintln(out, reviewUsage)
@@ -746,5 +796,202 @@ const reviewFindingsSchema = `{
 // any review state — it performs no LoadState/SaveState call at all.
 func reviewSchemaReviewer(out io.Writer) (bool, int, error) {
 	fmt.Fprintln(out, strings.TrimSpace(reviewFindingsSchema))
+	return true, 0, nil
+}
+
+// reviewValidate handles `review validate --gate pre-commit|pre-push` (spec
+// delivery-gates "Gate CLI command"; design "Data Flow"). It resolves the
+// kill switch with INVERTED polarity from reviewStart: ModeDisabled means
+// the gate does not exist, so it exits 0 silently without touching the
+// receipt or building any candidate identity; any other resolved mode
+// validates, fail-closed to managed (spec delivery-gates "Kill-switch
+// inverted polarity"). An unknown --gate value fails closed before any
+// workspace/receipt access. Gates are strictly read-only — this function
+// and everything it calls never invoke SaveState or WriteReceipt.
+func reviewValidate(args []string, out io.Writer) (bool, int, error) {
+	gateValue, _, err := extractFlagValue(args, "--gate")
+	if err != nil {
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, fmt.Errorf("review validate: %w", err)
+	}
+	gate := rddgate.Gate(gateValue)
+	if gate != rddgate.GatePreCommit && gate != rddgate.GatePrePush {
+		fmt.Fprintf(out, "review validate: unknown gate %q\n", gateValue)
+		return true, 1, fmt.Errorf("review validate: unknown gate %q", gateValue)
+	}
+
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review validate: resolving workspace: %w", err)
+	}
+
+	commonDir, err := reviewstore.GitCommonDir(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review validate: resolving git common dir: %w", err)
+	}
+
+	home, err := userHomeDirFn()
+	if err != nil {
+		return true, 1, fmt.Errorf("review validate: resolving home dir: %w", err)
+	}
+
+	effective, err := resolveEffectiveMode(commonDir, home)
+	if err != nil {
+		return true, 1, fmt.Errorf("review validate: %w", err)
+	}
+	if effective == rdd.ModeDisabled {
+		return true, 0, nil
+	}
+
+	store := reviewstore.NewStore(reviewAuthorityDir(commonDir))
+	receipt, err := store.LoadReceipt()
+	if err != nil {
+		fmt.Fprintln(out, "review validate: review receipt is corrupt")
+		return true, 1, fmt.Errorf("review validate: loading receipt: %w", err)
+	}
+	if receipt == nil {
+		fmt.Fprintln(out, "review validate: no review receipt found; run review lifecycle first")
+		return true, 1, fmt.Errorf("review validate: no review receipt found")
+	}
+
+	switch gate {
+	case rddgate.GatePreCommit:
+		return reviewValidatePreCommit(workspace, receipt, out)
+	default: // rddgate.GatePrePush, the only other value gate can hold here.
+		return reviewValidatePrePush(workspace, receipt, out)
+	}
+}
+
+// reviewValidatePreCommit builds the staged candidate identity, compares it
+// against receipt.Candidate, and evaluates the result against
+// rddgate.GatePreCommit's accept policy (design "Data Flow").
+func reviewValidatePreCommit(workspace string, receipt *reviewstore.ReviewReceipt, out io.Writer) (bool, int, error) {
+	current, err := buildIdentity(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review validate: building candidate identity: %w", err)
+	}
+
+	ancestry, err := buildGateAncestryEvidence(workspace, receipt.Candidate, current)
+	if err != nil {
+		// Ancestry failure degrades safely: pass nil ancestry into Compare
+		// rather than fabricating evidence (spec delivery-gates "Ancestry
+		// evidence"). Compare downgrades to RelationUnknown, which blocks.
+		ancestry = nil
+	}
+
+	relation := rdd.Compare(receipt.Candidate, current, ancestry)
+	result := rddgate.Evaluate(rddgate.GatePreCommit, relation)
+	if !result.Allowed {
+		fmt.Fprintln(out, "review validate: "+result.Reason)
+		return true, 1, fmt.Errorf("review validate: %s", result.Reason)
+	}
+	return true, 0, nil
+}
+
+// reviewValidatePrePush parses git's pre-push stdin protocol, then
+// validates each non-delete ref independently against receipt.Candidate,
+// blocking the entire push if ANY ref's relation is not accepted by
+// rddgate.GatePrePush (spec delivery-gates "Pre-push boundary validation
+// (multi-ref)").
+func reviewValidatePrePush(workspace string, receipt *reviewstore.ReviewReceipt, out io.Writer) (bool, int, error) {
+	refs, err := readPrePushStdin()
+	if err != nil {
+		fmt.Fprintln(out, "review validate: failed to parse pre-push stdin")
+		return true, 1, fmt.Errorf("review validate: parsing pre-push stdin: %w", err)
+	}
+
+	for _, ref := range refs {
+		if rddgate.IsDeleteRef(ref) {
+			// Delete-refs push nothing — gates skip them (spec
+			// delivery-gates "Pre-push boundary validation (multi-ref)").
+			continue
+		}
+
+		current, err := buildIdentityFromCommit(workspace, ref.LocalSHA)
+		if err != nil {
+			return true, 1, fmt.Errorf("review validate: building candidate identity for %s: %w", ref.LocalRef, err)
+		}
+
+		ancestry, err := buildGateAncestryEvidence(workspace, receipt.Candidate, current)
+		if err != nil {
+			ancestry = nil
+		}
+
+		relation := rdd.Compare(receipt.Candidate, current, ancestry)
+		result := rddgate.Evaluate(rddgate.GatePrePush, relation)
+		if !result.Allowed {
+			fmt.Fprintf(out, "review validate: ref %s: %s\n", ref.LocalRef, result.Reason)
+			return true, 1, fmt.Errorf("review validate: ref %s: %s", ref.LocalRef, result.Reason)
+		}
+	}
+
+	return true, 0, nil
+}
+
+// reviewGate dispatches `review gate <verb>` to install or uninstall the RDD
+// pre-commit/pre-push hooks (spec delivery-gates "Hook install/uninstall
+// CLI"). Independent of `review mode enable`/`disable` — installing the
+// hooks never touches the kill switch, and ModeDisabled short-circuits
+// `review validate` regardless of whether the hooks are installed.
+func reviewGate(args []string, out io.Writer) (bool, int, error) {
+	if len(args) == 0 {
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, fmt.Errorf("review gate: verb required (install, uninstall)")
+	}
+
+	verb := args[0]
+	switch verb {
+	case "install":
+		return reviewGateInstall(out)
+	case "uninstall":
+		return reviewGateUninstall(out)
+	default:
+		fmt.Fprintf(out, "review: unknown gate verb %q\n", verb)
+		fmt.Fprintln(out, reviewUsage)
+		return true, 1, nil
+	}
+}
+
+// reviewGateInstall writes the RDD pre-commit and pre-push hook blocks via
+// githooks.WriteBlock, whose subshell wrapping (PR1) makes hook body
+// ordering relative to any other managed block a preference, not a
+// correctness requirement (design "Subshell Wrapping Strategy"). Each hook
+// body is a single line delegating back to `review validate --gate <name>`;
+// pre-push stdin flows naturally through the wrapping subshell to the
+// capiko-ai process (design "Hook Script Design").
+func reviewGateInstall(out io.Writer) (bool, int, error) {
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review gate install: resolving workspace: %w", err)
+	}
+
+	if err := githooks.WriteBlock(workspace, "pre-commit", rddPreCommitMarkerStart, rddPreCommitMarkerEnd, "capiko-ai review validate --gate pre-commit"); err != nil {
+		return true, 1, fmt.Errorf("review gate install: writing pre-commit hook: %w", err)
+	}
+	if err := githooks.WriteBlock(workspace, "pre-push", rddPrePushMarkerStart, rddPrePushMarkerEnd, "capiko-ai review validate --gate pre-push"); err != nil {
+		return true, 1, fmt.Errorf("review gate install: writing pre-push hook: %w", err)
+	}
+
+	fmt.Fprintln(out, "review gate installed: pre-commit, pre-push")
+	return true, 0, nil
+}
+
+// reviewGateUninstall removes only the RDD-marked block from the pre-commit
+// and pre-push hooks, leaving any other managed block (CGA, team-sync)
+// untouched (spec delivery-gates "Uninstall removes only RDD block").
+func reviewGateUninstall(out io.Writer) (bool, int, error) {
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review gate uninstall: resolving workspace: %w", err)
+	}
+
+	if err := githooks.RemoveBlock(workspace, "pre-commit", rddPreCommitMarkerStart, rddPreCommitMarkerEnd); err != nil {
+		return true, 1, fmt.Errorf("review gate uninstall: removing pre-commit hook: %w", err)
+	}
+	if err := githooks.RemoveBlock(workspace, "pre-push", rddPrePushMarkerStart, rddPrePushMarkerEnd); err != nil {
+		return true, 1, fmt.Errorf("review gate uninstall: removing pre-push hook: %w", err)
+	}
+
+	fmt.Fprintln(out, "review gate uninstalled: pre-commit, pre-push")
 	return true, 0, nil
 }

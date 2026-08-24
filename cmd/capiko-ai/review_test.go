@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/martinhg/capiko-ai/internal/githooks"
 	"github.com/martinhg/capiko-ai/internal/rdd"
+	"github.com/martinhg/capiko-ai/internal/rddgate"
 	"github.com/martinhg/capiko-ai/internal/reviewstore"
 )
 
@@ -974,5 +976,493 @@ func TestReviewCaptureResult_StateNotReviewing_Rejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "reviewing") {
 		t.Errorf("err = %v, want it to mention the required reviewing state", err)
+	}
+}
+
+// --- review validate / review gate (PR2c) ---
+
+// withStubBuildIdentity stubs buildIdentity to return identity (or err),
+// mirroring the other seam-var stub helpers above so `review validate
+// --gate pre-commit` tests never need a real git repository.
+func withStubBuildIdentity(t *testing.T, identity rdd.CandidateIdentity, err error) {
+	t.Helper()
+	prev := buildIdentity
+	buildIdentity = func(string) (rdd.CandidateIdentity, error) { return identity, err }
+	t.Cleanup(func() { buildIdentity = prev })
+}
+
+// withStubBuildIdentityFromCommit stubs buildIdentityFromCommit to fn, so
+// `review validate --gate pre-push` tests can vary the returned identity
+// per commit SHA (e.g. one ref passes, another fails).
+func withStubBuildIdentityFromCommit(t *testing.T, fn func(workspace, commitSHA string) (rdd.CandidateIdentity, error)) {
+	t.Helper()
+	prev := buildIdentityFromCommit
+	buildIdentityFromCommit = fn
+	t.Cleanup(func() { buildIdentityFromCommit = prev })
+}
+
+// withStubBuildGateAncestryEvidence stubs buildGateAncestryEvidence to fn,
+// so gate tests can drive rdd.Compare to a specific Relation without a real
+// git repository (BuildGateAncestryEvidence's real implementation shells
+// out to `git diff` + `git patch-id`).
+func withStubBuildGateAncestryEvidence(t *testing.T, fn func(workspace string, a, b rdd.CandidateIdentity) (*rdd.AncestryEvidence, error)) {
+	t.Helper()
+	prev := buildGateAncestryEvidence
+	buildGateAncestryEvidence = fn
+	t.Cleanup(func() { buildGateAncestryEvidence = prev })
+}
+
+// withStubReadPrePushStdin stubs readPrePushStdin to return refs (or err),
+// so `review validate --gate pre-push` tests never need to feed real stdin.
+func withStubReadPrePushStdin(t *testing.T, refs []rddgate.PushRef, err error) {
+	t.Helper()
+	prev := readPrePushStdin
+	readPrePushStdin = func() ([]rddgate.PushRef, error) { return refs, err }
+	t.Cleanup(func() { readPrePushStdin = prev })
+}
+
+// seedReceipt writes a terminal ReviewReceipt directly via WriteReceipt,
+// bypassing `review finalize`, so gate tests can exercise validate in
+// isolation.
+func seedReceipt(t *testing.T, authorityDir string, identity rdd.CandidateIdentity, outcome rdd.LifecycleState) *reviewstore.ReviewReceipt {
+	t.Helper()
+	store := reviewstore.NewStore(authorityDir)
+	receipt := &reviewstore.ReviewReceipt{
+		SchemaVersion: 1,
+		Candidate:     identity,
+		Tier:          rdd.RiskTierElevated,
+		Outcome:       string(outcome),
+		IssuedAt:      "2026-08-21T00:00:00Z",
+	}
+	if err := store.WriteReceipt(receipt); err != nil {
+		t.Fatalf("seedReceipt: WriteReceipt: %v", err)
+	}
+	return receipt
+}
+
+func TestReviewValidate_MissingGateFlag_FailsClosed(t *testing.T) {
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "--gate") {
+		t.Errorf("err = %v, want it to mention --gate", err)
+	}
+}
+
+func TestReviewValidate_UnknownGateValue_FailsClosedBeforeIO(t *testing.T) {
+	// resolveWorkspace must never be reached: unknown --gate values fail
+	// closed before any receipt/candidate access (spec delivery-gates
+	// "Unknown gate value").
+	withStubResolveWorkspace(t, "", errors.New("resolveWorkspace should not be called"))
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "foo"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "unknown gate") {
+		t.Errorf("err = %v, want it to mention unknown gate", err)
+	}
+}
+
+func TestReviewValidate_PreCommit_Disabled_ExitsZeroSilently(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+
+	clonePath := cloneModePath(commonDir)
+	if err := reviewstore.SaveModeRecord(clonePath, &rdd.ModeRecord{
+		SchemaVersion: 1,
+		Mode:          rdd.ModeDisabled,
+		UpdatedAt:     "2026-08-21T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-commit"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	if buf.String() != "" {
+		t.Errorf("output = %q, want empty (silent skip)", buf.String())
+	}
+}
+
+func TestReviewValidate_PrePush_Disabled_ExitsZeroSilently(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+
+	clonePath := cloneModePath(commonDir)
+	if err := reviewstore.SaveModeRecord(clonePath, &rdd.ModeRecord{
+		SchemaVersion: 1,
+		Mode:          rdd.ModeDisabled,
+		UpdatedAt:     "2026-08-21T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-push"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	if buf.String() != "" {
+		t.Errorf("output = %q, want empty (silent skip)", buf.String())
+	}
+}
+
+func TestReviewValidate_PreCommit_NoReceipt_FailsClosed(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	// No mode record: effective mode defaults to managed (fail-closed). No
+	// receipt seeded either.
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-commit"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "no review receipt") {
+		t.Errorf("err = %v, want it to mention no review receipt", err)
+	}
+}
+
+func TestReviewValidate_PreCommit_CorruptReceipt_FailsClosed(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+
+	if err := writeFileAll(filepath.Join(authorityDir, "review-receipt.json"), []byte("{not json")); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-commit"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewValidate_PreCommit_ExactRelation_Passes(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubBuildIdentity(t, identity, nil)
+
+	seedReceipt(t, authorityDir, identity, rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-commit"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewValidate_PreCommit_CompatibleBaseAdvance_Passes(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	receiptIdentity := testCandidateIdentity()
+	currentIdentity := receiptIdentity
+	currentIdentity.BaseTree = "advanced-base-tree-hash"
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubBuildIdentity(t, currentIdentity, nil)
+	withStubBuildGateAncestryEvidence(t, func(string, rdd.CandidateIdentity, rdd.CandidateIdentity) (*rdd.AncestryEvidence, error) {
+		return &rdd.AncestryEvidence{MergeBaseHash: "gate-evidence", APatchID: "patch-1", BPatchID: "patch-1"}, nil
+	})
+
+	seedReceipt(t, authorityDir, receiptIdentity, rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-commit"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewValidate_PreCommit_ChangedRelation_Blocks(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	receiptIdentity := testCandidateIdentity()
+	currentIdentity := receiptIdentity
+	currentIdentity.CandidateTree = "different-candidate-tree-hash"
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubBuildIdentity(t, currentIdentity, nil)
+	withStubBuildGateAncestryEvidence(t, func(string, rdd.CandidateIdentity, rdd.CandidateIdentity) (*rdd.AncestryEvidence, error) {
+		return &rdd.AncestryEvidence{MergeBaseHash: "gate-evidence", APatchID: "patch-1", BPatchID: "patch-2"}, nil
+	})
+
+	seedReceipt(t, authorityDir, receiptIdentity, rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-commit"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "does not cover") {
+		t.Errorf("err = %v, want it to mention the receipt does not cover the candidate", err)
+	}
+}
+
+func TestReviewValidate_PrePush_AllRefsCovered_ExitsZero(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubReadPrePushStdin(t, []rddgate.PushRef{
+		{LocalRef: "refs/heads/main", LocalSHA: "sha-main", RemoteRef: "refs/heads/main", RemoteSHA: "remote-main"},
+		{LocalRef: "refs/heads/feature", LocalSHA: "sha-feature", RemoteRef: "refs/heads/feature", RemoteSHA: "remote-feature"},
+	}, nil)
+	withStubBuildIdentityFromCommit(t, func(workspace, commitSHA string) (rdd.CandidateIdentity, error) {
+		return identity, nil
+	})
+
+	seedReceipt(t, authorityDir, identity, rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-push"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewValidate_PrePush_OneRefUncovered_BlocksEntirePush(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	receiptIdentity := testCandidateIdentity()
+	uncoveredIdentity := receiptIdentity
+	uncoveredIdentity.CandidateTree = "uncovered-candidate-tree-hash"
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubReadPrePushStdin(t, []rddgate.PushRef{
+		{LocalRef: "refs/heads/main", LocalSHA: "sha-good", RemoteRef: "refs/heads/main", RemoteSHA: "remote-main"},
+		{LocalRef: "refs/heads/feature", LocalSHA: "sha-bad", RemoteRef: "refs/heads/feature", RemoteSHA: "remote-feature"},
+	}, nil)
+	withStubBuildIdentityFromCommit(t, func(workspace, commitSHA string) (rdd.CandidateIdentity, error) {
+		if commitSHA == "sha-bad" {
+			return uncoveredIdentity, nil
+		}
+		return receiptIdentity, nil
+	})
+	withStubBuildGateAncestryEvidence(t, func(string, rdd.CandidateIdentity, rdd.CandidateIdentity) (*rdd.AncestryEvidence, error) {
+		return nil, nil
+	})
+
+	seedReceipt(t, authorityDir, receiptIdentity, rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-push"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "refs/heads/feature") {
+		t.Errorf("err = %v, want it to identify the blocking ref refs/heads/feature", err)
+	}
+}
+
+func TestReviewValidate_PrePush_DeleteRefSkipped(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	deletedSHA := strings.Repeat("0", 40)
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubReadPrePushStdin(t, []rddgate.PushRef{
+		{LocalRef: "refs/heads/deleted", LocalSHA: deletedSHA, RemoteRef: "refs/heads/deleted", RemoteSHA: "remote-deleted"},
+		{LocalRef: "refs/heads/main", LocalSHA: "sha-good", RemoteRef: "refs/heads/main", RemoteSHA: "remote-main"},
+	}, nil)
+	called := make(map[string]bool)
+	withStubBuildIdentityFromCommit(t, func(workspace, commitSHA string) (rdd.CandidateIdentity, error) {
+		called[commitSHA] = true
+		return identity, nil
+	})
+
+	seedReceipt(t, authorityDir, identity, rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-push"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	if called[deletedSHA] {
+		t.Errorf("buildIdentityFromCommit called for delete-ref %q, want it skipped", deletedSHA)
+	}
+	if !called["sha-good"] {
+		t.Errorf("buildIdentityFromCommit not called for non-delete ref, want it validated")
+	}
+}
+
+func TestReviewValidate_PrePush_StdinParseError_FailsClosed(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubReadPrePushStdin(t, nil, errors.New("malformed pre-push stdin"))
+
+	seedReceipt(t, authorityDir, testCandidateIdentity(), rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"validate", "--gate", "pre-push"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewGate_RequiresVerb(t *testing.T) {
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"gate"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewGate_UnknownVerb(t *testing.T) {
+	var buf bytes.Buffer
+	handled, exitCode, _ := reviewCommand("review", []string{"gate", "bogus"}, &buf)
+	if !handled || exitCode != 1 {
+		t.Fatalf("handled=%v exitCode=%d, want handled=true exitCode=1", handled, exitCode)
+	}
+	if !strings.Contains(buf.String(), "unknown gate verb") {
+		t.Errorf("output = %q, want it to mention unknown gate verb", buf.String())
+	}
+}
+
+func TestReviewGateInstall_WritesBothHooksWithRDDMarkersAndHookBody(t *testing.T) {
+	workspace := t.TempDir()
+	withStubResolveWorkspace(t, workspace, nil)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"gate", "install"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	preCommit, err := os.ReadFile(filepath.Join(workspace, ".git", "hooks", "pre-commit"))
+	if err != nil {
+		t.Fatalf("reading pre-commit hook: %v", err)
+	}
+	preCommitContent := string(preCommit)
+	if !strings.Contains(preCommitContent, rddPreCommitMarkerStart) || !strings.Contains(preCommitContent, rddPreCommitMarkerEnd) {
+		t.Errorf("pre-commit hook = %q, want it to contain the RDD pre-commit markers", preCommitContent)
+	}
+	if !strings.Contains(preCommitContent, "capiko-ai review validate --gate pre-commit") {
+		t.Errorf("pre-commit hook = %q, want it to invoke review validate --gate pre-commit", preCommitContent)
+	}
+
+	prePush, err := os.ReadFile(filepath.Join(workspace, ".git", "hooks", "pre-push"))
+	if err != nil {
+		t.Fatalf("reading pre-push hook: %v", err)
+	}
+	prePushContent := string(prePush)
+	if !strings.Contains(prePushContent, rddPrePushMarkerStart) || !strings.Contains(prePushContent, rddPrePushMarkerEnd) {
+		t.Errorf("pre-push hook = %q, want it to contain the RDD pre-push markers", prePushContent)
+	}
+	if !strings.Contains(prePushContent, "capiko-ai review validate --gate pre-push") {
+		t.Errorf("pre-push hook = %q, want it to invoke review validate --gate pre-push", prePushContent)
+	}
+}
+
+func TestReviewGateInstall_ResolveWorkspaceError(t *testing.T) {
+	withStubResolveWorkspace(t, "", errors.New("boom"))
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"gate", "install"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+}
+
+func TestReviewGateUninstall_RemovesOnlyRDDBlock(t *testing.T) {
+	workspace := t.TempDir()
+	withStubResolveWorkspace(t, workspace, nil)
+
+	if _, _, err := reviewCommand("review", []string{"gate", "install"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("seeding gate install: %v", err)
+	}
+	// Seed an unrelated block that must survive uninstall.
+	if err := githooks.WriteBlock(workspace, "pre-commit", "# >>> capiko:cga:pre-commit >>>", "# <<< capiko:cga:pre-commit <<<", "echo cga"); err != nil {
+		t.Fatalf("seeding unrelated pre-commit block: %v", err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"gate", "uninstall"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	preCommit, err := os.ReadFile(filepath.Join(workspace, ".git", "hooks", "pre-commit"))
+	if err != nil {
+		t.Fatalf("reading pre-commit hook: %v", err)
+	}
+	preCommitContent := string(preCommit)
+	if strings.Contains(preCommitContent, rddPreCommitMarkerStart) {
+		t.Errorf("pre-commit hook = %q, want the RDD block removed", preCommitContent)
+	}
+	if !strings.Contains(preCommitContent, "capiko:cga:pre-commit") {
+		t.Errorf("pre-commit hook = %q, want the unrelated block preserved", preCommitContent)
+	}
+
+	// The pre-push hook had only the RDD block, so RemoveBlock deletes the
+	// file entirely rather than leaving an inert capiko-only hook behind
+	// (githooks.RemoveBlock: "delete the file when only the capiko-seeded
+	// shebang would remain").
+	prePush, err := os.ReadFile(filepath.Join(workspace, ".git", "hooks", "pre-push"))
+	if err == nil {
+		t.Errorf("pre-push hook = %q, want the file removed (no content left after RDD block removal)", string(prePush))
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("reading pre-push hook: %v", err)
+	}
+}
+
+func TestReviewGateUninstall_ResolveWorkspaceError(t *testing.T) {
+	withStubResolveWorkspace(t, "", errors.New("boom"))
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"gate", "uninstall"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
 	}
 }
