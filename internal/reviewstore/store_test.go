@@ -452,6 +452,37 @@ func TestStore_SaveState_NewFields_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestStore_SaveState_CorrectionFields_RoundTrip covers the R-4a additions
+// to ReviewState (design "Data Model Changes"): CorrectionConsumed and
+// CorrectionAttemptHash round-trip through SaveState/LoadState like the
+// other additive R-2 fields.
+func TestStore_SaveState_CorrectionFields_RoundTrip(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	state := &ReviewState{
+		Version:               0,
+		Candidate:             testCandidate(),
+		State:                 rdd.StateFixValidating,
+		CorrectionConsumed:    true,
+		CorrectionAttemptHash: "attempt-sha-1",
+	}
+
+	if err := s.SaveState(state); err != nil {
+		t.Fatalf("SaveState() error = %v, want nil", err)
+	}
+
+	got, err := s.LoadState()
+	if err != nil {
+		t.Fatalf("LoadState() error = %v, want nil", err)
+	}
+	if !got.CorrectionConsumed {
+		t.Errorf("LoadState().CorrectionConsumed = false, want true")
+	}
+	if got.CorrectionAttemptHash != "attempt-sha-1" {
+		t.Errorf("LoadState().CorrectionAttemptHash = %q, want %q", got.CorrectionAttemptHash, "attempt-sha-1")
+	}
+}
+
 func TestStore_SaveState_NewFields_OmittedWhenZeroValue(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
@@ -465,7 +496,7 @@ func TestStore_SaveState_NewFields_OmittedWhenZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read persisted state: %v", err)
 	}
-	for _, field := range []string{"subject_hash", "selected_lenses", "lens_results", "consent"} {
+	for _, field := range []string{"subject_hash", "selected_lenses", "lens_results", "consent", "correction_consumed", "correction_attempt_hash"} {
 		if strings.Contains(string(data), field) {
 			t.Errorf("persisted state contains %q with zero value, want omitempty to drop it", field)
 		}
@@ -658,6 +689,102 @@ func TestStore_SaveState_FreezeInvariant_UnchangedFreezeFieldsSucceedAfterUnrevi
 	}
 	if got.State != rdd.StateFindingsFrozen {
 		t.Errorf("LoadState().State = %q, want %q", got.State, rdd.StateFindingsFrozen)
+	}
+}
+
+// TestStore_SaveState_FreezeInvariant_CorrectionConsumedMonotonic covers the
+// R-4a monotonic freeze (spec bounded-correction "single-consumption
+// budget"; design "Freeze behavior"): once CorrectionConsumed is true,
+// reverting to false is rejected. Unlike Tier/SelectedLenses/SubjectHash,
+// this freeze is on the field's own value, not on leaving StateUnreviewed.
+func TestStore_SaveState_FreezeInvariant_CorrectionConsumedMonotonic(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:            0,
+		Candidate:          testCandidate(),
+		State:              rdd.StateFixValidating,
+		CorrectionConsumed: true,
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	attempt := &ReviewState{
+		Version:            first.Version,
+		Candidate:          testCandidate(),
+		State:              rdd.StateEscalated,
+		CorrectionConsumed: false,
+	}
+	err := s.SaveState(attempt)
+	if !errors.Is(err, ErrFreezeViolation) {
+		t.Fatalf("SaveState() error = %v, want errors.Is(err, ErrFreezeViolation)", err)
+	}
+
+	got, loadErr := s.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState() error = %v", loadErr)
+	}
+	if !got.CorrectionConsumed {
+		t.Errorf("LoadState().CorrectionConsumed = false after rejected write, want true (unchanged)")
+	}
+	if got.Version != first.Version {
+		t.Errorf("LoadState().Version = %d after rejected write, want %d (unchanged)", got.Version, first.Version)
+	}
+}
+
+// TestStore_SaveState_FreezeInvariant_CorrectionConsumedTrueToTrueAllowed
+// covers the exact-replay path (design "Exact replay"): re-saving with
+// CorrectionConsumed already true and staying true is not a freeze
+// violation.
+func TestStore_SaveState_FreezeInvariant_CorrectionConsumedTrueToTrueAllowed(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:            0,
+		Candidate:          testCandidate(),
+		State:              rdd.StateFixValidating,
+		CorrectionConsumed: true,
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	second := &ReviewState{
+		Version:            first.Version,
+		Candidate:          testCandidate(),
+		State:              rdd.StateReadyFinalVerification,
+		CorrectionConsumed: true,
+	}
+	if err := s.SaveState(second); err != nil {
+		t.Fatalf("SaveState() error = %v, want nil when CorrectionConsumed stays true", err)
+	}
+}
+
+// TestStore_SaveState_FreezeInvariant_CorrectionConsumedFalseToTrueAllowed
+// covers the normal consumption path: false -> true is the expected
+// transition when a correction is first consumed, and must not be rejected.
+func TestStore_SaveState_FreezeInvariant_CorrectionConsumedFalseToTrueAllowed(t *testing.T) {
+	s := NewStore(t.TempDir())
+
+	first := &ReviewState{
+		Version:            0,
+		Candidate:          testCandidate(),
+		State:              rdd.StateFixRequired,
+		CorrectionConsumed: false,
+	}
+	if err := s.SaveState(first); err != nil {
+		t.Fatalf("seed SaveState() error = %v, want nil", err)
+	}
+
+	second := &ReviewState{
+		Version:            first.Version,
+		Candidate:          testCandidate(),
+		State:              rdd.StateFixValidating,
+		CorrectionConsumed: true,
+	}
+	if err := s.SaveState(second); err != nil {
+		t.Fatalf("SaveState() error = %v, want nil when CorrectionConsumed transitions false -> true", err)
 	}
 }
 

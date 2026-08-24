@@ -1,6 +1,9 @@
 package rdd
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // LifecycleState is a review candidate's position in the R-2 review
 // lifecycle (spec review-lifecycle: "typed 12-state machine replacing
@@ -123,6 +126,33 @@ func ValidateTransition(from, to LifecycleState) error {
 		return fmt.Errorf("rdd: invalid transition %q -> %q: %q is a terminal state with no outbound transitions", from, to, from)
 	}
 	return fmt.Errorf("rdd: invalid transition %q -> %q: not in the lifecycle transition table", from, to)
+}
+
+// AvailableTransitions returns the sorted set of valid target states from
+// state, per the same fail-closed transition table ValidateTransition uses
+// (spec bounded-correction / review-status-cli "Transition lookup"; design
+// "AvailableTransitions"). Terminal states return an empty slice (design:
+// "no new states"; validTransitions maps every terminal to an empty set).
+// An unrecognized state returns nil rather than a fabricated transition
+// set — the exported function preserves ValidateTransition's encapsulation
+// of validTransitions rather than exposing the map directly (design
+// "AvailableTransitions": "Function preserves encapsulation"). Sorting
+// gives deterministic CLI/JSON rendering (design: "sorted output gives
+// deterministic CLI/JSON rendering").
+func AvailableTransitions(state LifecycleState) []LifecycleState {
+	targets, known := validTransitions[state]
+	if !known {
+		return nil
+	}
+
+	var transitions []LifecycleState
+	for to, ok := range targets {
+		if ok {
+			transitions = append(transitions, to)
+		}
+	}
+	sort.Slice(transitions, func(i, j int) bool { return transitions[i] < transitions[j] })
+	return transitions
 }
 
 // IsTerminal reports whether s is a terminal lifecycle state: approved,

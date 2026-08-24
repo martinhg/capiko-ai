@@ -58,6 +58,15 @@ type ReviewState struct {
 	LensResults    map[rdd.Lens]LensResult `json:"lens_results,omitempty"`
 	Consent        *rdd.ConsentResult      `json:"consent,omitempty"`
 
+	// CorrectionConsumed and CorrectionAttemptHash are additive R-4a fields
+	// (spec bounded-correction: "single-consumption budget"; design "Data
+	// Model Changes"). They are omitempty so pre-R-4a records serialize and
+	// deserialize unchanged, and SchemaVersion stays 1. CorrectionConsumed
+	// freezes monotonically once true (checkFreezeInvariant), independent of
+	// the unreviewed-exit freeze that governs Tier/SelectedLenses/SubjectHash.
+	CorrectionConsumed    bool   `json:"correction_consumed,omitempty"`
+	CorrectionAttemptHash string `json:"correction_attempt_hash,omitempty"`
+
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -217,6 +226,15 @@ func (s *Store) SaveState(state *ReviewState) error {
 func checkFreezeInvariant(current, next *ReviewState) error {
 	if current == nil {
 		return nil
+	}
+	// CorrectionConsumed freezes monotonically on its own value (spec
+	// bounded-correction "single-consumption budget"; design "Freeze
+	// behavior"): once consumed, always consumed. This is independent of
+	// the unreviewed-exit freeze below — it applies even while State is
+	// still unreviewed, since CorrectionConsumed only ever becomes true
+	// well past that point in the lifecycle.
+	if current.CorrectionConsumed && !next.CorrectionConsumed {
+		return fmt.Errorf("%w: correction_consumed changed from true to false", ErrFreezeViolation)
 	}
 	if current.State == "" || current.State == rdd.StateUnreviewed {
 		return nil
