@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.27.0](https://github.com/martinhg/capiko-ai/compare/v1.26.0...v1.27.0) (2026-08-25)
+
+
+### Features
+
+* **cmd:** add review correct verb for bounded fix-lane correction ([#234](https://github.com/martinhg/capiko-ai/issues/234)) ([8416cb3](https://github.com/martinhg/capiko-ai/commit/8416cb30cb48ddeedf93b2e105fb2ed75ed9afe9))
+* **cmd:** add review finalize and schema reviewer CLI commands (R-2 PR6/6) ([#227](https://github.com/martinhg/capiko-ai/issues/227)) ([f3143c0](https://github.com/martinhg/capiko-ai/commit/f3143c0288e0d3051ba679f3cd6d437ee4fb2860))
+* **cmd:** add review mode CLI command and dispatch wiring (R-1 PR6/6) ([#220](https://github.com/martinhg/capiko-ai/issues/220)) ([2f8bc80](https://github.com/martinhg/capiko-ai/commit/2f8bc80dc9c6827dfc81e2c69cf844222915ea60))
+* **cmd:** add review mode enable/disable/status CLI command ([48e43a4](https://github.com/martinhg/capiko-ai/commit/48e43a45544b5fdc9f70b664bdd3aad0152c884a))
+* **cmd:** add review start and capture-result CLI commands (R-2 PR5/6) ([#226](https://github.com/martinhg/capiko-ai/issues/226)) ([2e24b67](https://github.com/martinhg/capiko-ai/commit/2e24b67880d0d86ffab574e7c4fc621d28eda319))
+* **cmd:** add review status verb ([#235](https://github.com/martinhg/capiko-ai/issues/235)) ([cd4a0be](https://github.com/martinhg/capiko-ai/commit/cd4a0beeb7a762aabec525ebfee589b101b5b8b7))
+* **cmd:** add review validate and gate install/uninstall commands ([#232](https://github.com/martinhg/capiko-ai/issues/232)) ([dfefa7f](https://github.com/martinhg/capiko-ai/commit/dfefa7f85f445afe35a0d0b76aa44024a76668b7))
+* **cmd:** wire review command into dispatch and usage ([e009af7](https://github.com/martinhg/capiko-ai/commit/e009af7e535f7e109056668be13dfc51f766bb57))
+* **githooks:** subshell-wrap injected blocks to fix multi-block dead-code hazard ([#229](https://github.com/martinhg/capiko-ai/issues/229)) ([cc40b2e](https://github.com/martinhg/capiko-ai/commit/cc40b2e70e865312dfa1153ccebdfb4634ce06c3))
+* **rdd:** add 12-state lifecycle machine with transition table ([6206b58](https://github.com/martinhg/capiko-ai/commit/6206b58983091c5b69e7368406588bb6446610f1))
+* **rdd:** add 12-state lifecycle machine with transition table (R-2 PR1/6) ([edc8c0d](https://github.com/martinhg/capiko-ai/commit/edc8c0de98ab469004de19d49128d096f7e1df35))
+* **rdd:** add 4 canonical lens mandates with tier-based selection ([2778c80](https://github.com/martinhg/capiko-ai/commit/2778c80774af51b90d15b9799d9c4566956878f9))
+* **rdd:** add CandidateIdentity and deterministic digest/compare ([2b75fb8](https://github.com/martinhg/capiko-ai/commit/2b75fb8884277f0821c804bbe4a81c8d3c2b7635))
+* **rdd:** add CandidateIdentity and RiskClassifier (R-1 PR1/6) ([#215](https://github.com/martinhg/capiko-ai/issues/215)) ([640707b](https://github.com/martinhg/capiko-ai/commit/640707b48a5bb060ae76e29670b39fc196b19303))
+* **rdd:** add contract-based consent type and flag parser ([a7642c2](https://github.com/martinhg/capiko-ai/commit/a7642c2a5f91be938da62d7830a0f1c828324339))
+* **rdd:** add deterministic tier 0/1 risk classifier ([f3b2a89](https://github.com/martinhg/capiko-ai/commit/f3b2a89807e15a6e68aafb73dc6c2825a7137f19))
+* **rdd:** add kill switch mode resolution ([9811bb8](https://github.com/martinhg/capiko-ai/commit/9811bb8cc4425308ff2e8eee124dfa875b77630e))
+* **rdd:** add kill switch mode resolution and persistence (R-1 PR2/6) ([#216](https://github.com/martinhg/capiko-ai/issues/216)) ([9a3a013](https://github.com/martinhg/capiko-ai/commit/9a3a013adedb59335fc9303f977864fea6a29649))
+* **rdd:** add tier 4 classification, lens mandates, and consent type (R-2 PR3/6) ([69e9199](https://github.com/martinhg/capiko-ai/commit/69e9199bb83f69de75b7811b914b336193cd9e25))
+* **rdd:** add tier 4 risk classification with hot-path patterns ([46fb745](https://github.com/martinhg/capiko-ai/commit/46fb745d3bbb1f74ccdb904c5aa895d8fcceef1b))
+* **rdd:** extend relation algebra to 7 values with ancestry evidence ([c265cea](https://github.com/martinhg/capiko-ai/commit/c265ceafa55c289b1c171105e31f778f7c30c328))
+* **rdd:** extend relation algebra to 7 values with ancestry evidence (R-2 PR2/6) ([d54573d](https://github.com/martinhg/capiko-ai/commit/d54573d20daba41f89018b678ea59a264be5b26a))
+* **rddgate:** add gate evaluation and push-ref parsing ([#230](https://github.com/martinhg/capiko-ai/issues/230)) ([2abead7](https://github.com/martinhg/capiko-ai/commit/2abead7aba8679fe7125edc9350ef989c6b54116))
+* **release:** sign releases with cosign keyless ([50ddff4](https://github.com/martinhg/capiko-ai/commit/50ddff49b24f383f97860f08a8a3647af980b9cc))
+* **release:** sign releases with cosign keyless ([#213](https://github.com/martinhg/capiko-ai/issues/213)) ([7b04c5b](https://github.com/martinhg/capiko-ai/commit/7b04c5be174be5055256e99764dc99b2f4fb2b2d))
+* **reviewstore:** add BuildAncestryEvidence orchestration ([1d22bda](https://github.com/martinhg/capiko-ai/commit/1d22bdacde65c9bb5732bee7de20a81250e2907d))
+* **reviewstore:** add CAS-protected authority store ([69c999c](https://github.com/martinhg/capiko-ai/commit/69c999c5dfd3b7009dc8e0f01c71b4138ff2d3c6))
+* **reviewstore:** add CAS-protected authority store (R-1 PR5/6) ([#219](https://github.com/martinhg/capiko-ai/issues/219)) ([6db42fb](https://github.com/martinhg/capiko-ai/commit/6db42fb642661e2e61d91db10bde6b875783416d))
+* **reviewstore:** add correction budget fields and path-scope helpers ([#233](https://github.com/martinhg/capiko-ai/issues/233)) ([54ebb38](https://github.com/martinhg/capiko-ai/commit/54ebb38ae7a0349f80df829c897b931f6fef5808))
+* **reviewstore:** add flock locking and git command seams (R-1 PR3/6) ([#217](https://github.com/martinhg/capiko-ai/issues/217)) ([d9ad311](https://github.com/martinhg/capiko-ai/commit/d9ad311b9c29cc70729835404047b8f85af51c8b))
+* **reviewstore:** add flock-based single-writer locking ([e23f75f](https://github.com/martinhg/capiko-ai/commit/e23f75feb172df8d8b35a68cce900e89a7119c3c))
+* **reviewstore:** add gate boundary evidence seams ([#231](https://github.com/martinhg/capiko-ai/issues/231)) ([f8d16dc](https://github.com/martinhg/capiko-ai/commit/f8d16dc3556de47e5dd33158b4a69eb765e3cba8))
+* **reviewstore:** add git command seams and output parsers ([5453df9](https://github.com/martinhg/capiko-ai/commit/5453df999b724e4600ba114d849c1dda89926cd6))
+* **reviewstore:** add gitMergeBase and gitPatchID ancestry seams ([e11dd2b](https://github.com/martinhg/capiko-ai/commit/e11dd2b391436db76ede64cb1dfc797847d6462f))
+* **reviewstore:** add kill switch mode persistence ([809c121](https://github.com/martinhg/capiko-ai/commit/809c1214d5dd4fb1dcefbf8682a3ce7a94b05fee))
+* **reviewstore:** enforce freeze invariant in SaveState (R-2 verify W-1) ([#228](https://github.com/martinhg/capiko-ai/issues/228)) ([bc9cb2a](https://github.com/martinhg/capiko-ai/commit/bc9cb2a8b5d3698b495857cdbdf920a8025376c6))
+* **reviewstore:** extend ReviewState with lifecycle fields and ancestry seams (R-2 PR4/6) ([f97ef03](https://github.com/martinhg/capiko-ai/commit/f97ef0376dc541ff83e4aad43845f01e2caf47d2))
+* **reviewstore:** extend ReviewState with lifecycle, lenses, and consent fields ([62c92d9](https://github.com/martinhg/capiko-ai/commit/62c92d9a7fbac616e5de1d7daed73f74b734915d))
+* **reviewstore:** orchestrate git seams into BuildIdentity ([bf9c18a](https://github.com/martinhg/capiko-ai/commit/bf9c18aa4724806ec2a7cd4d2b2e5287d43e9412))
+* **reviewstore:** orchestrate git seams into BuildIdentity (R-1 PR4/6) ([#218](https://github.com/martinhg/capiko-ai/issues/218)) ([6343918](https://github.com/martinhg/capiko-ai/commit/634391890bd934d0039318eb99ea83c301961a04))
+
 ## [1.26.0](https://github.com/martinhg/capiko-ai/compare/v1.25.0...v1.26.0) (2026-08-20)
 
 
