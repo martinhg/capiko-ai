@@ -795,7 +795,12 @@ func TestReviewFinalize_FromFindingsFrozen_DrivesToApprovedAndWritesReceipt(t *t
 	}
 }
 
-func TestReviewFinalize_FixRequiredPath_EscalatesWithoutFixCLI(t *testing.T) {
+// TestReviewFinalize_FixRequiredPath_StopsAtFixRequired_NoAutoWalk replaces
+// the R-2-era "auto-escalate" test: R-4a wires a real `review correct` CLI
+// for the fix lane, so finalize no longer walks fix_required all the way to
+// escalated on its own (spec review-lifecycle MODIFIED: "Finalize stops at
+// fix_required"; design "Finalize fix-path behavior").
+func TestReviewFinalize_FixRequiredPath_StopsAtFixRequired_NoAutoWalk(t *testing.T) {
 	workspace := t.TempDir()
 	commonDir := filepath.Join(workspace, ".git")
 	authorityDir := reviewAuthorityDir(commonDir)
@@ -818,19 +823,129 @@ func TestReviewFinalize_FixRequiredPath_EscalatesWithoutFixCLI(t *testing.T) {
 	if loadErr != nil {
 		t.Fatalf("LoadState: %v", loadErr)
 	}
-	if state.State != rdd.StateEscalated {
-		t.Errorf("State = %q, want %q (no fix CLI in R-2, fix_required must auto-escalate)", state.State, rdd.StateEscalated)
+	if state.State != rdd.StateFixRequired {
+		t.Errorf("State = %q, want %q (finalize must stop at fix_required, not auto-walk)", state.State, rdd.StateFixRequired)
 	}
 
 	receipt, receiptErr := store.LoadReceipt()
 	if receiptErr != nil {
 		t.Fatalf("LoadReceipt: %v", receiptErr)
 	}
-	if receipt == nil {
-		t.Fatal("LoadReceipt() = nil, want a terminal receipt")
+	if receipt != nil {
+		t.Errorf("LoadReceipt() = %+v, want nil (fix_required is not terminal, no receipt yet)", receipt)
 	}
-	if receipt.Outcome != string(rdd.StateEscalated) {
-		t.Errorf("receipt.Outcome = %q, want %q", receipt.Outcome, rdd.StateEscalated)
+}
+
+// TestReviewFinalize_FromFixValidating_DefaultAdvancesToApproved exercises
+// the new fix_validating entry state (spec review-lifecycle MODIFIED:
+// "Finalize entry states" accepts both findings_frozen and fix_validating).
+// With the real (non-stubbed) finalizeVerificationOutcome, a fix_validating
+// review always advances to ready_final_verification (path scope was
+// already checked by `review correct`) and then default-approves at
+// final_verifying, exactly like the pre-existing no-fix path.
+func TestReviewFinalize_FromFixValidating_DefaultAdvancesToApproved(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 15, 0, 0, 0, time.UTC))
+
+	seedStateAt(t, authorityDir, identity, rdd.StateFixValidating, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateApproved {
+		t.Errorf("State = %q, want %q (fix_validating default advances through ready_final_verification/final_verifying to approved)", state.State, rdd.StateApproved)
+	}
+
+	receipt, receiptErr := store.LoadReceipt()
+	if receiptErr != nil {
+		t.Fatalf("LoadReceipt: %v", receiptErr)
+	}
+	if receipt == nil || receipt.Outcome != string(rdd.StateApproved) {
+		t.Errorf("LoadReceipt() = %+v, want outcome=approved", receipt)
+	}
+}
+
+// TestReviewFinalize_FromFixValidating_StubbedEscalated_StopsWithoutFinalVerifying
+// drives finalizeVerificationOutcome's fix_validating decision point to
+// escalated (spec review-lifecycle MODIFIED: "Fix-validation outcome ...
+// resolve fix_validating to ready_final_verification on compliance or
+// escalated/invalidated otherwise") and confirms finalize stops there
+// instead of continuing into final_verifying.
+func TestReviewFinalize_FromFixValidating_StubbedEscalated_StopsWithoutFinalVerifying(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 15, 0, 0, 0, time.UTC))
+	withStubFinalizeVerificationOutcome(t, rdd.StateEscalated)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateFixValidating, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"finalize"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateEscalated {
+		t.Errorf("State = %q, want %q", state.State, rdd.StateEscalated)
+	}
+
+	receipt, receiptErr := store.LoadReceipt()
+	if receiptErr != nil {
+		t.Fatalf("LoadReceipt: %v", receiptErr)
+	}
+	if receipt == nil || receipt.Outcome != string(rdd.StateEscalated) {
+		t.Errorf("LoadReceipt() = %+v, want outcome=escalated", receipt)
+	}
+}
+
+// TestFinalizeRequiresFix_Default_TrueWhenLensFindingsHavePaths exercises
+// the rewired finalizeRequiresFix default (spec review-lifecycle MODIFIED:
+// "Fix-required decision ... true when frozen LensResults contain at least
+// one non-empty finding set"; design seam catalog: "iterate LensResults,
+// call ExtractFindingPaths, check non-empty").
+func TestFinalizeRequiresFix_Default_TrueWhenLensFindingsHavePaths(t *testing.T) {
+	state := &reviewstore.ReviewState{
+		LensResults: map[rdd.Lens]reviewstore.LensResult{
+			rdd.LensRisk: {Findings: json.RawMessage(`{"issues":[{"severity":"warning","path":"a.go","message":"x"}]}`)},
+		},
+	}
+	if !finalizeRequiresFix(state) {
+		t.Errorf("finalizeRequiresFix(...) = false, want true when a lens finding has a path")
+	}
+}
+
+// TestFinalizeRequiresFix_Default_FalseWhenNoFindingPaths covers both the
+// no-findings and empty-issues cases: neither should require a fix.
+func TestFinalizeRequiresFix_Default_FalseWhenNoFindingPaths(t *testing.T) {
+	state := &reviewstore.ReviewState{
+		LensResults: map[rdd.Lens]reviewstore.LensResult{
+			rdd.LensRisk: {Findings: json.RawMessage(`{"issues":[]}`)},
+		},
+	}
+	if finalizeRequiresFix(state) {
+		t.Errorf("finalizeRequiresFix(...) = true, want false when findings carry no paths")
 	}
 }
 
@@ -976,6 +1091,309 @@ func TestReviewCaptureResult_StateNotReviewing_Rejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "reviewing") {
 		t.Errorf("err = %v, want it to mention the required reviewing state", err)
+	}
+}
+
+// --- review correct (R-4a PR2) ---
+
+// withStubChangedPathsFn stubs changedPathsFn to return paths/err regardless
+// of its arguments, mirroring the other seam-var stub helpers above (design
+// "Seam Catalog": test helpers follow the established withStubBuildCandidate
+// pattern) so `review correct` tests never need a real git repository.
+func withStubChangedPathsFn(t *testing.T, paths []string, err error) {
+	t.Helper()
+	prev := changedPathsFn
+	changedPathsFn = func(string, string, string) ([]string, error) { return paths, err }
+	t.Cleanup(func() { changedPathsFn = prev })
+}
+
+// seedFixRequiredState seeds a review-state.json at State=fix_required with
+// a single lens result whose findings carry the given paths, and the given
+// correction-budget fields — used by `review correct` tests (spec
+// bounded-correction) to start from a known fix_required state without
+// driving the full lifecycle from `review start`.
+func seedFixRequiredState(t *testing.T, authorityDir string, identity rdd.CandidateIdentity, findingPaths []string, correctionConsumed bool, correctionAttemptHash string) *reviewstore.ReviewState {
+	t.Helper()
+	issues := make([]map[string]string, 0, len(findingPaths))
+	for _, p := range findingPaths {
+		issues = append(issues, map[string]string{"path": p, "severity": "warning", "message": "finding"})
+	}
+	findingsJSON, err := json.Marshal(map[string]interface{}{"issues": issues})
+	if err != nil {
+		t.Fatalf("seedFixRequiredState: marshal findings: %v", err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	st := &reviewstore.ReviewState{
+		SchemaVersion:  1,
+		Candidate:      identity,
+		Tier:           rdd.RiskTierElevated,
+		Lenses:         1,
+		State:          rdd.StateFixRequired,
+		SubjectHash:    computeSubjectHash(identity),
+		SelectedLenses: []rdd.Lens{rdd.LensRisk},
+		LensResults: map[rdd.Lens]reviewstore.LensResult{
+			rdd.LensRisk: {
+				LensID:      rdd.LensRisk,
+				SubjectHash: computeSubjectHash(identity),
+				Findings:    json.RawMessage(findingsJSON),
+				CapturedAt:  "2026-08-21T00:00:00Z",
+			},
+		},
+		CorrectionConsumed:    correctionConsumed,
+		CorrectionAttemptHash: correctionAttemptHash,
+		CreatedAt:             "2026-08-21T00:00:00Z",
+		UpdatedAt:             "2026-08-21T00:00:00Z",
+	}
+	if err := store.SaveState(st); err != nil {
+		t.Fatalf("seedFixRequiredState: SaveState: %v", err)
+	}
+	return st
+}
+
+// TestReviewCommandRoutesCorrectVerb proves the dispatcher routes "correct"
+// to reviewCorrect rather than falling back to the unknown-subcommand
+// handler (spec review-cli-commands "New verb dispatch"): with no review
+// state seeded, reviewCorrect's own fix_required precondition rejects the
+// call, which only happens if the dispatcher actually routed to it.
+func TestReviewCommandRoutesCorrectVerb(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"correct"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if strings.Contains(buf.String(), "unknown subcommand") {
+		t.Errorf("output = %q, dispatcher fell back to unknown-subcommand handling for %q", buf.String(), "correct")
+	}
+	if !strings.Contains(err.Error(), "fix_required") {
+		t.Errorf("err = %v, want it to mention the required fix_required state", err)
+	}
+}
+
+// TestReviewCorrect_WrongPrecondition_RejectedNoMutation covers spec
+// bounded-correction "Wrong precondition state rejected": a review not in
+// fix_required is rejected before any state or budget mutation.
+func TestReviewCorrect_WrongPrecondition_RejectedNoMutation(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seeded := seedReviewingState(t, authorityDir, identity, []rdd.Lens{rdd.LensRisk}, nil)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"correct"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "fix_required") {
+		t.Errorf("err = %v, want it to mention the required fix_required state", err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.Version != seeded.Version || state.State != rdd.StateReviewing {
+		t.Errorf("state = %+v, want unchanged from seeded %+v", state, seeded)
+	}
+}
+
+// TestReviewCorrect_KillSwitchDisabled_BlocksStateAndBudgetUnchanged covers
+// spec bounded-correction "Kill switch blocks correction": normal polarity,
+// like reviewStart — ModeDisabled blocks with an actionable error and
+// mutates nothing.
+func TestReviewCorrect_KillSwitchDisabled_BlocksStateAndBudgetUnchanged(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+
+	clonePath := cloneModePath(commonDir)
+	if err := reviewstore.SaveModeRecord(clonePath, &rdd.ModeRecord{
+		SchemaVersion: 1,
+		Mode:          rdd.ModeDisabled,
+		UpdatedAt:     "2026-08-21T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	seeded := seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, false, "")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"correct"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "managed") {
+		t.Errorf("err = %v, want it to mention managed", err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.Version != seeded.Version || state.State != rdd.StateFixRequired || state.CorrectionConsumed {
+		t.Errorf("state = %+v, want unchanged from seeded %+v (kill switch must block before any mutation)", state, seeded)
+	}
+}
+
+// TestReviewCorrect_ExactReplay_NoOpNoReconsumption covers spec
+// bounded-correction "Exact replay idempotency": a byte-identical correction
+// request (same CorrectionAttemptHash, already consumed) replays as a no-op
+// success and does not re-consume the budget or advance state.
+func TestReviewCorrect_ExactReplay_NoOpNoReconsumption(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	correctionIdentity := identity
+	correctionIdentity.CandidateTree = "corrected-candidate-tree-hash"
+	attemptHash := computeSubjectHash(correctionIdentity)
+
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubBuildCandidate(t, correctionIdentity, nil, nil)
+
+	seeded := seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, true, attemptHash)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"correct"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.Version != seeded.Version {
+		t.Errorf("Version = %d, want %d (exact replay must not re-consume or mutate state)", state.Version, seeded.Version)
+	}
+	if state.State != rdd.StateFixRequired {
+		t.Errorf("State = %q, want %q unchanged", state.State, rdd.StateFixRequired)
+	}
+	if !state.CorrectionConsumed {
+		t.Errorf("CorrectionConsumed = false, want true (stays true)")
+	}
+}
+
+// TestReviewCorrect_InScopeCorrection_AdvancesAndConsumesBudget covers spec
+// bounded-correction "In-scope correction advances the fix lane".
+func TestReviewCorrect_InScopeCorrection_AdvancesAndConsumesBudget(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	correctionIdentity := identity
+	correctionIdentity.CandidateTree = "corrected-candidate-tree-hash"
+
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 16, 0, 0, 0, time.UTC))
+	withStubBuildCandidate(t, correctionIdentity, nil, nil)
+	withStubChangedPathsFn(t, []string{"a.go"}, nil)
+
+	seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, false, "")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"correct"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateFixValidating {
+		t.Errorf("State = %q, want %q", state.State, rdd.StateFixValidating)
+	}
+	if !state.CorrectionConsumed {
+		t.Errorf("CorrectionConsumed = false, want true")
+	}
+	wantHash := computeSubjectHash(correctionIdentity)
+	if state.CorrectionAttemptHash != wantHash {
+		t.Errorf("CorrectionAttemptHash = %q, want %q", state.CorrectionAttemptHash, wantHash)
+	}
+}
+
+// TestReviewCorrect_OutOfScopeCorrection_InvalidatesConsumesBudgetAndRejectsRetry
+// covers spec bounded-correction "Out-of-scope correction invalidates and
+// still consumes budget": an out-of-scope path invalidates the review,
+// still consumes the single-consumption budget, and a retry is rejected
+// because the review is now in a terminal state.
+func TestReviewCorrect_OutOfScopeCorrection_InvalidatesConsumesBudgetAndRejectsRetry(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	home := t.TempDir()
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	correctionIdentity := identity
+	correctionIdentity.CandidateTree = "corrected-candidate-tree-hash"
+
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+	withStubUserHomeDir(t, home, nil)
+	withStubReviewNow(t, time.Date(2026, 8, 21, 16, 0, 0, 0, time.UTC))
+	withStubBuildCandidate(t, correctionIdentity, nil, nil)
+	withStubChangedPathsFn(t, []string{"c.go"}, nil)
+
+	seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, false, "")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"correct"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+
+	store := reviewstore.NewStore(authorityDir)
+	state, loadErr := store.LoadState()
+	if loadErr != nil {
+		t.Fatalf("LoadState: %v", loadErr)
+	}
+	if state.State != rdd.StateInvalidated {
+		t.Errorf("State = %q, want %q", state.State, rdd.StateInvalidated)
+	}
+	if !state.CorrectionConsumed {
+		t.Errorf("CorrectionConsumed = false, want true (budget still consumed on invalidation)")
+	}
+
+	receipt, receiptErr := store.LoadReceipt()
+	if receiptErr != nil {
+		t.Fatalf("LoadReceipt: %v", receiptErr)
+	}
+	if receipt == nil || receipt.Outcome != string(rdd.StateInvalidated) {
+		t.Errorf("LoadReceipt() = %+v, want outcome=invalidated", receipt)
+	}
+
+	// Retry after invalidation must be rejected — the state is terminal.
+	var buf2 bytes.Buffer
+	handled, exitCode, err = reviewCommand("review", []string{"correct"}, &buf2)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("retry: handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "fix_required") {
+		t.Errorf("retry err = %v, want it to mention the required fix_required state", err)
 	}
 }
 
