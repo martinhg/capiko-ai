@@ -1884,3 +1884,349 @@ func TestReviewGateUninstall_ResolveWorkspaceError(t *testing.T) {
 		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
 	}
 }
+
+// --- review status (PR3) ---
+
+// TestReviewCommandRoutesStatusVerb proves the dispatcher routes "status" to
+// reviewStatus rather than falling back to the unknown-subcommand handler
+// (spec review-cli-commands "New verb dispatch"): with no review state
+// seeded, reviewStatus still succeeds (it is read-only and always
+// available), defaulting to state=unreviewed.
+func TestReviewCommandRoutesStatusVerb(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	if strings.Contains(buf.String(), "unknown subcommand") {
+		t.Errorf("output = %q, dispatcher fell back to unknown-subcommand handling for %q", buf.String(), "status")
+	}
+	if !strings.Contains(buf.String(), "unreviewed") {
+		t.Errorf("output = %q, want it to show state=unreviewed with no review state seeded", buf.String())
+	}
+}
+
+// TestReviewStatus_Human_FixRequired_ShowsTransitionsAndCorrectionBudget
+// covers spec review-status-cli "Human status for an in-progress review"
+// (design "Human format"): state, terminal, transitions, and correction
+// budget on four aligned lines.
+func TestReviewStatus_Human_FixRequired_ShowsTransitionsAndCorrectionBudget(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, false, "")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	want := "state:       fix_required\n" +
+		"terminal:    no\n" +
+		"transitions: fixing, invalidated\n" +
+		"correction:  available (not consumed)\n"
+	if buf.String() != want {
+		t.Errorf("output = %q, want %q", buf.String(), want)
+	}
+}
+
+// TestReviewStatus_Human_CorrectionConsumed_ShowsHash triangulates the
+// correction-budget line against a second, different input: once
+// CorrectionConsumed is true, the line must reflect that instead of the
+// "available" default.
+func TestReviewStatus_Human_CorrectionConsumed_ShowsHash(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, true, "deadbeef")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "correction:  consumed (hash: deadbeef)") {
+		t.Errorf("output = %q, want it to show consumed correction with hash", buf.String())
+	}
+}
+
+// TestReviewStatus_JSONFormat_FixRequired_ExactSchema covers spec
+// review-status-cli "Negotiated JSON output" (design "JSON schema"): the
+// {state, terminal, transitions, correction} keys with the exact values
+// design's fix_required example specifies.
+func TestReviewStatus_JSONFormat_FixRequired_ExactSchema(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, false, "")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status", "--format", "json"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	var payload struct {
+		State       string   `json:"state"`
+		Terminal    bool     `json:"terminal"`
+		Transitions []string `json:"transitions"`
+		Correction  *struct {
+			Consumed    bool   `json:"consumed"`
+			AttemptHash string `json:"attempt_hash"`
+		} `json:"correction"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput=%s", err, buf.String())
+	}
+	if payload.State != "fix_required" {
+		t.Errorf("state = %q, want %q", payload.State, "fix_required")
+	}
+	if payload.Terminal {
+		t.Errorf("terminal = true, want false")
+	}
+	if len(payload.Transitions) != 2 || payload.Transitions[0] != "fixing" || payload.Transitions[1] != "invalidated" {
+		t.Errorf("transitions = %v, want [fixing invalidated]", payload.Transitions)
+	}
+	if payload.Correction == nil || payload.Correction.Consumed || payload.Correction.AttemptHash != "" {
+		t.Errorf("correction = %+v, want {consumed:false attempt_hash:\"\"}", payload.Correction)
+	}
+}
+
+// TestReviewStatus_JSONFormat_ReviewingState covers spec review-status-cli
+// "JSON status": GIVEN state=reviewing, WHEN `review status --format json`
+// runs, THEN output is valid JSON containing "state":"reviewing" and a
+// transitions array.
+func TestReviewStatus_JSONFormat_ReviewingState(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateReviewing, []rdd.Lens{rdd.LensRisk})
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status", "--format", "json"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput=%s", err, buf.String())
+	}
+	if payload["state"] != "reviewing" {
+		t.Errorf("state = %v, want %q", payload["state"], "reviewing")
+	}
+	transitions, ok := payload["transitions"].([]interface{})
+	if !ok {
+		t.Fatalf("transitions = %v (%T), want []interface{}", payload["transitions"], payload["transitions"])
+	}
+	want := []string{"findings_frozen", "invalidated"}
+	if len(transitions) != len(want) {
+		t.Fatalf("transitions = %v, want %v", transitions, want)
+	}
+	for i, w := range want {
+		if transitions[i] != w {
+			t.Errorf("transitions[%d] = %v, want %q", i, transitions[i], w)
+		}
+	}
+}
+
+// TestReviewStatus_TerminalState_EmptyTransitionsAndOutcomeFromReceipt
+// covers spec review-status-cli "Status on terminal state" and "Terminal
+// handling" for both output formats: an empty valid-transitions set and the
+// receipt's outcome surfaced.
+func TestReviewStatus_TerminalState_EmptyTransitionsAndOutcomeFromReceipt(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateApproved, nil)
+	seedReceipt(t, authorityDir, identity, rdd.StateApproved)
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	want := "state:       approved\n" +
+		"terminal:    yes\n" +
+		"transitions: (none)\n" +
+		"outcome:     approved\n"
+	if buf.String() != want {
+		t.Errorf("human output = %q, want %q", buf.String(), want)
+	}
+
+	var buf2 bytes.Buffer
+	handled, exitCode, err = reviewCommand("review", []string{"status", "--format", "json"}, &buf2)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("json: handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil", handled, exitCode, err)
+	}
+	var payload struct {
+		State       string      `json:"state"`
+		Terminal    bool        `json:"terminal"`
+		Transitions []string    `json:"transitions"`
+		Outcome     string      `json:"outcome"`
+		Correction  interface{} `json:"correction"`
+	}
+	if err := json.Unmarshal(buf2.Bytes(), &payload); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput=%s", err, buf2.String())
+	}
+	if payload.State != "approved" || !payload.Terminal || payload.Outcome != "approved" {
+		t.Errorf("payload = %+v, want state=approved terminal=true outcome=approved", payload)
+	}
+	if len(payload.Transitions) != 0 {
+		t.Errorf("transitions = %v, want empty", payload.Transitions)
+	}
+	if payload.Correction != nil {
+		t.Errorf("correction = %v, want null", payload.Correction)
+	}
+}
+
+// TestReviewStatus_UnknownFormat_FailsClosedNoStateAccess covers spec
+// review-status-cli requirement that an unrecognized --format value fails
+// closed. It stubs resolveWorkspace with a call counter to prove format
+// validation happens before ANY workspace/state access (design "--format ...
+// Unknown format values fail closed").
+func TestReviewStatus_UnknownFormat_FailsClosedNoStateAccess(t *testing.T) {
+	calls := 0
+	prev := resolveWorkspace
+	resolveWorkspace = func() (string, error) {
+		calls++
+		return "", nil
+	}
+	t.Cleanup(func() { resolveWorkspace = prev })
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status", "--format", "xml"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !strings.Contains(err.Error(), "format") {
+		t.Errorf("err = %v, want it to mention format", err)
+	}
+	if calls != 0 {
+		t.Errorf("resolveWorkspace called %d times, want 0 (format validation must happen before any I/O)", calls)
+	}
+}
+
+// TestReviewStatus_NeverCallsSaveState_ReadOnlyRegression covers spec
+// review-status-cli "Read-only": `review status` MUST NOT call SaveState
+// under any circumstance. It compares review-state.json's raw bytes before
+// and after running both output formats.
+func TestReviewStatus_NeverCallsSaveState_ReadOnlyRegression(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	seedStateAt(t, authorityDir, identity, rdd.StateReviewing, []rdd.Lens{rdd.LensRisk})
+
+	statePath := filepath.Join(authorityDir, "review-state.json")
+	before, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile before: %v", err)
+	}
+
+	for _, args := range [][]string{
+		{"status"},
+		{"status", "--format", "json"},
+	} {
+		var buf bytes.Buffer
+		if _, _, err := reviewCommand("review", args, &buf); err != nil {
+			t.Fatalf("reviewCommand(%v) error = %v", args, err)
+		}
+	}
+
+	after, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("ReadFile after: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("review-state.json changed after `review status`, want byte-identical (read-only invariant)\nbefore=%s\nafter=%s", before, after)
+	}
+}
+
+// TestReviewStatus_RunsRegardlessOfKillSwitchMode covers spec
+// review-status-cli "Always available": `review status` MUST run regardless
+// of kill-switch mode (no ResolveMode gate) — unlike `review correct` and
+// `review start`, a disabled kill switch does not block it.
+func TestReviewStatus_RunsRegardlessOfKillSwitchMode(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	identity := testCandidateIdentity()
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	clonePath := cloneModePath(commonDir)
+	if err := reviewstore.SaveModeRecord(clonePath, &rdd.ModeRecord{
+		SchemaVersion: 1,
+		Mode:          rdd.ModeDisabled,
+		UpdatedAt:     "2026-08-21T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	seedFixRequiredState(t, authorityDir, identity, []string{"a.go"}, false, "")
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status"}, &buf)
+	if !handled || exitCode != 0 || err != nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=0 err=nil (status must ignore kill switch)", handled, exitCode, err)
+	}
+	if !strings.Contains(buf.String(), "fix_required") {
+		t.Errorf("output = %q, want it to contain fix_required", buf.String())
+	}
+}
+
+// TestReviewStatus_CorruptState_PropagatesErrCorruptState covers spec
+// delivery-gates/review-status-cli "Corrupt state fails closed for status
+// too": a ReviewState record that fails to deserialize propagates
+// reviewstore.ErrCorruptState unchanged, not a default/empty status.
+func TestReviewStatus_CorruptState_PropagatesErrCorruptState(t *testing.T) {
+	workspace := t.TempDir()
+	commonDir := filepath.Join(workspace, ".git")
+	authorityDir := reviewAuthorityDir(commonDir)
+	withStubResolveWorkspace(t, workspace, nil)
+	withStubGitCommonDirFn(t, commonDir, nil)
+
+	statePath := filepath.Join(authorityDir, "review-state.json")
+	if err := writeFileAll(statePath, []byte("{not valid json")); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	handled, exitCode, err := reviewCommand("review", []string{"status"}, &buf)
+	if !handled || exitCode != 1 || err == nil {
+		t.Fatalf("handled=%v exitCode=%d err=%v, want handled=true exitCode=1 err!=nil", handled, exitCode, err)
+	}
+	if !errors.Is(err, reviewstore.ErrCorruptState) {
+		t.Errorf("err = %v, want it to wrap reviewstore.ErrCorruptState", err)
+	}
+}

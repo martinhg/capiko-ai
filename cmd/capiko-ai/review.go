@@ -28,6 +28,7 @@ const reviewUsage = "Usage:\n" +
 	"  capiko-ai review capture-result --lens <id> <result-file>\n" +
 	"  capiko-ai review finalize\n" +
 	"  capiko-ai review correct\n" +
+	"  capiko-ai review status [--format json]\n" +
 	"  capiko-ai review schema reviewer\n" +
 	"  capiko-ai review validate --gate pre-commit|pre-push\n" +
 	"  capiko-ai review gate install\n" +
@@ -197,6 +198,8 @@ func reviewCommand(name string, args []string, out io.Writer) (handled bool, exi
 		return reviewFinalize(args[1:], out)
 	case "correct":
 		return reviewCorrect(args[1:], out)
+	case "status":
+		return reviewStatus(args[1:], out)
 	case "schema":
 		return reviewSchema(args[1:], out)
 	case "validate":
@@ -908,6 +911,188 @@ func reviewCorrect(args []string, out io.Writer) (bool, int, error) {
 
 	fmt.Fprintf(out, "review corrected: state=%s\n", current.State)
 	return true, 0, nil
+}
+
+// reviewStatusCorrection is the `correction` object in the `--format json`
+// payload for a non-terminal review (design "JSON schema"): whether the
+// single-consumption correction budget has been used, and the hash of the
+// attempt that consumed it. It is nil (and the payload's "correction" key
+// marshals to `null`) for terminal states, whose budget is no longer
+// relevant once the review is over (design terminal JSON example).
+type reviewStatusCorrection struct {
+	Consumed    bool   `json:"consumed"`
+	AttemptHash string `json:"attempt_hash"`
+}
+
+// reviewStatusPayload is the JSON shape emitted by `review status --format
+// json` (spec review-status-cli "Negotiated JSON output"; design "JSON
+// schema"). Outcome is omitted for non-terminal reviews (it is only ever set
+// when terminal); Correction is nil for terminal reviews.
+type reviewStatusPayload struct {
+	State       string                  `json:"state"`
+	Terminal    bool                    `json:"terminal"`
+	Transitions []string                `json:"transitions"`
+	Outcome     string                  `json:"outcome,omitempty"`
+	Correction  *reviewStatusCorrection `json:"correction"`
+}
+
+// reviewStatus handles `review status [--format human|json]` (spec
+// review-status-cli; design "Status CLI"): read-only inspection of the
+// current review state and its valid next transitions.
+//
+// It validates --format before touching the workspace or authority store at
+// all — an unrecognized --format value fails closed immediately, with
+// nothing read or mutated (spec review-status-cli "Read-only"). A missing
+// --format flag defaults to human output (design "--format ... Missing flag
+// defaults to human format"); extractFlagValue's "flag required" error for
+// an absent flag is exactly that default case.
+//
+// Unlike every other review verb, it performs no kill-switch check (spec
+// review-status-cli "Always available": "MUST run regardless of kill-switch
+// mode (no ResolveMode gate)") and only ever calls LoadState/LoadReceipt —
+// never SaveState or WriteReceipt (spec review-status-cli "Read-only").
+//
+// A missing state file defaults to StateUnreviewed, mirroring reviewStart's
+// own current==nil handling. For a terminal state, it additionally loads the
+// receipt to surface its Outcome (spec review-status-cli "Terminal
+// handling").
+func reviewStatus(args []string, out io.Writer) (bool, int, error) {
+	formatValue, _, err := extractFlagValue(args, "--format")
+	if err != nil {
+		formatValue = "human"
+	}
+	if formatValue != "human" && formatValue != "json" {
+		return true, 1, fmt.Errorf("review status: unknown --format value %q (want human or json)", formatValue)
+	}
+
+	workspace, err := resolveWorkspace()
+	if err != nil {
+		return true, 1, fmt.Errorf("review status: resolving workspace: %w", err)
+	}
+
+	commonDir, err := reviewstore.GitCommonDir(workspace)
+	if err != nil {
+		return true, 1, fmt.Errorf("review status: resolving git common dir: %w", err)
+	}
+
+	store := reviewstore.NewStore(reviewAuthorityDir(commonDir))
+	current, err := store.LoadState()
+	if err != nil {
+		return true, 1, fmt.Errorf("review status: loading review state: %w", err)
+	}
+
+	state := rdd.StateUnreviewed
+	if current != nil {
+		state = current.State
+	}
+	terminal := rdd.IsTerminal(state)
+	transitions := rdd.AvailableTransitions(state)
+
+	var outcome string
+	if terminal {
+		receipt, err := store.LoadReceipt()
+		if err != nil {
+			return true, 1, fmt.Errorf("review status: loading review receipt: %w", err)
+		}
+		if receipt != nil {
+			outcome = receipt.Outcome
+		}
+	}
+
+	if formatValue == "json" {
+		return reviewStatusPrintJSON(out, state, terminal, transitions, outcome, current)
+	}
+	reviewStatusPrintHuman(out, state, terminal, transitions, outcome, current)
+	return true, 0, nil
+}
+
+// reviewStatusPrintHuman renders the human-readable status block (design
+// "Human format"): state, terminal, and transitions on every review, plus
+// either outcome (terminal) or correction (non-terminal) as the fourth
+// line. Labels are left-padded to a fixed width so values line up in a
+// column, matching reviewModeStatus's rendering style.
+func reviewStatusPrintHuman(out io.Writer, state rdd.LifecycleState, terminal bool, transitions []rdd.LifecycleState, outcome string, current *reviewstore.ReviewState) {
+	fmt.Fprintf(out, "%-13s%s\n", "state:", state)
+	fmt.Fprintf(out, "%-13s%s\n", "terminal:", reviewStatusYesNo(terminal))
+	fmt.Fprintf(out, "%-13s%s\n", "transitions:", reviewStatusFormatTransitions(transitions))
+	if terminal {
+		fmt.Fprintf(out, "%-13s%s\n", "outcome:", outcome)
+		return
+	}
+	fmt.Fprintf(out, "%-13s%s\n", "correction:", reviewStatusFormatCorrection(current))
+}
+
+// reviewStatusPrintJSON renders the `--format json` payload (design "JSON
+// schema"), always emitting `transitions` as `[]` rather than `null` for
+// terminal or unknown states (nil slices marshal to null otherwise), and
+// `correction` as `null` for terminal states (design terminal example).
+func reviewStatusPrintJSON(out io.Writer, state rdd.LifecycleState, terminal bool, transitions []rdd.LifecycleState, outcome string, current *reviewstore.ReviewState) (bool, int, error) {
+	transitionsOut := make([]string, 0, len(transitions))
+	for _, t := range transitions {
+		transitionsOut = append(transitionsOut, string(t))
+	}
+
+	payload := reviewStatusPayload{
+		State:       string(state),
+		Terminal:    terminal,
+		Transitions: transitionsOut,
+		Outcome:     outcome,
+	}
+	if !terminal {
+		payload.Correction = &reviewStatusCorrection{
+			Consumed:    current != nil && current.CorrectionConsumed,
+			AttemptHash: reviewStatusAttemptHash(current),
+		}
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return true, 1, fmt.Errorf("review status: encoding status: %w", err)
+	}
+	fmt.Fprintln(out, string(data))
+	return true, 0, nil
+}
+
+// reviewStatusYesNo renders a bool as the human-format "yes"/"no" word used
+// for the terminal: line.
+func reviewStatusYesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
+// reviewStatusFormatTransitions renders transitions as a comma-separated
+// list, or "(none)" for a terminal/unknown state's empty set (design
+// terminal human example).
+func reviewStatusFormatTransitions(transitions []rdd.LifecycleState) string {
+	if len(transitions) == 0 {
+		return "(none)"
+	}
+	parts := make([]string, len(transitions))
+	for i, t := range transitions {
+		parts[i] = string(t)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// reviewStatusFormatCorrection renders the correction-budget status line for
+// a non-terminal review: "available (not consumed)" until the single
+// correction attempt is used, then "consumed (hash: ...)".
+func reviewStatusFormatCorrection(current *reviewstore.ReviewState) string {
+	if current != nil && current.CorrectionConsumed {
+		return fmt.Sprintf("consumed (hash: %s)", current.CorrectionAttemptHash)
+	}
+	return "available (not consumed)"
+}
+
+// reviewStatusAttemptHash safely reads CorrectionAttemptHash from a
+// possibly-nil current state (no review started yet).
+func reviewStatusAttemptHash(current *reviewstore.ReviewState) string {
+	if current == nil {
+		return ""
+	}
+	return current.CorrectionAttemptHash
 }
 
 // reviewSchema dispatches `review schema <verb>`.
