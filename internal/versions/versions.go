@@ -13,4 +13,4 @@ const CopilotCLI = "1.0.80"
 // engram, so this only drives an "engram is outdated" advisory in doctor — capiko
 // never installs or upgrades the binary itself.
 // renovate: datasource=github-releases depName=Gentleman-Programming/engram
-const Engram = "1.20.0"
+const Engram = "2.2.1"
