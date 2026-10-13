@@ -67,6 +67,67 @@ func TestLatestVersion_HTTPError(t *testing.T) {
 	}
 }
 
+func TestGoAvailable(t *testing.T) {
+	if !GoAvailable() {
+		t.Skip("go not on PATH in this environment")
+	}
+}
+
+func TestUpgrade_Success(t *testing.T) {
+	orig := runGoInstall
+	defer func() { runGoInstall = orig }()
+
+	var gotPkg string
+	runGoInstall = func(_ context.Context, pkg string) (string, error) {
+		gotPkg = pkg
+		return "", nil
+	}
+
+	if err := Upgrade(context.Background(), "3.5.0"); err != nil {
+		t.Fatalf("Upgrade: %v", err)
+	}
+	want := engramModule + "@v3.5.0"
+	if gotPkg != want {
+		t.Errorf("go install pkg = %q, want %q", gotPkg, want)
+	}
+}
+
+func TestUpgrade_Latest(t *testing.T) {
+	orig := runGoInstall
+	defer func() { runGoInstall = orig }()
+
+	var gotPkg string
+	runGoInstall = func(_ context.Context, pkg string) (string, error) {
+		gotPkg = pkg
+		return "", nil
+	}
+
+	if err := Upgrade(context.Background(), ""); err != nil {
+		t.Fatalf("Upgrade: %v", err)
+	}
+	want := engramModule + "@latest"
+	if gotPkg != want {
+		t.Errorf("go install pkg = %q, want %q", gotPkg, want)
+	}
+}
+
+func TestUpgrade_GoInstallFails(t *testing.T) {
+	orig := runGoInstall
+	defer func() { runGoInstall = orig }()
+
+	runGoInstall = func(_ context.Context, _ string) (string, error) {
+		return "module not found", fmt.Errorf("exit status 1")
+	}
+
+	err := Upgrade(context.Background(), "99.0.0")
+	if err == nil {
+		t.Fatal("expected error when go install fails")
+	}
+	if got := err.Error(); got == "" {
+		t.Error("error message should not be empty")
+	}
+}
+
 func TestLatestVersion_Timeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(2 * time.Second)
