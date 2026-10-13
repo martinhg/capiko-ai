@@ -11,7 +11,6 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/persona"
-	"github.com/martinhg/capiko-ai/internal/sdd"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/versions"
@@ -70,16 +69,16 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					}
 				}
 			}
-			// SDD is always-on: seed default assignments when unset, otherwise
-			// re-apply the user's existing configuration unchanged.
-			if len(st.SDDModels) == 0 {
-				if err := applySDD(host, store, bkp, sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil); err != nil {
-					return len(recorded) + len(agentRecorded), fmt.Errorf("seeding SDD: %w", err)
+			// ODD is always-on: apply the ODD routing block and, on first
+			// sync after upgrade, migrate from SDD by removing the old
+			// SDD marker block from the instructions file.
+			if !st.ODD && len(st.SDDModels) > 0 {
+				if err := migrateSddToOdd(host, store, bkp); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("migrating SDD to ODD: %w", err)
 				}
-			} else {
-				if err := applySDD(host, store, bkp, st.SDDModels, st.SDDEfforts, st.StrictTDD, st.SDDFallbackModels); err != nil {
-					return len(recorded) + len(agentRecorded), fmt.Errorf("re-applying SDD: %w", err)
-				}
+			}
+			if err := applyODD(host, store, bkp, st.TriggerRules); err != nil {
+				return len(recorded) + len(agentRecorded), fmt.Errorf("applying ODD: %w", err)
 			}
 			if st.TriggerRules {
 				if err := applyTriggerRules(host, store, bkp, true); err != nil {

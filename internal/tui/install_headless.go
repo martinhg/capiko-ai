@@ -6,7 +6,6 @@ import (
 	"github.com/martinhg/capiko-ai/internal/agent"
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
-	"github.com/martinhg/capiko-ai/internal/sdd"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
@@ -99,9 +98,9 @@ func InstallAll(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.
 		if err != nil {
 			return ReconcileResult{}, fmt.Errorf("loading state: %w", err)
 		}
-		if len(st.SDDModels) == 0 {
-			if err := applySDD(host, store, bkp, sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil); err != nil {
-				return ReconcileResult{}, fmt.Errorf("seeding SDD: %w", err)
+		if !st.ODD {
+			if err := applyODD(host, store, bkp, st.TriggerRules); err != nil {
+				return ReconcileResult{}, fmt.Errorf("seeding ODD: %w", err)
 			}
 		}
 	}

@@ -139,15 +139,51 @@ func TestRunSyncSkipsInstructionsWhenUnmanaged(t *testing.T) {
 	}
 }
 
-// TestRunSyncReappliesSDD asserts that once SDD is managed (strict TDD recorded),
-// sync re-applies the SDD instruction block so it tracks the catalog/version.
-func TestRunSyncReappliesSDD(t *testing.T) {
+// TestRunSyncMigratesSddToOdd asserts that when SDD models are set but ODD is
+// not yet enabled, sync migrates from SDD to ODD: removes the SDD block and
+// applies the ODD routing block.
+func TestRunSyncMigratesSddToOdd(t *testing.T) {
 	cfgDir := t.TempDir()
 	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
 	store := state.NewStore(t.TempDir())
-	if err := store.SetStrictTDD(true); err != nil {
+	if err := store.SetSDDModels(sdd.DefaultAssignments()); err != nil {
 		t.Fatal(err)
 	}
+
+	// Pre-populate instructions with an SDD block to verify removal.
+	instrPath := filepath.Join(cfgDir, "copilot-instructions.md")
+	os.MkdirAll(cfgDir, 0o755)
+	os.WriteFile(instrPath, []byte("<!-- capiko:sdd:start -->\nold SDD block\n<!-- capiko:sdd:end -->\n"), 0o644)
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	data, err := os.ReadFile(instrPath)
+	if err != nil {
+		t.Fatalf("instructions not written by sync: %v", err)
+	}
+	if strings.Contains(string(data), "capiko:sdd:start") {
+		t.Error("SDD block should have been removed during migration")
+	}
+	if !strings.Contains(string(data), "capiko:odd:start") {
+		t.Error("ODD block should have been applied after migration")
+	}
+	st, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.ODD {
+		t.Error("state.ODD should be true after migration")
+	}
+}
+
+// TestRunSyncSeedsODDOnFreshState asserts that sync seeds the ODD routing block
+// on fresh state (no SDD models, no ODD flag). ODD is always-on.
+func TestRunSyncSeedsODDOnFreshState(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
 
 	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
 		t.Fatalf("RunSync: %v", err)
@@ -157,44 +193,16 @@ func TestRunSyncReappliesSDD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("instructions not written by sync: %v", err)
 	}
-	if !strings.Contains(string(data), "capiko:sdd:start") {
-		t.Errorf("sync did not re-apply the SDD block: %q", data)
-	}
-}
-
-// TestRunSyncSeedsSDDOnFreshState asserts that sync seeds the SDD orchestrator
-// block with default assignments/efforts when state.SDDModels is empty, rather
-// than skipping the SDD branch entirely (SDD is always-on).
-// Spec: Sync Seeds SDD Block When Unset / Scenario: Fresh sync seeds defaults.
-func TestRunSyncSeedsSDDOnFreshState(t *testing.T) {
-	cfgDir := t.TempDir()
-	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
-	store := state.NewStore(t.TempDir())
-
-	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
-		t.Fatalf("RunSync: %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(cfgDir, "copilot-instructions.md"))
-	if err != nil {
-		t.Fatalf("SDD instructions not written by sync: %v", err)
-	}
-	if !strings.Contains(string(data), "capiko:sdd:start") {
-		t.Errorf("sync did not seed the SDD block on fresh state: %q", data)
+	if !strings.Contains(string(data), "capiko:odd:start") {
+		t.Errorf("sync did not seed the ODD block on fresh state: %q", data)
 	}
 
 	st, err := store.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := sdd.DefaultAssignments()
-	if len(st.SDDModels) != len(want) {
-		t.Fatalf("SDDModels = %v, want %d entries matching defaults", st.SDDModels, len(want))
-	}
-	for phase, model := range want {
-		if got := st.SDDModels[phase]; got != model {
-			t.Errorf("SDDModels[%q] = %q, want %q", phase, got, model)
-		}
+	if !st.ODD {
+		t.Error("state.ODD should be true after fresh sync")
 	}
 }
 

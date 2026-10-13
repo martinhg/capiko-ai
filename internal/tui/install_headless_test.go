@@ -8,7 +8,7 @@ import (
 
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
-	"github.com/martinhg/capiko-ai/internal/sdd"
+	"github.com/martinhg/capiko-ai/internal/odd"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -261,12 +261,9 @@ func TestInstallAll_EmptyCatalog(t *testing.T) {
 	}
 }
 
-// TestInstallAll_SeedsSDDBlock asserts that a fresh install (empty
-// state.SDDModels) seeds the SDD orchestrator instructions block with default
-// model/effort assignments, so `install --all` is always-on for SDD.
-// Spec: Headless Install Seeds SDD Block / Scenario: Fresh headless install
-// seeds SDD defaults.
-func TestInstallAll_SeedsSDDBlock(t *testing.T) {
+// TestInstallAll_SeedsODDBlock asserts that a fresh install seeds the ODD
+// routing block into copilot-instructions.md and sets state.ODD = true.
+func TestInstallAll_SeedsODDBlock(t *testing.T) {
 	host := installHost(t)
 	store := state.NewStore(t.TempDir())
 	bkp := backup.NewStore(t.TempDir())
@@ -278,42 +275,30 @@ func TestInstallAll_SeedsSDDBlock(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(host.ConfigDir, "copilot-instructions.md"))
 	if err != nil {
-		t.Fatalf("SDD instructions not written by InstallAll: %v", err)
+		t.Fatalf("ODD instructions not written by InstallAll: %v", err)
 	}
-	if !strings.Contains(string(data), sdd.MarkerStart) || !strings.Contains(string(data), sdd.MarkerEnd) {
-		t.Errorf("InstallAll did not seed the SDD marker block: %q", data)
+	if !strings.Contains(string(data), odd.MarkerStart) || !strings.Contains(string(data), odd.MarkerEnd) {
+		t.Errorf("InstallAll did not seed the ODD marker block")
 	}
 
 	st, err := store.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := sdd.DefaultAssignments()
-	if len(st.SDDModels) != len(want) {
-		t.Fatalf("SDDModels = %v, want %d entries matching defaults", st.SDDModels, len(want))
-	}
-	for phase, model := range want {
-		if got := st.SDDModels[phase]; got != model {
-			t.Errorf("SDDModels[%q] = %q, want %q", phase, got, model)
-		}
+	if !st.ODD {
+		t.Error("state.ODD should be true after fresh install")
 	}
 }
 
-// TestInstallAll_PreservesExistingSDDConfig asserts that a re-run of
-// InstallAll never overwrites an already-configured SDD assignment map with
-// defaults — seeding is a one-time, non-destructive operation.
-// Spec: Idempotent, Non-Destructive Seeding / Scenario: Re-running install
-// after seeding is a no-op for SDD.
-func TestInstallAll_PreservesExistingSDDConfig(t *testing.T) {
+// TestInstallAll_IdempotentODD asserts that a re-run of InstallAll with ODD
+// already enabled is idempotent — the ODD block stays in place and state.ODD
+// remains true.
+func TestInstallAll_IdempotentODD(t *testing.T) {
 	host := installHost(t)
 	store := state.NewStore(t.TempDir())
 	bkp := backup.NewStore(t.TempDir())
 
-	custom := map[string]string{}
-	for _, phase := range sdd.Phases {
-		custom[phase] = "claude-opus-4.8"
-	}
-	if err := store.SetSDDModels(custom); err != nil {
+	if err := store.SetODD(true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -325,9 +310,7 @@ func TestInstallAll_PreservesExistingSDDConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for phase, model := range custom {
-		if got := st.SDDModels[phase]; got != model {
-			t.Errorf("SDDModels[%q] = %q, want preserved custom %q", phase, got, model)
-		}
+	if !st.ODD {
+		t.Error("state.ODD should remain true after re-install")
 	}
 }

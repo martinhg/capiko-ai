@@ -1,0 +1,207 @@
+package odd
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestRenderContainsProtocol(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"## Implementation Routing",
+		"Organic Driven Development (ODD)",
+		"### ODD protocol (MANDATORY",
+		"1. **Authorize.**",
+		"2. **Explore.**",
+		"3. **Resolve uncertainty.**",
+		"4. **Classify.**",
+		"5. **Track before the first write.**",
+		"6. **Implement task by task.**",
+		"7. **Close.**",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("protocol missing %q", want)
+		}
+	}
+}
+
+func TestRenderContainsTaskSize(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"### Task Size",
+		"**small**",
+		"**Understood**",
+		"**Contained risk**",
+		"**Resumable from the diff**",
+		"resume test",
+		"**High risk**",
+		"**Risk line**",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("task size section missing %q", want)
+		}
+	}
+}
+
+func TestRenderContainsRoutes(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"**Direct inline:**",
+		"**Delegated direct:**",
+		"include-custom-instructions: true",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("routes missing %q", want)
+		}
+	}
+}
+
+func TestRenderContainsDelegationTriggers(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"### Mandatory Delegation Triggers",
+		"**Ask trigger:**",
+		"**Mapping trigger:**",
+		"**Verification trigger:**",
+		"**Tracking trigger:**",
+		"**Writer trigger:**",
+		"**Parallel writers:**",
+		"**Preparation trigger:**",
+		"**Output budget:**",
+		"**Long-session backstop:**",
+		"**Route declaration:**",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("delegation triggers missing %q", want)
+		}
+	}
+}
+
+func TestRenderContainsODDDetail(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"### Organic Driven Development",
+		"odd/tasks/<feature-name>.md",
+		"mem_context",
+		"mem_search",
+		"mem_get_observation",
+		"test-first policy",
+		"observe RED before implementation",
+		"work-unit commit",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ODD detail missing %q", want)
+		}
+	}
+}
+
+func TestRenderContainsDeliveryStrategy(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"ask-on-risk",
+		"auto-chain",
+		"single-pr",
+		"exception-ok",
+		"stacked-to-main",
+		"feature-branch-chain",
+		"400 authored changed lines",
+		"work-unit-commits",
+		"chained-pr",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("delivery strategy missing %q", want)
+		}
+	}
+}
+
+func TestRenderEvidenceBudgetValues(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"3 calls",
+		"10k tokens",
+		"5 sequential lookups",
+		"2k tokens",
+		"150k parent-context tokens",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("evidence budget missing %q", want)
+		}
+	}
+}
+
+func TestRenderNoRDD(t *testing.T) {
+	out := Render(false)
+	if strings.Contains(out, "review trigger rules") {
+		t.Error("RDD clauses should be absent when disabled")
+	}
+	if !strings.Contains(out, "Delegated Verification Gate") {
+		t.Error("non-RDD verification should reference Delegated Verification Gate")
+	}
+}
+
+func TestRenderWithRDD(t *testing.T) {
+	out := Render(true)
+	for _, want := range []string{
+		"review trigger rules",
+		"review skills",
+		"independent verifier",
+		"risk tier",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("RDD clause missing %q when enabled", want)
+		}
+	}
+}
+
+func TestRenderNoSDD(t *testing.T) {
+	out := Render(false)
+	if strings.Contains(out, "SDD") {
+		t.Error("ODD block should not mention SDD")
+	}
+}
+
+func TestRenderIncludeCustomInstructions(t *testing.T) {
+	out := Render(false)
+	count := strings.Count(out, "include-custom-instructions: true")
+	if count < 1 {
+		t.Error("should instruct workers to inherit custom instructions")
+	}
+}
+
+func TestRenderTaskTool(t *testing.T) {
+	out := Render(false)
+	if !strings.Contains(out, "Task tool") {
+		t.Error("should reference Copilot CLI's Task tool for delegation")
+	}
+}
+
+func TestRenderHighRiskItems(t *testing.T) {
+	out := Render(false)
+	for _, want := range []string{
+		"(1) data or irreversible effects",
+		"(2) security",
+		"(3) contracts others consume",
+		"(4) concurrency",
+		"(5) delivery or environment",
+		"(6) no test would catch",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("high-risk item missing %q", want)
+		}
+	}
+}
+
+func TestMarkers(t *testing.T) {
+	if MarkerStart == MarkerEnd {
+		t.Fatal("markers must differ")
+	}
+	if !strings.HasPrefix(MarkerStart, "<!--") || !strings.HasSuffix(MarkerStart, "-->") {
+		t.Error("start marker should be an HTML comment")
+	}
+	if !strings.HasPrefix(MarkerEnd, "<!--") || !strings.HasSuffix(MarkerEnd, "-->") {
+		t.Error("end marker should be an HTML comment")
+	}
+	if !strings.Contains(MarkerStart, "odd") {
+		t.Error("start marker should contain 'odd'")
+	}
+}
