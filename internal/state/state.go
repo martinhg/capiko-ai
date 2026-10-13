@@ -58,6 +58,9 @@ type State struct {
 	// unmanaged. When set, drift detection re-hashes the declared files and
 	// compares against the recorded checksums.
 	Integrity *IntegrityRecord `json:"integrity,omitempty"`
+	// ODD is true once the ODD routing block is installed, replacing SDD as the
+	// default workflow. SDD fields remain for legacy detection and migration.
+	ODD bool `json:"odd,omitempty"`
 	// CGA records the managed Capiko Guardian Angel (native pre-commit review)
 	// configuration; nil = unmanaged. Replaces CodeReview (gga) entirely — no
 	// automatic migration from CodeReviewRecord is performed. Sync re-applies
@@ -469,6 +472,17 @@ func (s *Store) SetCGA(rec *CGARecord) error {
 		return err
 	}
 	st.CGA = rec
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetODD records whether the ODD routing block is installed.
+func (s *Store) SetODD(on bool) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.ODD = on
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }
