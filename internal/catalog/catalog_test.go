@@ -5,21 +5,20 @@ import (
 	"testing"
 
 	"github.com/martinhg/capiko-ai/internal/agent"
-	"github.com/martinhg/capiko-ai/internal/sdd"
 )
 
 // jdJudgeNames is the canonical list of the two blind Judgment-Day judges.
 var jdJudgeNames = []string{"capiko-jd-judge-a", "capiko-jd-judge-b"}
 
-// TestLoadAgents_ReturnsTwelve exercises the embedded agents catalog at test
+// TestLoadAgents_ReturnsThree exercises the embedded agents catalog at test
 // time so any authoring error is caught before the binary ships.
-func TestLoadAgents_ReturnsTwelve(t *testing.T) {
+func TestLoadAgents_ReturnsThree(t *testing.T) {
 	agents, err := LoadAgents()
 	if err != nil {
 		t.Fatalf("LoadAgents error: %v", err)
 	}
-	if len(agents) != 12 {
-		t.Fatalf("expected 12 agents from embedded catalog, got %d", len(agents))
+	if len(agents) != 3 {
+		t.Fatalf("expected 3 agents from embedded catalog, got %d", len(agents))
 	}
 	for _, a := range agents {
 		if a.Name == "" {
@@ -114,37 +113,6 @@ func TestJDFixAgent_ScopedToConfirmedIssues(t *testing.T) {
 	}
 	if !strings.Contains(fix.Content, "confirmed") {
 		t.Error("capiko-jd-fix-agent body must restrict edits to jointly-confirmed issues")
-	}
-}
-
-// TestCoordinator_JudgmentDayProtocol pins the coordinator's ownership of JD
-// routing: the body must describe the protocol, launch both judges before a
-// PR, and delegate only jointly-confirmed findings to the fix agent.
-func TestCoordinator_JudgmentDayProtocol(t *testing.T) {
-	agents, err := LoadAgents()
-	if err != nil {
-		t.Fatalf("LoadAgents error: %v", err)
-	}
-	var coord string
-	for _, a := range agents {
-		if a.Name == "capiko-sdd-coordinator" {
-			coord = a.Content
-			break
-		}
-	}
-	if coord == "" {
-		t.Fatal("capiko-sdd-coordinator not found in catalog")
-	}
-	for _, want := range []string{
-		"Judgment-Day Protocol",
-		"capiko-jd-judge-a",
-		"capiko-jd-judge-b",
-		"capiko-jd-fix-agent",
-		"confirmed",
-	} {
-		if !strings.Contains(coord, want) {
-			t.Errorf("coordinator body must contain %q", want)
-		}
 	}
 }
 
@@ -261,138 +229,6 @@ func TestFileReadingSkillsCarryUntrustedContentClause(t *testing.T) {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s must contain %q for untrusted-content defence", name, want)
 			}
-		}
-	}
-}
-
-// TestSDDAgentsForwardStrictTDD pins the structural strict-TDD forwarding to the
-// delegation targets. The orchestrator forwards `strict_tdd: true` into the
-// apply/verify handoff; the worker .agent.md bodies are the direct delegation
-// targets, so they MUST detect that signal and load the right reference file. The
-// coordinator MUST carry the rule to forward it. Without this, the forwarding the
-// orchestrator block promises has no receiver and the worker silently skips TDD.
-func TestSDDAgentsForwardStrictTDD(t *testing.T) {
-	agents, err := LoadAgents()
-	if err != nil {
-		t.Fatalf("LoadAgents error: %v", err)
-	}
-	byName := map[string]string{}
-	for _, a := range agents {
-		byName[a.Name] = a.Content
-	}
-
-	cases := []struct {
-		name     string
-		contains []string
-	}{
-		// Apply/verify workers detect the forwarded signal and load their protocol.
-		{"capiko-sdd-apply", []string{"strict_tdd: true", "strict-tdd.md"}},
-		{"capiko-sdd-verify", []string{"strict_tdd: true", "strict-tdd-verify.md"}},
-		// The coordinator must carry the rule to forward the signal downstream.
-		{"capiko-sdd-coordinator", []string{"strict_tdd: true", "forward"}},
-	}
-	for _, c := range cases {
-		body, ok := byName[c.name]
-		if !ok {
-			t.Errorf("agent %q not found in catalog", c.name)
-			continue
-		}
-		for _, want := range c.contains {
-			if !strings.Contains(body, want) {
-				t.Errorf("agent %q must carry strict-TDD forwarding %q, but it is missing", c.name, want)
-			}
-		}
-	}
-}
-
-// TestCoordinatorTriageParity is a drift guard between the coordinator agent's
-// Triage Gate and sdd.Render's "When to use SDD (triage)" section. Both carry
-// the same decision heuristic intentionally (the coordinator for Copilot agents,
-// the rendered block for Claude Code). If either copy drifts, this test fails —
-// forcing the author to update both, not relax the test.
-func TestCoordinatorTriageParity(t *testing.T) {
-	agents, err := LoadAgents()
-	if err != nil {
-		t.Fatalf("LoadAgents error: %v", err)
-	}
-	var coordBody string
-	for _, a := range agents {
-		if a.Name == "capiko-sdd-coordinator" {
-			coordBody = a.Content
-			break
-		}
-	}
-	if coordBody == "" {
-		t.Fatal("capiko-sdd-coordinator agent not found in catalog")
-	}
-
-	rendered := sdd.Render(sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil)
-
-	// Invariant phrases that must appear in BOTH copies. If one is edited
-	// without the other, the test catches the drift.
-	triageInvariants := []string{
-		"**Inline**",
-		"**Delegate an exploration**",
-		"**Delegate a writer**",
-		"**Run the full SDD workflow**",
-		"**Fresh review before a PR**",
-		"ambiguity, not size",
-		"4-file rule",
-		"substantial ambiguity and durable artifacts",
-		"user can always override",
-	}
-
-	for _, phrase := range triageInvariants {
-		if !strings.Contains(coordBody, phrase) {
-			t.Errorf("coordinator agent missing triage invariant %q", phrase)
-		}
-		if !strings.Contains(rendered, phrase) {
-			t.Errorf("sdd.Render output missing triage invariant %q", phrase)
-		}
-	}
-}
-
-// TestCoordinatorDeliveryStrategyParity is a drift guard between the
-// coordinator agent's Review Workload Guard / chain-strategy rules and
-// sdd.Render's "Delivery & chain strategy" section. Both enumerate the same
-// strategy names and guard triggers; if either copy drifts, this test fails.
-func TestCoordinatorDeliveryStrategyParity(t *testing.T) {
-	agents, err := LoadAgents()
-	if err != nil {
-		t.Fatalf("LoadAgents error: %v", err)
-	}
-	var coordBody string
-	for _, a := range agents {
-		if a.Name == "capiko-sdd-coordinator" {
-			coordBody = a.Content
-			break
-		}
-	}
-	if coordBody == "" {
-		t.Fatal("capiko-sdd-coordinator agent not found in catalog")
-	}
-
-	rendered := sdd.Render(sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil)
-
-	deliveryInvariants := []string{
-		"ask-on-risk",
-		"auto-chain",
-		"single-pr",
-		"exception-ok",
-		"stacked-to-main",
-		"feature-branch-chain",
-		"Chained PRs recommended: Yes",
-		"400-line budget risk: High",
-		"Decision needed before apply: Yes",
-		"size:exception",
-	}
-
-	for _, phrase := range deliveryInvariants {
-		if !strings.Contains(coordBody, phrase) {
-			t.Errorf("coordinator agent missing delivery invariant %q", phrase)
-		}
-		if !strings.Contains(rendered, phrase) {
-			t.Errorf("sdd.Render output missing delivery invariant %q", phrase)
 		}
 	}
 }

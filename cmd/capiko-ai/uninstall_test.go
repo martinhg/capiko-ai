@@ -39,7 +39,7 @@ func readyUninstallInputs(t *testing.T) uninstallInputs {
 	if err := store.Apply(tui.Version, []state.Installed{{Name: "capiko-hello", Checksum: "x"}}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.ApplyAgents(tui.Version, []state.Installed{{Name: "capiko-sdd-explore", Checksum: "x"}}, nil); err != nil {
+	if err := store.ApplyAgents(tui.Version, []state.Installed{{Name: "capiko-jd-judge-a", Checksum: "x"}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	return uninstallInputs{

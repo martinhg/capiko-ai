@@ -155,7 +155,7 @@ func TestCatalog_WorkerFrontmatter(t *testing.T) {
 	agents := loadRealCatalog(t)
 	byName := indexByName(agents)
 
-	for _, phase := range allPhases {
+	for _, phase := range jdAgents {
 		a, ok := byName[phase]
 		if !ok {
 			t.Errorf("worker %q not found in catalog", phase)
@@ -178,159 +178,6 @@ func TestCatalog_WorkerFrontmatter(t *testing.T) {
 			if strings.EqualFold(fm.Model, alias) {
 				t.Errorf("worker %q: model field contains Anthropic alias %q", phase, fm.Model)
 			}
-		}
-	}
-}
-
-func TestCatalog_WorkerBodyReferencesSkillPath(t *testing.T) {
-	agents := loadRealCatalog(t)
-	byName := indexByName(agents)
-
-	for _, phase := range allPhases {
-		a, ok := byName[phase]
-		if !ok {
-			t.Errorf("worker %q not found in catalog", phase)
-			continue
-		}
-		// Each worker name is "capiko-sdd-<phase>"; skill path is "sdd-<phase>/SKILL.md"
-		// e.g. capiko-sdd-explore → ~/.copilot/skills/sdd-explore/SKILL.md
-		sddPhase := strings.TrimPrefix(phase, "capiko-")
-		wantPath := "~/.copilot/skills/" + sddPhase + "/SKILL.md"
-		if !strings.Contains(a.Content, wantPath) {
-			t.Errorf("worker %q body must contain %q", phase, wantPath)
-		}
-	}
-}
-
-func TestCatalog_CoordinatorAllowlist(t *testing.T) {
-	agents := loadRealCatalog(t)
-	byName := indexByName(agents)
-
-	coord, ok := byName["capiko-sdd-coordinator"]
-	if !ok {
-		t.Fatal("capiko-sdd-coordinator not found in catalog")
-	}
-	fm, err := agent.ParseFrontmatter(coord.Content)
-	if err != nil {
-		t.Fatalf("coordinator frontmatter parse error: %v", err)
-	}
-
-	wantAgents := append(append([]string{}, allPhases...), jdAgents...)
-	if len(fm.Agents) != len(wantAgents) {
-		t.Errorf("coordinator agents allowlist: got %d entries, want %d", len(fm.Agents), len(wantAgents))
-	}
-	allowlist := make(map[string]bool, len(fm.Agents))
-	for _, n := range fm.Agents {
-		allowlist[n] = true
-	}
-	for _, want := range wantAgents {
-		if !allowlist[want] {
-			t.Errorf("coordinator agents allowlist missing %q", want)
-		}
-	}
-	// No extras beyond the 8 workers and 3 JD agents.
-	for _, n := range fm.Agents {
-		found := false
-		for _, want := range wantAgents {
-			if n == want {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("coordinator agents allowlist has unexpected entry %q", n)
-		}
-	}
-	// The coordinator must not carry an Anthropic model alias either (the worker
-	// check covers workers; the coordinator escapes it otherwise).
-	for _, alias := range anthropicAliases {
-		if strings.EqualFold(fm.Model, alias) {
-			t.Errorf("coordinator: model field contains Anthropic alias %q", fm.Model)
-		}
-	}
-}
-
-func TestCatalog_CoordinatorBodyCitesNativeEngine(t *testing.T) {
-	agents := loadRealCatalog(t)
-	byName := indexByName(agents)
-
-	coord, ok := byName["capiko-sdd-coordinator"]
-	if !ok {
-		t.Fatal("capiko-sdd-coordinator not found in catalog")
-	}
-	for _, want := range []string{"capiko-ai sdd-status --json", "nextRecommended"} {
-		if !strings.Contains(coord.Content, want) {
-			t.Errorf("coordinator body must contain %q", want)
-		}
-	}
-}
-
-func TestCatalog_CoordinatorBodyExplicitDelegation(t *testing.T) {
-	agents := loadRealCatalog(t)
-	byName := indexByName(agents)
-
-	coord, ok := byName["capiko-sdd-coordinator"]
-	if !ok {
-		t.Fatal("capiko-sdd-coordinator not found in catalog")
-	}
-	// Pin the backtick form "`agent` tool" — the bare substring "agent" also
-	// appears in "agents:" and the worker names, so it would pass even if the body
-	// never named the delegation tool.
-	if !strings.Contains(coord.Content, "`agent` tool") {
-		t.Error("coordinator body must reference the `agent` tool (backtick form) for explicit delegation")
-	}
-}
-
-func TestCatalog_CoordinatorTriageGate(t *testing.T) {
-	agents := loadRealCatalog(t)
-	byName := indexByName(agents)
-
-	coord, ok := byName["capiko-sdd-coordinator"]
-	if !ok {
-		t.Fatal("capiko-sdd-coordinator not found in catalog")
-	}
-	// Guard the triage gate so a future edit cannot silently drop the rules that
-	// keep small changes inline instead of forcing the full SDD phase DAG.
-	for _, want := range []string{
-		"Triage Gate",
-		"4-file rule",
-		"Delegate a writer",
-		"Fresh review before a PR",
-	} {
-		if !strings.Contains(coord.Content, want) {
-			t.Errorf("coordinator body must contain triage rule %q", want)
-		}
-	}
-}
-
-func TestCatalog_LanguageContract_Coordinator(t *testing.T) {
-	agents := loadRealCatalog(t)
-	byName := indexByName(agents)
-
-	coord, ok := byName["capiko-sdd-coordinator"]
-	if !ok {
-		t.Fatal("capiko-sdd-coordinator not found in catalog")
-	}
-	for _, marker := range []string{"human's language", "English"} {
-		if !strings.Contains(coord.Content, marker) {
-			t.Errorf("coordinator body must contain language contract marker %q", marker)
-		}
-	}
-}
-
-func TestCatalog_LanguageContract_Workers(t *testing.T) {
-	agents := loadRealCatalog(t)
-	byName := indexByName(agents)
-
-	for _, phase := range allPhases {
-		a, ok := byName[phase]
-		if !ok {
-			t.Errorf("worker %q not found in catalog", phase)
-			continue
-		}
-		// Workers must carry a language contract line (they reference the coordinator's contract).
-		if !strings.Contains(a.Content, "Language:") {
-			t.Errorf("worker %q body must contain a Language: line", phase)
 		}
 	}
 }
@@ -500,7 +347,7 @@ func TestWithRouting_RoutedCatalogRejectsBareAlias(t *testing.T) {
 	routed := agent.WithRouting(agents, models)
 	byName := indexByName(routed)
 
-	for _, phase := range allPhases {
+	for _, phase := range jdAgents {
 		a, ok := byName[phase]
 		if !ok {
 			t.Errorf("worker %q not found in routed catalog", phase)
