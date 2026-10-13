@@ -135,6 +135,15 @@ func main() {
 				os.Exit(exitCode)
 			}
 			return
+		case "purge":
+			_, exitCode, err := purgeCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		default:
 			// Unknown subcommand: error out instead of falling through to the
 			// TUI, which would otherwise launch on a typo like `capiko-ai

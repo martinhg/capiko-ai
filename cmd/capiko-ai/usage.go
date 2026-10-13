@@ -16,6 +16,7 @@ var commands = map[string]string{
 	"doctor":         "Run ecosystem health checks",
 	"help":           "Show this help message",
 	"install":        "Install all catalog skills and agents",
+	"purge":          "Remove ALL capiko data from the system",
 	"review":         "Manage RDD review kill-switch mode",
 	"sdd-continue":   "Continue the next SDD phase",
 	"sdd-status":     "Show SDD change status",
