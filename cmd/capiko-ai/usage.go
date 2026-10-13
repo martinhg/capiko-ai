@@ -18,8 +18,6 @@ var commands = map[string]string{
 	"install":        "Install all catalog skills and agents",
 	"purge":          "Remove ALL capiko data from the system",
 	"review":         "Manage RDD review kill-switch mode",
-	"sdd-continue":   "Continue the next SDD phase",
-	"sdd-status":     "Show SDD change status",
 	"skill-registry": "Print the skill index for orchestrators",
 	"sync":           "Sync all managed skills and agents",
 	"uninstall":      "Remove all managed skills and agents",

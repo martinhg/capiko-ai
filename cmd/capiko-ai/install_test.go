@@ -34,7 +34,7 @@ func readyInstallInputs(t *testing.T) installInputs {
 	return installInputs{
 		host:    &copilot.Host{SkillsDir: t.TempDir(), AgentsDir: t.TempDir(), ConfigDir: t.TempDir()},
 		catalog: []skill.Skill{{Name: "capiko-hello", Description: "smoke test", Content: "---\nname: capiko-hello\n---\nx"}},
-		agents:  []agent.Agent{{Name: "capiko-sdd-explore", Description: "explore", Content: "---\ndescription: explore\n---\nx"}},
+		agents:  []agent.Agent{{Name: "capiko-jd-judge-a", Description: "explore", Content: "---\ndescription: explore\n---\nx"}},
 		store:   state.NewStore(t.TempDir()),
 		bkp:     backup.NewStore(t.TempDir()),
 	}
@@ -56,7 +56,7 @@ func TestInstallCommandTextOutput(t *testing.T) {
 		t.Fatalf("handled=%v exitCode=%d err=%v", handled, exitCode, err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "capiko-hello") || !strings.Contains(out, "capiko-sdd-explore") {
+	if !strings.Contains(out, "capiko-hello") || !strings.Contains(out, "capiko-jd-judge-a") {
 		t.Errorf("unexpected text output:\n%s", out)
 	}
 	if !strings.Contains(out, "installed") {

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/martinhg/capiko-ai/internal/engram"
 )
 
 // ---------------------------------------------------------------------------
@@ -499,81 +501,6 @@ func TestEngramSeamIsolation(t *testing.T) {
 	}
 }
 
-// ---------- InferEngramProject / projectFromGitConfig ----------
-
-func TestInferEngramProject_EnvVar(t *testing.T) {
-	t.Setenv("ENGRAM_PROJECT", "acme/my-service")
-	cwd := t.TempDir()
-	if got := InferEngramProject(cwd); got != "acme/my-service" {
-		t.Errorf("got %q, want acme/my-service", got)
-	}
-}
-
-func TestInferEngramProject_GitConfigHTTPS(t *testing.T) {
-	t.Setenv("ENGRAM_PROJECT", "")
-	cwd := t.TempDir()
-	gitDir := filepath.Join(cwd, ".git")
-	if err := os.MkdirAll(gitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg := "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = https://github.com/myorg/myrepo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
-	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := InferEngramProject(cwd); got != "myorg/myrepo" {
-		t.Errorf("got %q, want myorg/myrepo", got)
-	}
-}
-
-func TestInferEngramProject_GitConfigSSH(t *testing.T) {
-	t.Setenv("ENGRAM_PROJECT", "")
-	cwd := t.TempDir()
-	gitDir := filepath.Join(cwd, ".git")
-	if err := os.MkdirAll(gitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg := "[remote \"origin\"]\n\turl = git@github.com:myorg/myrepo.git\n"
-	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := InferEngramProject(cwd); got != "myorg/myrepo" {
-		t.Errorf("got %q, want myorg/myrepo", got)
-	}
-}
-
-func TestInferEngramProject_DirBasename(t *testing.T) {
-	t.Setenv("ENGRAM_PROJECT", "")
-	// No .git/config — falls back to lowercased basename.
-	cwd := t.TempDir()
-	got := InferEngramProject(cwd)
-	want := strings.ToLower(filepath.Base(cwd))
-	if got != want {
-		t.Errorf("got %q, want %q (lowercased basename)", got, want)
-	}
-}
-
-func TestProjectFromGitConfig_NoGitDir(t *testing.T) {
-	cwd := t.TempDir()
-	if got := projectFromGitConfig(cwd); got != "" {
-		t.Errorf("got %q, want empty when .git/config is absent", got)
-	}
-}
-
-func TestProjectFromGitConfig_NoOriginSection(t *testing.T) {
-	cwd := t.TempDir()
-	gitDir := filepath.Join(cwd, ".git")
-	if err := os.MkdirAll(gitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg := "[core]\n\trepositoryformatversion = 0\n"
-	if err := os.WriteFile(filepath.Join(gitDir, "config"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := projectFromGitConfig(cwd); got != "" {
-		t.Errorf("got %q, want empty when no origin section", got)
-	}
-}
-
 // ---------- collectEngramChanges ----------
 
 func TestCollectEngramChanges_OneChange(t *testing.T) {
@@ -906,7 +833,7 @@ func engramCwd(t *testing.T) (string, string) {
 	if err := os.MkdirAll(filepath.Join(cwd, ".engram"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return cwd, InferEngramProject(cwd)
+	return cwd, engram.InferEngramProject(cwd)
 }
 
 // SC-01: Gating OFF — seam is never invoked, nextRecommended stays sdd-new.
@@ -928,7 +855,7 @@ func TestSC01_GatingOff_FatalSeam(t *testing.T) {
 func TestSC02a_GatingOn_EnvVar(t *testing.T) {
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
 	cwd := t.TempDir()
-	project := InferEngramProject(cwd)
+	project := engram.InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -970,7 +897,7 @@ func TestSC02c_GatingOn_ConfigEngram(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: engram\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	project := InferEngramProject(cwd)
+	project := engram.InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -995,7 +922,7 @@ func TestSC02d_GatingOn_ConfigHybrid(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte("artifact_store: hybrid\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	project := InferEngramProject(cwd)
+	project := engram.InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -1088,7 +1015,7 @@ func TestSC04_FallbackA_ZeroOpenSpecOneEngram(t *testing.T) {
 func TestSC05_FallbackB_NamedChangeInEngram(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
-	project := InferEngramProject(cwd)
+	project := engram.InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("auth-refactor", "proposal", "# Proposal\n...", project),
 		engramObs("auth-refactor", "spec", "# Spec\n...", project),
@@ -1348,7 +1275,7 @@ func TestSC09c_Degradation_EmptyObservations(t *testing.T) {
 func TestSC10_OriginFlags_ConsumerSafe(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
-	project := InferEngramProject(cwd)
+	project := engram.InferEngramProject(cwd)
 	obs := []engramObservation{
 		engramObs("my-feature", "proposal", "# Proposal\n...", project),
 	}
@@ -1390,7 +1317,7 @@ func TestSC10_OriginFlags_ConsumerSafe(t *testing.T) {
 func TestSC_StateOnlyChange_RoutesToPropose(t *testing.T) {
 	cwd := t.TempDir()
 	t.Setenv("CAPIKO_SDD_STATUS_ENGRAM", "1")
-	project := InferEngramProject(cwd)
+	project := engram.InferEngramProject(cwd)
 	// Only a state observation — no proposal, spec, etc.
 	obs := []engramObservation{{
 		Title:   "sdd/state-only-change/state",

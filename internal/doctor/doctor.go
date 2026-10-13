@@ -241,6 +241,10 @@ func Evaluate(in Inputs) Report {
 	// copilot-instructions.md and warns when the total exceeds a threshold.
 	r.Checks = append(r.Checks, instructionBudgetCheck(in))
 
+	// Legacy SDD block: SDD is frozen in favor of ODD; a leftover marker block
+	// in copilot-instructions.md is migrated by sync.
+	r.Checks = append(r.Checks, legacySDDBlockCheck(in))
+
 	return r
 }
 
@@ -454,6 +458,32 @@ func versionLabel(v string) string {
 	return v
 }
 
+// Marker pair of the frozen SDD routing block.
+const (
+	legacySDDStart = "<!-- capiko:sdd:start -->"
+	legacySDDEnd   = "<!-- capiko:sdd:end -->"
+)
+
+// legacySDDBlockCheck warns when copilot-instructions.md still carries the
+// SDD routing block. SDD is frozen (replaced by ODD), so the block is legacy
+// and `capiko-ai sync` migrates it. An unclosed block is ignored, matching how
+// the instruction budget check treats malformed blocks.
+func legacySDDBlockCheck(in Inputs) Check {
+	const name = "Legacy SDD block"
+	content := in.InstructionsContent
+	si := strings.Index(content, legacySDDStart)
+	ei := strings.Index(content, legacySDDEnd)
+	if content == "" || si < 0 || ei <= si {
+		return Check{Name: name, Status: Pass, Detail: "no legacy SDD block"}
+	}
+	return Check{
+		Name:   name,
+		Status: Warn,
+		Detail: "SDD routing block is legacy",
+		Remedy: "SDD routing block is legacy — run `capiko-ai sync` to migrate to ODD.",
+	}
+}
+
 // managedBlock is a capiko-managed section inside copilot-instructions.md.
 type managedBlock struct {
 	name  string
@@ -463,7 +493,7 @@ type managedBlock struct {
 
 var managedBlocks = []managedBlock{
 	{"persona", "<!-- capiko:persona:start -->", "<!-- capiko:persona:end -->"},
-	{"sdd", "<!-- capiko:sdd:start -->", "<!-- capiko:sdd:end -->"},
+	{"sdd (legacy)", "<!-- capiko:sdd:start -->", "<!-- capiko:sdd:end -->"},
 	{"efficiency", "<!-- capiko:efficiency:start -->", "<!-- capiko:efficiency:end -->"},
 	{"headroom", "<!-- capiko:headroom:start -->", "<!-- capiko:headroom:end -->"},
 	{"memory", "<!-- capiko:memory:start -->", "<!-- capiko:memory:end -->"},

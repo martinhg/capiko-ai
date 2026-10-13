@@ -98,7 +98,7 @@ func TestE2EHeadlessLifecycle(t *testing.T) {
 	bin := buildCapiko(t)
 	home, env := fakeHost(t)
 	skillsDir := filepath.Join(home, ".copilot", "skills")
-	probe := filepath.Join(skillsDir, "sdd-apply", "SKILL.md")
+	probe := filepath.Join(skillsDir, "capiko-hello", "SKILL.md")
 
 	// install --all: succeeds, installs skills, writes files to disk.
 	r, code := runCapiko(t, bin, env, "install", "--all", "--json")
@@ -147,8 +147,8 @@ func TestE2EHeadlessLifecycle(t *testing.T) {
 	if len(ru.Items.RemovedSkills) == 0 {
 		t.Fatal("uninstall reported no skills removed")
 	}
-	if _, err := os.Stat(filepath.Join(skillsDir, "sdd-apply")); !os.IsNotExist(err) {
-		t.Fatalf("expected sdd-apply removed after uninstall, stat err = %v", err)
+	if _, err := os.Stat(filepath.Join(skillsDir, "capiko-hello")); !os.IsNotExist(err) {
+		t.Fatalf("expected capiko-hello removed after uninstall, stat err = %v", err)
 	}
 }
 

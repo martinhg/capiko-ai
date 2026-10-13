@@ -12,9 +12,9 @@ import (
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/cga"
 	"github.com/martinhg/capiko-ai/internal/cgastore"
+	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/githooks"
 	"github.com/martinhg/capiko-ai/internal/instructions"
-	"github.com/martinhg/capiko-ai/internal/sddstatus"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -63,7 +63,7 @@ func cgaFindingsLogPath(workspace string) string {
 }
 
 // loadLearnedRules resolves the local learned-rules store for workspace's
-// engram project (design D8: `sddstatus.InferEngramProject`, the same chain
+// engram project (design D8: `engram.InferEngramProject`, the same chain
 // `cmd/capiko-ai`'s cgaProject seam uses) and reads it via cgastore. A
 // package-level seam so tests can stub it entirely, mirroring the
 // cgaGetwd/gitRevParseGitDir seam pattern.
@@ -72,7 +72,7 @@ var loadLearnedRules = func(workspace string) ([]cga.LearnedRule, error) {
 	if err != nil {
 		return nil, err
 	}
-	project := sddstatus.InferEngramProject(workspace)
+	project := engram.InferEngramProject(workspace)
 	return cgastore.LoadLearnedRules(cgastore.DefaultStorePath(s.Dir(), project))
 }
 

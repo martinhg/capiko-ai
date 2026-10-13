@@ -68,8 +68,6 @@ var menuItems = []menuItem{
 	{"Managed uninstall", "uninstall", "Remove installed skills and agents cleanly.", true},
 	{"Sync configs", "sync", "Re-apply all configs to match the latest catalog.", true},
 	{"Manage backups", "backups", "View and restore configuration snapshots.", true},
-	{"Configure SDD", "sdd", "Set up Spec-Driven Development model assignments.", true},
-	{"SDD Status", "sdd-status", "View active SDD changes and their progress.", true},
 	{"Configure engram", "engram", "Set up persistent memory across sessions.", true},
 	{"Configure headroom", "headroom", "Tune context-window budget for large codebases.", true},
 	{"Configure CGA", "code-review", "Capiko Guardian Angel: Copilot reviews every commit.", true},
@@ -241,10 +239,6 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newBackups(a.svc)
 	case it.id == "upgrade":
 		a.active = newUpgrade(a.svc, a.latest)
-	case it.id == "sdd":
-		a.active = newSDD(a.svc, a.catalog, a.installed, false)
-	case it.id == "sdd-status":
-		a.active = newSDDStatus(a.svc)
 	case it.id == "engram":
 		a.active = newEngram(a.svc)
 	case it.id == "headroom":
