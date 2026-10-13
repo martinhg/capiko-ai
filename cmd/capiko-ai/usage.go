@@ -21,6 +21,7 @@ var commands = map[string]string{
 	"skill-registry": "Print the skill index for orchestrators",
 	"sync":           "Sync all managed skills and agents",
 	"uninstall":      "Remove all managed skills and agents",
+	"update":         "Check versions of capiko-ai and engram",
 	"version":        "Print version information",
 }
 
