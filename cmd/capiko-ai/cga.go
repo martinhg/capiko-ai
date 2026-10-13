@@ -14,7 +14,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/cga"
 	"github.com/martinhg/capiko-ai/internal/cgastore"
 	"github.com/martinhg/capiko-ai/internal/clilog"
-	"github.com/martinhg/capiko-ai/internal/sddstatus"
+	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
@@ -181,7 +181,7 @@ var cgaProject = func() string {
 	if err != nil {
 		return ""
 	}
-	return sddstatus.InferEngramProject(cwd)
+	return engram.InferEngramProject(cwd)
 }
 
 // cgaStdin is the source of `cga learn` approval-prompt answers. It is a
