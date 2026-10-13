@@ -39,14 +39,6 @@ func main() {
 			fmt.Println("capiko-ai", tui.Version)
 			fmt.Println("targets GitHub Copilot CLI", versions.CopilotCLI)
 			return
-		case "sdd-status", "sdd-continue":
-			// The native SDD engine: print authoritative change status without
-			// launching the TUI, so the agent can shell out for it.
-			if _, err := sddCommand(os.Args[1], os.Args[2:], os.Stdout); err != nil {
-				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
-				os.Exit(1)
-			}
-			return
 		case "skill-registry":
 			// The native skill-registry engine: print the skill index so an
 			// orchestrator can resolve exact SKILL.md paths to inject into
