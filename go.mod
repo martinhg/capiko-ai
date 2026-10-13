@@ -1,6 +1,6 @@
 module github.com/martinhg/capiko-ai
 
-go 1.26.6
+go 1.26.9
 
 require (
 	charm.land/bubbletea/v2 v2.0.9

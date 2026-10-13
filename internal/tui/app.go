@@ -78,6 +78,7 @@ var menuItems = []menuItem{
 	{"Upgrade tools", "upgrade", "Update capiko-ai to the latest release.", true},
 	{"Upgrade + sync", "upgrade-sync", "Update capiko-ai and re-sync all configs.", true},
 	{"Install instructions", "instructions", "Write the global copilot-instructions file.", true},
+	{"Purge capiko", "purge", "Remove ALL capiko data: skills, agents, configs, hooks, state.", true},
 	{"Quit", "quit", "Exit capiko-ai.", true},
 }
 
@@ -258,6 +259,8 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newUpgradeSync(a.svc, a.catalog, a.latest)
 	case it.id == "instructions":
 		a.active = newInstructions(a.svc)
+	case it.id == "purge":
+		a.active = newPurge(a.svc)
 	default:
 		a.active = newSoon(it.label)
 	}
