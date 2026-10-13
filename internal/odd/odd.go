@@ -35,6 +35,9 @@ func Render(rddEnabled bool) string {
 
 	renderProtocol(&b, rddEnabled)
 	renderTaskSize(&b, rddEnabled)
+	if rddEnabled {
+		renderRiskTiers(&b)
+	}
 	renderRoutes(&b)
 	renderDelegationTriggers(&b)
 	renderODD(&b, rddEnabled)
@@ -56,7 +59,7 @@ func renderProtocol(b *strings.Builder, rdd bool) {
 	closeGate := "Close every code change with its Risk line. Hedged wording is not a stop: a user saying they may stop you or resume later asks for notes and separate commits. A tracked task ends pending only with the user's explicit stop or one **Needs your decision** result naming the open blockers or missing proof; partial, blocked, unavailable, or exhausted proof becomes that one result, never more verification."
 
 	if rdd {
-		b.WriteString("7. **Close.** Report the verified outcome, every failed, skipped, or pending check, and the next step. " + closeGate + " After each work-unit commit, evaluate the change against the high-risk items list above. If any item applies, load the applicable review skills and delegate an independent verifier via the Task tool with `include-custom-instructions: true`. Record the risk tier per task.\n\n")
+		b.WriteString("7. **Close.** Report the verified outcome, every failed, skipped, or pending check, and the next step. " + closeGate + " After each work-unit commit, classify the change's risk tier per the Risk Tiers section above and select lenses proportionate to it. Standard: self-verify. Elevated or higher: delegate the mandated lenses via the Task tool with `include-custom-instructions: true`. Record the risk tier and lenses applied per task.\n\n")
 	} else {
 		b.WriteString("7. **Close.** Report the verified outcome, every failed, skipped, or pending check, and the next step. " + closeGate + " Verification covers a work-unit commit or a PR slice, never a TODO checkbox and never the accumulated feature branch.\n\n")
 	}
@@ -79,6 +82,21 @@ func renderTaskSize(b *strings.Builder, rdd bool) {
 	b.WriteString("\n\n")
 	b.WriteString("**Risk line**: close every code change, small path or delegated, with `Risk: item N (reason)` or `Risk: none` per the list; any item fires the Verification trigger. Before writing `Risk: none`, check whether the diff changes code that existing behavior the request did not mention also uses (shared options, parsers, helpers); if it does, that is item 3.\n\n")
 	b.WriteString("After explicit change intent is established, route work for the requested outcome with the smallest useful topology. Every authorized change takes exactly one implementation route: direct inline or delegated direct.\n\n")
+}
+
+func renderRiskTiers(b *strings.Builder) {
+	b.WriteString("### Risk Tiers and Lens Selection\n\n")
+	b.WriteString("Classify every code change into a risk tier before deciding verification depth. Use path evidence and the high-risk items above — never diff size or file count.\n\n")
+	b.WriteString("| Tier | Path evidence | Review lenses | Verification |\n")
+	b.WriteString("| --- | --- | --- | --- |\n")
+	b.WriteString("| **Standard** (0) | No high-risk item applies | None | Self-verify: focused test + suite inline |\n")
+	b.WriteString("| **Elevated** (1) | Matches items 1–6 above (e.g. auth, crypto, permissions, secrets, migrations, concurrency) | R1 (Risk) | Delegate R1 independent verifier |\n")
+	b.WriteString("| **Critical** (4) | Auth+security hot paths, webhooks, payments, or review-system code | R1 R2 R3 R4 | Delegate all four lenses |\n\n")
+	b.WriteString("Select lenses proportionate to the tier — the agent picks which lenses apply based on the change's nature:\n\n")
+	b.WriteString("- **Standard**: self-verify with focused tests and suite; no review delegation.\n")
+	b.WriteString("- **Elevated**: delegate R1 (Risk) as independent verifier via the Task tool. The agent may add R2–R4 if the change warrants it (e.g. a complex refactor touching auth also warrants R2).\n")
+	b.WriteString("- **Critical**: delegate R1 (Risk, strong), R2 (Readability), R3 (Reliability), R4 (Resilience). All four lenses are mandatory.\n\n")
+	b.WriteString("The agent may raise a tier but never lower it. When uncertain whether a high-risk item applies, classify as elevated.\n\n")
 }
 
 func renderRoutes(b *strings.Builder) {
@@ -141,7 +159,7 @@ func renderODD(b *strings.Builder, rdd bool) {
 	b.WriteString("- Before implementation or resume, the parent reads both the actual file and full observation, reconciles them, and passes the locator, task IDs, and linked `S#`; workers read the document until `## Log` before edits and report which `S#` they covered. Small work without a document still receives its authorized scope and checks.\n")
 
 	if rdd {
-		b.WriteString("- Preserve applicable functional verification via capiko's review trigger rules. Run applicable functional checks per task, not a review cycle per TODO checkbox. Verify each work-unit commit in proportion to its risk: after each work-unit commit, evaluate the change against the high-risk items list. If any item applies, load the applicable review skills and delegate an independent verifier via the Task tool. Record per task the risk tier and the checks observed. Never infer low risk without evidence; count an unclear change as high only when a bounded look cannot tell whether the list applies. Never skip an existing delivery gate. A task list or assumption challenge never replaces verification or adds an execution harness.\n")
+		b.WriteString("- Preserve applicable functional verification via capiko's review trigger rules. Run applicable functional checks per task, not a review cycle per TODO checkbox. Verify each work-unit commit in proportion to its risk tier: classify per the Risk Tiers section, select lenses proportionate to the tier, and delegate only when tier is elevated or higher. Standard risk: self-verify with focused tests and suite. Elevated: delegate R1 (Risk). Critical: delegate all four lenses (R1–R4). The agent may add lenses when the change warrants it but never drop mandated ones. Record per task the risk tier, lenses applied, and checks observed. Never infer standard risk without evidence; count an unclear change as elevated when a bounded look cannot tell whether a high-risk item applies. Never skip an existing delivery gate. A task list or assumption challenge never replaces verification or adds an execution harness.\n")
 	} else {
 		b.WriteString("- Preserve applicable functional verification. Run applicable functional checks per task, not a verification ceremony per TODO checkbox. Verify each work-unit commit in proportion to its risk, as the orchestrator's Delegated Verification Gate describes: structural readback for passive changes, writer self-verification for ordinary changes, and an added independent verifier for high-risk changes by the Task Size list. Record per task the risk tier you applied and the checks you observed. Never infer low risk without evidence; count an unclear change as high only when a bounded look cannot tell whether the list applies. Never skip an existing delivery gate. A task list or assumption challenge never replaces verification or adds an execution harness.\n")
 	}
