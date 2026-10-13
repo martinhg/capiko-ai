@@ -60,24 +60,37 @@ func TestDefaultRulesValid(t *testing.T) {
 func TestDefaultRulesContent(t *testing.T) {
 	rules := DefaultRules()
 
-	has := func(event Event, skill string) bool {
-		for _, r := range rules {
-			if r.Event == event && r.Skill == skill {
-				return true
-			}
-		}
-		return false
+	type ruleKey struct {
+		event Event
+		skill string
+	}
+	lookup := make(map[ruleKey]Rule)
+	for _, r := range rules {
+		lookup[ruleKey{r.Event, r.Skill}] = r
 	}
 
-	if !has(PreCommit, "review-readability") {
-		t.Error("missing pre-commit readability rule")
+	has := func(event Event, skill string) bool {
+		_, ok := lookup[ruleKey{event, skill}]
+		return ok
 	}
-	if !has(PrePush, "review-readability") {
-		t.Error("missing pre-push readability rule")
+
+	// Risk-proportionate: no blanket pre-commit or pre-push readability.
+	if has(PreCommit, "review-readability") {
+		t.Error("pre-commit readability should not be a default rule (risk-proportionate)")
+	}
+	if has(PrePush, "review-readability") {
+		t.Error("pre-push readability should not be a default rule (risk-proportionate)")
+	}
+
+	// Elevated+: R1 on push and PR.
+	if !has(PrePush, "review-risk") {
+		t.Error("missing pre-push risk rule")
 	}
 	if !has(PrePR, "review-risk") {
 		t.Error("missing pre-pr risk rule")
 	}
+
+	// Critical: full 4R on PR.
 	if !has(PrePR, "review-readability") {
 		t.Error("missing pre-pr readability rule")
 	}
@@ -88,10 +101,18 @@ func TestDefaultRulesContent(t *testing.T) {
 		t.Error("missing pre-pr resilience rule")
 	}
 
-	// risk should be strong mode
-	for _, r := range rules {
-		if r.Event == PrePR && r.Skill == "review-risk" && r.Mode != Strong {
-			t.Errorf("pre-pr review-risk mode = %q, want %q", r.Mode, Strong)
+	// Pre-PR risk should be strong; push risk should be advisory.
+	if r := lookup[ruleKey{PrePR, "review-risk"}]; r.Mode != Strong {
+		t.Errorf("pre-pr review-risk mode = %q, want %q", r.Mode, Strong)
+	}
+	if r := lookup[ruleKey{PrePush, "review-risk"}]; r.Mode != Advisory {
+		t.Errorf("pre-push review-risk mode = %q, want %q", r.Mode, Advisory)
+	}
+
+	// All rules should have risk-tier conditions.
+	for i, r := range rules {
+		if r.When == "" {
+			t.Errorf("rule[%d] (%s/%s): missing When condition — risk-proportionate rules must be conditional", i, r.Event, r.Skill)
 		}
 	}
 }
@@ -131,12 +152,11 @@ func TestRenderRuleRows(t *testing.T) {
 	out := Render(DefaultRules())
 
 	for _, want := range []string{
-		"| pre-commit | review-readability | advisory |",
-		"| pre-push | review-readability | advisory |",
-		"| pre-pr | review-risk | strong |",
-		"| pre-pr | review-readability | advisory |",
-		"| pre-pr | review-reliability | advisory |",
-		"| pre-pr | review-resilience | advisory |",
+		"| pre-push | review-risk | advisory | risk tier is elevated or higher |",
+		"| pre-pr | review-risk | strong | risk tier is elevated or higher |",
+		"| pre-pr | review-readability | advisory | risk tier is critical |",
+		"| pre-pr | review-reliability | advisory | risk tier is critical |",
+		"| pre-pr | review-resilience | advisory | risk tier is critical |",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rule row missing %q", want)

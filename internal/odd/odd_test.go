@@ -137,18 +137,50 @@ func TestRenderNoRDD(t *testing.T) {
 	if !strings.Contains(out, "Delegated Verification Gate") {
 		t.Error("non-RDD verification should reference Delegated Verification Gate")
 	}
+	if strings.Contains(out, "### Risk Tiers") {
+		t.Error("Risk Tiers section should be absent when RDD is disabled")
+	}
 }
 
 func TestRenderWithRDD(t *testing.T) {
 	out := Render(true)
 	for _, want := range []string{
 		"review trigger rules",
-		"review skills",
-		"independent verifier",
 		"risk tier",
+		"lenses proportionate",
+		"R1 (Risk)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("RDD clause missing %q when enabled", want)
+		}
+	}
+}
+
+func TestRenderRiskTiers(t *testing.T) {
+	out := Render(true)
+	for _, want := range []string{
+		"### Risk Tiers and Lens Selection",
+		"**Standard** (0)",
+		"**Elevated** (1)",
+		"**Critical** (4)",
+		"R1 R2 R3 R4",
+		"agent may raise a tier but never lower",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("risk tiers section missing %q", want)
+		}
+	}
+}
+
+func TestRenderRiskTiersLensSelection(t *testing.T) {
+	out := Render(true)
+	for _, want := range []string{
+		"Self-verify",
+		"delegate R1 (Risk) as independent verifier",
+		"delegate R1 (Risk, strong), R2 (Readability), R3 (Reliability), R4 (Resilience)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lens selection guidance missing %q", want)
 		}
 	}
 }

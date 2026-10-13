@@ -72,16 +72,17 @@ func (r Rule) Validate() error {
 	return nil
 }
 
-// DefaultRules returns the recommended trigger rule set:
-// readability on pre-commit/push, full 4R on pre-PR (risk as strong).
+// DefaultRules returns the recommended trigger rule set: risk-proportionate
+// review where triggers fire only when the change's risk tier warrants it.
+// Standard-risk changes rely on ODD's inline self-verification; elevated
+// and critical changes get progressively more review lenses.
 func DefaultRules() []Rule {
 	return []Rule{
-		{Event: PreCommit, Skill: "review-readability", Mode: Advisory},
-		{Event: PrePush, Skill: "review-readability", Mode: Advisory},
-		{Event: PrePR, Skill: "review-risk", Mode: Strong},
-		{Event: PrePR, Skill: "review-readability", Mode: Advisory},
-		{Event: PrePR, Skill: "review-reliability", Mode: Advisory},
-		{Event: PrePR, Skill: "review-resilience", Mode: Advisory},
+		{Event: PrePush, Skill: "review-risk", Mode: Advisory, When: "risk tier is elevated or higher"},
+		{Event: PrePR, Skill: "review-risk", Mode: Strong, When: "risk tier is elevated or higher"},
+		{Event: PrePR, Skill: "review-readability", Mode: Advisory, When: "risk tier is critical"},
+		{Event: PrePR, Skill: "review-reliability", Mode: Advisory, When: "risk tier is critical"},
+		{Event: PrePR, Skill: "review-resilience", Mode: Advisory, When: "risk tier is critical"},
 	}
 }
 
