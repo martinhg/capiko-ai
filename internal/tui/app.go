@@ -73,6 +73,7 @@ var menuItems = []menuItem{
 	{"Configure CGA", "code-review", "Capiko Guardian Angel: Copilot reviews every commit.", true},
 	{"Configure team sync", "team-sync", "Share conventions and hooks across a team.", true},
 	{"Configure Copilot hooks", "copilot-hooks", "Add safety hooks that run before Copilot actions.", true},
+	{"Switch workflow", "workflow", "Choose between ODD (default) and SDD (legacy).", true},
 	{"Upgrade tools", "upgrade", "Update capiko-ai to the latest release.", true},
 	{"Upgrade + sync", "upgrade-sync", "Update capiko-ai and re-sync all configs.", true},
 	{"Install instructions", "instructions", "Write the global copilot-instructions file.", true},
@@ -249,6 +250,8 @@ func (a App) open(it menuItem) (tea.Model, tea.Cmd) {
 		a.active = newTeamSync(a.svc)
 	case it.id == "copilot-hooks":
 		a.active = newCopilotHooks(a.svc)
+	case it.id == "workflow":
+		a.active = newWorkflow(a.svc)
 	case it.id == "upgrade-sync":
 		a.active = newUpgradeSync(a.svc, a.catalog, a.latest)
 	case it.id == "instructions":
