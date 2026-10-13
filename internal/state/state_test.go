@@ -429,6 +429,48 @@ func TestLastUpdateCheckBackwardCompat(t *testing.T) {
 	}
 }
 
+func TestSetWorkflow(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.SetWorkflow("sdd"); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Workflow != "sdd" {
+		t.Errorf("Workflow = %q, want sdd", st.Workflow)
+	}
+	if !st.IsSDDWorkflow() {
+		t.Error("IsSDDWorkflow should be true when Workflow is sdd")
+	}
+	if err := s.SetWorkflow("odd"); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.Load()
+	if st.IsSDDWorkflow() {
+		t.Error("IsSDDWorkflow should be false when Workflow is odd")
+	}
+}
+
+func TestIsSDDWorkflow_EmptyDefaultsToODD(t *testing.T) {
+	st := &State{}
+	if st.IsSDDWorkflow() {
+		t.Error("empty Workflow should default to ODD, not SDD")
+	}
+}
+
+func TestWorkflowOmittedWhenEmpty(t *testing.T) {
+	s := NewStore(t.TempDir())
+	if err := s.Apply("1.0.0", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(s.Dir(), "state.json"))
+	if bytes.Contains(data, []byte("workflow")) {
+		t.Errorf("state without workflow should omit the key, got:\n%s", data)
+	}
+}
+
 func TestChecksumStable(t *testing.T) {
 	if Checksum("hello") != Checksum("hello") {
 		t.Error("checksum not deterministic")

@@ -133,7 +133,7 @@ func TestEnterOpensCopilotHooks(t *testing.T) {
 
 func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 9 // Upgrade tools
+	a.cursor = 10 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -148,7 +148,7 @@ func TestEnterOpensUpgrade(t *testing.T) {
 
 func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 10 // Upgrade + sync
+	a.cursor = 11 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -174,7 +174,7 @@ func TestEnterOpensBackups(t *testing.T) {
 
 func TestEnterOpensInstructions(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 11 // Install instructions
+	a.cursor = 12 // Install instructions
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*instructionsScreen); !ok {

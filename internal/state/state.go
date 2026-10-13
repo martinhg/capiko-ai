@@ -58,6 +58,10 @@ type State struct {
 	// unmanaged. When set, drift detection re-hashes the declared files and
 	// compares against the recorded checksums.
 	Integrity *IntegrityRecord `json:"integrity,omitempty"`
+	// Workflow selects the active routing block: "" or "odd" means ODD (the
+	// default), "sdd" selects the legacy SDD orchestrator. Only the routing
+	// block changes; SDD skills/agents are not reinstalled.
+	Workflow string `json:"workflow,omitempty"`
 	// ODD is true once the ODD routing block is installed, replacing SDD as the
 	// default workflow. SDD fields remain for legacy detection and migration.
 	ODD bool `json:"odd,omitempty"`
@@ -483,6 +487,21 @@ func (s *Store) SetODD(on bool) error {
 		return err
 	}
 	st.ODD = on
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// IsSDDWorkflow reports whether the active workflow is the legacy SDD
+// orchestrator. An empty Workflow field defaults to ODD.
+func (st *State) IsSDDWorkflow() bool { return st.Workflow == "sdd" }
+
+// SetWorkflow records the active routing-block choice ("odd" or "sdd").
+func (s *Store) SetWorkflow(w string) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.Workflow = w
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

@@ -206,6 +206,33 @@ func TestRunSyncSeedsODDOnFreshState(t *testing.T) {
 	}
 }
 
+// TestRunSyncRespectsSDDWorkflow asserts that when the user selected the SDD
+// workflow, RunSync applies the SDD routing block instead of ODD.
+func TestRunSyncRespectsSDDWorkflow(t *testing.T) {
+	cfgDir := t.TempDir()
+	host := &copilot.Host{ConfigDir: cfgDir, SkillsDir: filepath.Join(cfgDir, "skills")}
+	store := state.NewStore(t.TempDir())
+	if err := store.SetWorkflow("sdd"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RunSync(host, testCatalog(), nil, store, nil); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cfgDir, "copilot-instructions.md"))
+	if err != nil {
+		t.Fatalf("instructions not written: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, sdd.MarkerStart) {
+		t.Error("SDD block should be applied when workflow is sdd")
+	}
+	if strings.Contains(content, "capiko:odd:start") {
+		t.Error("ODD block should NOT be present when workflow is sdd")
+	}
+}
+
 // TestRunSyncReappliesCopilotHooks asserts that once copilot hooks are managed
 // (enabled in state), sync re-applies the guardrails hook file so it tracks the
 // catalog's pattern set (SC-10).
