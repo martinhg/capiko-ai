@@ -18,7 +18,7 @@ const (
 	maxEvidenceBatches          = 1
 	maxEvidenceCalls            = 3
 	approxEvidenceTokens        = 10_000
-	approxSequentialLookupLimit  = 5
+	approxSequentialLookupLimit = 5
 	approxHandoffTokens         = 2_000
 	maxParentSpotChecks         = 1
 	approxParentContextTokens   = 150_000
