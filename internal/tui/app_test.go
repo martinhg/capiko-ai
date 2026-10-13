@@ -83,30 +83,9 @@ func TestEnterOpensDetection(t *testing.T) {
 	}
 }
 
-func TestEnterOpensSDD(t *testing.T) {
-	a := readyApp(t, t.TempDir())
-	a.cursor = 4 // Configure SDD
-
-	next, _ := a.Update(key("enter"))
-	app := next.(App)
-	if _, ok := app.active.(*sddScreen); !ok {
-		t.Errorf("active = %T, want *sddScreen", app.active)
-	}
-}
-
-func TestEnterOpensSDDStatus(t *testing.T) {
-	a := readyApp(t, t.TempDir())
-	a.cursor = 5 // SDD Status
-
-	next, _ := a.Update(key("enter"))
-	if _, ok := next.(App).active.(*sddStatusScreen); !ok {
-		t.Errorf("active = %T, want *sddStatusScreen", next.(App).active)
-	}
-}
-
 func TestEnterOpensHeadroom(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 7 // Configure headroom
+	a.cursor = 5 // Configure headroom
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*headroomScreen); !ok {
@@ -116,7 +95,7 @@ func TestEnterOpensHeadroom(t *testing.T) {
 
 func TestEnterOpensCGA(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 8 // Configure CGA
+	a.cursor = 6 // Configure CGA
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*cgaScreen); !ok {
@@ -126,7 +105,7 @@ func TestEnterOpensCGA(t *testing.T) {
 
 func TestEnterOpensTeamSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 9 // Configure team sync
+	a.cursor = 7 // Configure team sync
 
 	// Stub seams so newTeamSync does not hit the real filesystem or exec.
 	origGetwd := teamSyncGetwd
@@ -144,7 +123,7 @@ func TestEnterOpensTeamSync(t *testing.T) {
 
 func TestEnterOpensCopilotHooks(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 10 // Configure Copilot hooks (after Configure team sync)
+	a.cursor = 8 // Configure Copilot hooks (after Configure team sync)
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*copilotHooksScreen); !ok {
@@ -154,7 +133,7 @@ func TestEnterOpensCopilotHooks(t *testing.T) {
 
 func TestEnterOpensUpgrade(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 11 // Upgrade tools
+	a.cursor = 9 // Upgrade tools
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -169,7 +148,7 @@ func TestEnterOpensUpgrade(t *testing.T) {
 
 func TestEnterOpensUpgradeSync(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 12 // Upgrade + sync
+	a.cursor = 10 // Upgrade + sync
 
 	next, _ := a.Update(key("enter"))
 	app := next.(App)
@@ -195,7 +174,7 @@ func TestEnterOpensBackups(t *testing.T) {
 
 func TestEnterOpensInstructions(t *testing.T) {
 	a := readyApp(t, t.TempDir())
-	a.cursor = 13 // Install instructions
+	a.cursor = 11 // Install instructions
 
 	next, _ := a.Update(key("enter"))
 	if _, ok := next.(App).active.(*instructionsScreen); !ok {
