@@ -65,6 +65,11 @@ type State struct {
 	// ODD is true once the ODD routing block is installed, replacing SDD as the
 	// default workflow. SDD fields remain for legacy detection and migration.
 	ODD bool `json:"odd,omitempty"`
+
+	// ModularODD is true when the ODD routing block uses the modular layout
+	// (core in copilot-instructions.md + modules in ~/.copilot/instructions/).
+	// When false (default), the monolithic layout is used.
+	ModularODD bool `json:"modular_odd,omitempty"`
 	// CGA records the managed Capiko Guardian Angel (native pre-commit review)
 	// configuration; nil = unmanaged. Replaces CodeReview (gga) entirely — no
 	// automatic migration from CodeReviewRecord is performed. Sync re-applies
@@ -487,6 +492,17 @@ func (s *Store) SetODD(on bool) error {
 		return err
 	}
 	st.ODD = on
+	st.UpdatedAt = time.Now().UTC()
+	return s.Save(st)
+}
+
+// SetModularODD records whether the ODD routing block uses the modular layout.
+func (s *Store) SetModularODD(on bool) error {
+	st, err := s.Load()
+	if err != nil {
+		return err
+	}
+	st.ModularODD = on
 	st.UpdatedAt = time.Now().UTC()
 	return s.Save(st)
 }

@@ -24,7 +24,7 @@ func TestSwitchToSDD_WritesSDDBlock(t *testing.T) {
 	svc := services{host: host, state: store, backup: bkp}
 
 	// Seed an ODD block first.
-	if err := applyODD(host, store, bkp, false); err != nil {
+	if err := applyODD(host, store, bkp, false, false); err != nil {
 		t.Fatalf("seed ODD: %v", err)
 	}
 

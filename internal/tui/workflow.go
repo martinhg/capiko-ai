@@ -127,13 +127,14 @@ func switchToODD(svc services) error {
 	if err := removeBlock(svc.host, svc.backup, sdd.MarkerStart, sdd.MarkerEnd, "sdd-remove"); err != nil {
 		return err
 	}
-	triggerRules := false
+	triggerRules, modular := false, false
 	if svc.state != nil {
 		if st, err := svc.state.Load(); err == nil {
 			triggerRules = st.TriggerRules
+			modular = st.ModularODD
 		}
 	}
-	if err := applyODD(svc.host, svc.state, svc.backup, triggerRules); err != nil {
+	if err := applyODD(svc.host, svc.state, svc.backup, triggerRules, modular); err != nil {
 		return err
 	}
 	if svc.state != nil {

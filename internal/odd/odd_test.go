@@ -237,3 +237,79 @@ func TestMarkers(t *testing.T) {
 		t.Error("start marker should contain 'odd'")
 	}
 }
+
+func assertContains(t *testing.T, out string, wants ...string) {
+	t.Helper()
+	for _, want := range wants {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+}
+
+func assertNotContains(t *testing.T, out string, nots ...string) {
+	t.Helper()
+	for _, not := range nots {
+		if strings.Contains(out, not) {
+			t.Errorf("unexpected %q", not)
+		}
+	}
+}
+
+func TestRenderCoreContainsProtocol(t *testing.T) {
+	assertContains(t, RenderCore(false),
+		"## Implementation Routing", "### ODD protocol (MANDATORY",
+		"1. **Authorize.**", "7. **Close.**")
+}
+
+func TestRenderCoreContainsTaskSize(t *testing.T) {
+	assertContains(t, RenderCore(false), "### Task Size", "**High risk**", "**Risk line**")
+}
+
+func TestRenderCoreNoRoutes(t *testing.T) {
+	assertNotContains(t, RenderCore(true), "**Direct inline:**", "### Mandatory Delegation Triggers")
+}
+
+func TestRenderCoreNoODDDetail(t *testing.T) {
+	assertNotContains(t, RenderCore(true), "### Organic Driven Development")
+}
+
+func TestRenderCoreWithRDD(t *testing.T) {
+	assertContains(t, RenderCore(true), "### Risk Tiers and Lens Selection")
+}
+
+func TestRenderCoreNoRDD(t *testing.T) {
+	assertNotContains(t, RenderCore(false), "### Risk Tiers and Lens Selection")
+}
+
+func TestRenderModulesCount(t *testing.T) {
+	for _, rdd := range []bool{false, true} {
+		if got := len(RenderModules(rdd)); got != 2 {
+			t.Errorf("rdd=%v: got %d modules, want 2", rdd, got)
+		}
+	}
+}
+
+func TestRenderModulesFrontmatter(t *testing.T) {
+	for _, m := range RenderModules(false) {
+		if !strings.HasPrefix(m.Content, "---\napplyTo: \"**\"\n---\n\n") {
+			t.Errorf("%s: missing applyTo frontmatter", m.Name)
+		}
+	}
+}
+
+func TestRenderModulesDelegation(t *testing.T) {
+	mods := RenderModules(false)
+	if mods[0].Name != "capiko-delegation" {
+		t.Fatalf("first module = %q", mods[0].Name)
+	}
+	assertContains(t, mods[0].Content, "**Direct inline:**", "### Mandatory Delegation Triggers")
+}
+
+func TestRenderModulesODDDetail(t *testing.T) {
+	mods := RenderModules(true)
+	if mods[1].Name != "capiko-odd-detail" {
+		t.Fatalf("second module = %q", mods[1].Name)
+	}
+	assertContains(t, mods[1].Content, "### Organic Driven Development", "Apply one default test-first policy")
+}

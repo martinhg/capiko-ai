@@ -91,7 +91,7 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 						return len(recorded) + len(agentRecorded), fmt.Errorf("migrating SDD to ODD: %w", err)
 					}
 				}
-				if err := applyODD(host, store, bkp, st.TriggerRules); err != nil {
+				if err := applyODD(host, store, bkp, st.TriggerRules, st.ModularODD); err != nil {
 					return len(recorded) + len(agentRecorded), fmt.Errorf("applying ODD: %w", err)
 				}
 			}
