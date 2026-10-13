@@ -638,3 +638,44 @@ func TestInstructionBudgetCheck_ExceedsThreshold(t *testing.T) {
 		t.Error("warning must carry a remedy")
 	}
 }
+
+func TestLegacySDDBlockCheck_NoFile(t *testing.T) {
+	r := Evaluate(Inputs{Env: healthyEnv()})
+	c := find(t, r, "Legacy SDD block")
+	if c.Status != Pass {
+		t.Errorf("want Pass when no instructions file, got %v", c.Status)
+	}
+}
+
+func TestLegacySDDBlockCheck_NoSDDBlock(t *testing.T) {
+	content := "<!-- capiko:persona:start -->\nPersona.\n<!-- capiko:persona:end -->\n"
+	r := Evaluate(Inputs{Env: healthyEnv(), InstructionsContent: content})
+	c := find(t, r, "Legacy SDD block")
+	if c.Status != Pass {
+		t.Errorf("want Pass without an SDD block, got %v", c.Status)
+	}
+}
+
+func TestLegacySDDBlockCheck_FlagsLeftoverBlock(t *testing.T) {
+	content := "<!-- capiko:sdd:start -->\nSDD block.\n<!-- capiko:sdd:end -->\n"
+	r := Evaluate(Inputs{Env: healthyEnv(), InstructionsContent: content})
+	c := find(t, r, "Legacy SDD block")
+	if c.Status != Warn {
+		t.Fatalf("want Warn for leftover SDD block, got %v", c.Status)
+	}
+	if !strings.Contains(c.Remedy, "capiko-ai sync") || !strings.Contains(c.Remedy, "ODD") {
+		t.Errorf("remedy should point to sync/ODD migration: %q", c.Remedy)
+	}
+	if !strings.Contains(c.Detail, "legacy") {
+		t.Errorf("detail should say the block is legacy: %q", c.Detail)
+	}
+}
+
+func TestLegacySDDBlockCheck_IgnoresUnclosedBlock(t *testing.T) {
+	content := "<!-- capiko:sdd:start -->\nno end marker\n"
+	r := Evaluate(Inputs{Env: healthyEnv(), InstructionsContent: content})
+	c := find(t, r, "Legacy SDD block")
+	if c.Status != Pass {
+		t.Errorf("want Pass for an unclosed block, got %v", c.Status)
+	}
+}
