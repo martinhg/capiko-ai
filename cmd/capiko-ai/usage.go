@@ -22,6 +22,7 @@ var commands = map[string]string{
 	"sync":           "Sync all managed skills and agents",
 	"uninstall":      "Remove all managed skills and agents",
 	"update":         "Check versions of capiko-ai and engram",
+	"upgrade":        "Upgrade engram to the latest version",
 	"version":        "Print version information",
 }
 
