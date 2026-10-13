@@ -11,6 +11,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/persona"
+	"github.com/martinhg/capiko-ai/internal/sdd"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/versions"
@@ -69,16 +70,30 @@ func RunSync(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.Age
 					}
 				}
 			}
-			// ODD is always-on: apply the ODD routing block and, on first
-			// sync after upgrade, migrate from SDD by removing the old
-			// SDD marker block from the instructions file.
-			if !st.ODD && len(st.SDDModels) > 0 {
-				if err := migrateSddToOdd(host, store, bkp); err != nil {
-					return len(recorded) + len(agentRecorded), fmt.Errorf("migrating SDD to ODD: %w", err)
+			// Apply the active routing block. When workflow is SDD,
+			// re-apply the SDD orchestrator block; otherwise apply ODD
+			// (the default) and migrate from SDD on first sync after
+			// upgrade when state still has SDD models set.
+			if st.IsSDDWorkflow() {
+				models, efforts := st.SDDModels, st.SDDEfforts
+				if len(models) == 0 {
+					models = sdd.DefaultAssignments()
 				}
-			}
-			if err := applyODD(host, store, bkp, st.TriggerRules); err != nil {
-				return len(recorded) + len(agentRecorded), fmt.Errorf("applying ODD: %w", err)
+				if len(efforts) == 0 {
+					efforts = sdd.DefaultEfforts()
+				}
+				if err := applySDD(host, store, bkp, models, efforts, st.StrictTDD, st.SDDFallbackModels); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("applying SDD: %w", err)
+				}
+			} else {
+				if !st.ODD && len(st.SDDModels) > 0 {
+					if err := migrateSddToOdd(host, store, bkp); err != nil {
+						return len(recorded) + len(agentRecorded), fmt.Errorf("migrating SDD to ODD: %w", err)
+					}
+				}
+				if err := applyODD(host, store, bkp, st.TriggerRules); err != nil {
+					return len(recorded) + len(agentRecorded), fmt.Errorf("applying ODD: %w", err)
+				}
 			}
 			if st.TriggerRules {
 				if err := applyTriggerRules(host, store, bkp, true); err != nil {
