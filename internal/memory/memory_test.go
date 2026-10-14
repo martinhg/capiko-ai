@@ -82,3 +82,59 @@ func TestRenderMilestoneAdvisory(t *testing.T) {
 		t.Error("memory block contains 'timer' outside of 'no timer' advisory")
 	}
 }
+
+func TestRenderProjectDetection(t *testing.T) {
+	block := strings.ToLower(Render())
+	for _, want := range []string{"mem_current_project", "session start", "auto-detect"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("memory block missing project detection keyword %q", want)
+		}
+	}
+}
+
+func TestRenderConflictSurfacing(t *testing.T) {
+	block := strings.ToLower(Render())
+	for _, want := range []string{
+		"judgment_required",
+		"mem_judge",
+		"mem_judge_many",
+		"mem_compare",
+		"judgment_id",
+		"conflicts_with",
+		"supersedes",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("memory block missing conflict surfacing keyword %q", want)
+		}
+	}
+}
+
+func TestRenderMutationSafety(t *testing.T) {
+	block := strings.ToLower(Render())
+	for _, want := range []string{
+		"expected_project",
+		"mem_delete",
+		"mem_consolidate",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("memory block missing mutation safety keyword %q", want)
+		}
+	}
+}
+
+func TestRenderNewTools(t *testing.T) {
+	block := strings.ToLower(Render())
+	for _, want := range []string{
+		"mem_list_projects",
+		"mem_merge_projects",
+		"mem_stats",
+		"mem_session_finalize",
+		"mem_suggest_topic_key",
+		"mem_session_start",
+		"mem_session_end",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("memory block missing new tool reference %q", want)
+		}
+	}
+}
