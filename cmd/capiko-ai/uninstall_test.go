@@ -183,5 +183,3 @@ func TestGatherUninstallInputsIsAFunctionVar(t *testing.T) {
 		t.Fatal("gatherUninstallInputs must be set")
 	}
 }
-
-var _ = tui.ReconcileResult{} // keep tui import alive if test bodies are trimmed later

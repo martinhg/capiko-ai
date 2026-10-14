@@ -16,13 +16,13 @@ import (
 	"github.com/martinhg/capiko-ai/internal/state"
 )
 
-// applyODD injects the ODD routing block into Copilot's instructions file,
+// ApplyODD injects the ODD routing block into Copilot's instructions file,
 // backing the file up only when it changes, then records ODD as enabled in
 // state. rddEnabled controls whether review-trigger integration clauses are
 // included. When modular is true only the core block is injected and the
 // routing and detail modules are written to the instructions directory;
 // otherwise the full block is injected and any module files are removed.
-func applyODD(host *copilot.Host, store *state.Store, bkp *backup.Store, rddEnabled, modular bool) error {
+func ApplyODD(host *copilot.Host, store *state.Store, bkp *backup.Store, rddEnabled, modular bool) error {
 	if host == nil {
 		return nil
 	}

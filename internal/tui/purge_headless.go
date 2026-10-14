@@ -18,6 +18,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/instructions"
 	"github.com/martinhg/capiko-ai/internal/memory"
 	"github.com/martinhg/capiko-ai/internal/persona"
+	"github.com/martinhg/capiko-ai/internal/reconcile"
 	"github.com/martinhg/capiko-ai/internal/scoped"
 	"github.com/martinhg/capiko-ai/internal/sdd"
 	"github.com/martinhg/capiko-ai/internal/state"
@@ -129,7 +130,7 @@ func purgeSkillsAndAgents(cfg PurgeConfig, rpt *PurgeReport) {
 		return
 	}
 
-	skills, agents, err := managedItems(cfg.Store)
+	skills, agents, err := reconcile.ManagedItems(cfg.Store)
 	if err != nil {
 		rpt.Warnings = append(rpt.Warnings, "loading managed items: "+err.Error())
 		return

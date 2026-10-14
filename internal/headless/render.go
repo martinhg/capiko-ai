@@ -1,6 +1,6 @@
 // Package headless renders the outcome of a headless capiko-ai command
 // (install/sync/uninstall) as text or JSON. It is a pure render package: no
-// domain imports beyond the tui.ReconcileResult conversion helper, so it
+// domain imports beyond the reconcile.ReconcileResult conversion helper, so it
 // stays free of any dependency on the Copilot host or the filesystem.
 package headless
 
@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/martinhg/capiko-ai/internal/tui"
+	"github.com/martinhg/capiko-ai/internal/reconcile"
 )
 
 // ItemChanges lists the names of skills and agents installed or removed by a
@@ -33,10 +33,10 @@ type CommandResult struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// FromReconcileResult converts a tui.ReconcileResult (plus the error from the
+// FromReconcileResult converts a reconcile.ReconcileResult (plus the error from the
 // operation that produced it, if any) into a CommandResult ready to render.
 // OK is true exactly when err is nil.
-func FromReconcileResult(cmd string, r tui.ReconcileResult, err error) CommandResult {
+func FromReconcileResult(cmd string, r reconcile.ReconcileResult, err error) CommandResult {
 	if err != nil {
 		return CommandResult{
 			OK:      false,

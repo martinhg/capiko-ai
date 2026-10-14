@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/martinhg/capiko-ai/internal/tui"
+	"github.com/martinhg/capiko-ai/internal/reconcile"
 )
 
 func TestRenderTextEmptyResult(t *testing.T) {
@@ -216,7 +216,7 @@ func TestRenderJSONErrorField(t *testing.T) {
 }
 
 func TestFromReconcileResultSuccess(t *testing.T) {
-	rr := tui.ReconcileResult{
+	rr := reconcile.ReconcileResult{
 		InstalledSkills: []string{"capiko-dev"},
 		InstalledAgents: []string{"capiko-onboard"},
 	}
@@ -243,7 +243,7 @@ func TestFromReconcileResultSuccess(t *testing.T) {
 }
 
 func TestFromReconcileResultError(t *testing.T) {
-	r := FromReconcileResult("uninstall", tui.ReconcileResult{}, errors.New("disk full"))
+	r := FromReconcileResult("uninstall", reconcile.ReconcileResult{}, errors.New("disk full"))
 
 	if r.OK {
 		t.Error("OK should be false when err is non-nil")

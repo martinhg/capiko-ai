@@ -140,7 +140,7 @@ func switchToODD(svc services) error {
 			modular = st.ModularODD
 		}
 	}
-	if err := applyODD(svc.host, svc.state, svc.backup, triggerRules, modular); err != nil {
+	if err := ApplyODD(svc.host, svc.state, svc.backup, triggerRules, modular); err != nil {
 		return err
 	}
 	if svc.state != nil {
