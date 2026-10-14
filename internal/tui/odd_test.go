@@ -17,7 +17,7 @@ func TestApplyODD_ModularWritesModulesAndCleansOnMonolithic(t *testing.T) {
 	bkp := backup.NewStore(t.TempDir())
 	modDir := filepath.Join(host.ConfigDir, "instructions")
 
-	if err := applyODD(host, store, bkp, false, true); err != nil {
+	if err := ApplyODD(host, store, bkp, false, true); err != nil {
 		t.Fatalf("modular apply: %v", err)
 	}
 	for _, name := range []string{"capiko-delegation", "capiko-odd-detail"} {
@@ -33,7 +33,7 @@ func TestApplyODD_ModularWritesModulesAndCleansOnMonolithic(t *testing.T) {
 		t.Error("ModularODD should be true")
 	}
 
-	if err := applyODD(host, store, bkp, false, false); err != nil {
+	if err := ApplyODD(host, store, bkp, false, false); err != nil {
 		t.Fatalf("monolithic apply: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(modDir, moduleFileName("capiko-delegation"))); !os.IsNotExist(err) {

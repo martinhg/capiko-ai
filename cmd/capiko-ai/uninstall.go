@@ -7,6 +7,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/backup"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/headless"
+	"github.com/martinhg/capiko-ai/internal/reconcile"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/tui"
 )
@@ -66,16 +67,16 @@ func uninstallCommand(name string, args []string, out io.Writer) (handled bool, 
 		if in.hostExitCode == 1 && in.hostErr != nil {
 			msg = in.hostErr.Error()
 		}
-		r := headless.FromReconcileResult("uninstall", tui.ReconcileResult{}, fmt.Errorf("%s", msg))
+		r := headless.FromReconcileResult("uninstall", reconcile.ReconcileResult{}, fmt.Errorf("%s", msg))
 		renderUninstall(out, r, asJSON)
 		return true, in.hostExitCode, in.hostErr
 	}
 
 	doneUninstall := log.Step("uninstall-all")
-	result, err := tui.UninstallAll(in.host, in.store, in.bkp)
+	result, err := reconcile.UninstallAll(in.host, in.store, in.bkp, tui.Version)
 	if err != nil {
 		doneUninstall("error")
-		r := headless.FromReconcileResult("uninstall", tui.ReconcileResult{}, err)
+		r := headless.FromReconcileResult("uninstall", reconcile.ReconcileResult{}, err)
 		renderUninstall(out, r, asJSON)
 		return true, 1, nil
 	}

@@ -24,7 +24,7 @@ func TestSwitchToSDD_WritesSDDBlock(t *testing.T) {
 	svc := services{host: host, state: store, backup: bkp}
 
 	// Seed an ODD block in modular mode so module files exist.
-	if err := applyODD(host, store, bkp, false, true); err != nil {
+	if err := ApplyODD(host, store, bkp, false, true); err != nil {
 		t.Fatalf("seed ODD modular: %v", err)
 	}
 	modDir := filepath.Join(host.ConfigDir, "instructions")

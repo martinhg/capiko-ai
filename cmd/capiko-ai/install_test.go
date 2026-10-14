@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
-	"github.com/martinhg/capiko-ai/internal/tui"
 )
 
 // withStubInstallInputs swaps the gather seam for the duration of a test.
@@ -163,4 +164,26 @@ func TestGatherInstallInputsIsAFunctionVar(t *testing.T) {
 	}
 }
 
-var _ = tui.ReconcileResult{} // keep tui import if test bodies are trimmed later
+// TestSeedODD_SeedsOnFirstInstallAndIsIdempotent asserts the post-install hook
+// seeds the ODD block and flips state.ODD, and leaves it enabled on re-run.
+func TestSeedODD_SeedsOnFirstInstallAndIsIdempotent(t *testing.T) {
+	host := &copilot.Host{SkillsDir: t.TempDir(), AgentsDir: t.TempDir(), ConfigDir: t.TempDir()}
+	store := state.NewStore(t.TempDir())
+	in := installInputs{host: host, store: store, bkp: backup.NewStore(t.TempDir())}
+
+	for i := 0; i < 2; i++ {
+		if err := seedODD(in)(); err != nil {
+			t.Fatalf("seedODD run %d: %v", i, err)
+		}
+		st, err := store.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !st.ODD {
+			t.Errorf("run %d: state.ODD should be true", i)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(host.ConfigDir, "copilot-instructions.md")); err != nil {
+		t.Errorf("ODD instructions not written: %v", err)
+	}
+}

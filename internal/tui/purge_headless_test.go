@@ -658,3 +658,44 @@ func TestPurgeReport_TotalRemoved(t *testing.T) {
 		t.Errorf("TotalRemoved() = %d, want 6", got)
 	}
 }
+
+// seedInstalled writes the test skill and agent catalogs to host and records
+// them in state, so purge sees managed items to remove.
+func seedInstalled(t *testing.T, host *copilot.Host, store *state.Store) {
+	t.Helper()
+	cat := testCatalog()
+	agents := testAgentCatalog()
+
+	for _, sk := range cat {
+		dir := filepath.Join(host.SkillsDir, sk.Name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(sk.Content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(host.AgentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range agents {
+		if err := os.WriteFile(filepath.Join(host.AgentsDir, a.Name+".agent.md"), []byte(a.Content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recs := make([]state.Installed, len(cat))
+	for i, sk := range cat {
+		recs[i] = state.Installed{Name: sk.Name, Checksum: state.Checksum(sk.CanonicalContent())}
+	}
+	if err := store.Apply(Version, recs, nil); err != nil {
+		t.Fatal(err)
+	}
+	agentRecs := make([]state.Installed, len(agents))
+	for i, a := range agents {
+		agentRecs[i] = state.Installed{Name: a.Name, Checksum: state.Checksum(a.CanonicalContent())}
+	}
+	if err := store.ApplyAgents(Version, agentRecs, nil); err != nil {
+		t.Fatal(err)
+	}
+}

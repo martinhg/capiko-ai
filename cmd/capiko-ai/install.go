@@ -9,6 +9,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/catalog"
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/headless"
+	"github.com/martinhg/capiko-ai/internal/reconcile"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/tui"
@@ -89,16 +90,16 @@ func installCommand(name string, args []string, out io.Writer) (handled bool, ex
 		if in.hostExitCode == 1 && in.hostErr != nil {
 			msg = in.hostErr.Error()
 		}
-		r := headless.FromReconcileResult("install", tui.ReconcileResult{}, fmt.Errorf("%s", msg))
+		r := headless.FromReconcileResult("install", reconcile.ReconcileResult{}, fmt.Errorf("%s", msg))
 		renderInstall(out, r, asJSON)
 		return true, in.hostExitCode, in.hostErr
 	}
 
 	doneInstall := log.Step("install-all")
-	result, err := tui.InstallAll(in.host, in.catalog, in.agents, in.store, in.bkp)
+	result, err := reconcile.InstallAll(in.host, in.catalog, in.agents, in.store, in.bkp, tui.Version, seedODD(in))
 	if err != nil {
 		doneInstall("error")
-		r := headless.FromReconcileResult("install", tui.ReconcileResult{}, err)
+		r := headless.FromReconcileResult("install", reconcile.ReconcileResult{}, err)
 		renderInstall(out, r, asJSON)
 		return true, 1, nil
 	}
@@ -107,6 +108,28 @@ func installCommand(name string, args []string, out io.Writer) (handled bool, ex
 	r := headless.FromReconcileResult("install", result, nil)
 	renderInstall(out, r, asJSON)
 	return true, 0, nil
+}
+
+// seedODD returns the post-install hook that seeds the ODD routing block on
+// first install. It is a no-op when ODD is already enabled or there is no
+// store/host to record against.
+func seedODD(in installInputs) func() error {
+	return func() error {
+		if in.store == nil || in.host == nil {
+			return nil
+		}
+		st, err := in.store.Load()
+		if err != nil {
+			return fmt.Errorf("loading state: %w", err)
+		}
+		if st.ODD {
+			return nil
+		}
+		if err := tui.ApplyODD(in.host, in.store, in.bkp, st.TriggerRules, st.ModularODD); err != nil {
+			return fmt.Errorf("seeding ODD: %w", err)
+		}
+		return nil
+	}
 }
 
 // renderInstall writes r to out as JSON or text, ignoring render errors past

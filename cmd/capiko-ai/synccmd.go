@@ -11,6 +11,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/drift"
 	"github.com/martinhg/capiko-ai/internal/engram"
 	"github.com/martinhg/capiko-ai/internal/headless"
+	"github.com/martinhg/capiko-ai/internal/reconcile"
 	"github.com/martinhg/capiko-ai/internal/skill"
 	"github.com/martinhg/capiko-ai/internal/state"
 	"github.com/martinhg/capiko-ai/internal/tui"
@@ -108,7 +109,7 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 		if in.hostExitCode == 1 && in.hostErr != nil {
 			msg = in.hostErr.Error()
 		}
-		r := headless.FromReconcileResult("sync", tui.ReconcileResult{}, fmt.Errorf("%s", msg))
+		r := headless.FromReconcileResult("sync", reconcile.ReconcileResult{}, fmt.Errorf("%s", msg))
 		renderSync(out, r, asJSON)
 		return true, in.hostExitCode, in.hostErr
 	}
@@ -137,7 +138,7 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 				// "No drift detected" message in RenderText) and exit cleanly
 				// without calling RunSync.
 				log.Event("auto-repair-skipped", "no-drift")
-				r := headless.FromReconcileResult("sync", tui.ReconcileResult{}, nil)
+				r := headless.FromReconcileResult("sync", reconcile.ReconcileResult{}, nil)
 				renderSync(out, r, asJSON)
 				return true, 0, nil
 			}
@@ -149,7 +150,7 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 	n, err := runSync(in.host, in.catalog, in.agents, in.store, in.bkp)
 	if err != nil {
 		doneSync("error")
-		r := headless.FromReconcileResult("sync", tui.ReconcileResult{}, err)
+		r := headless.FromReconcileResult("sync", reconcile.ReconcileResult{}, err)
 		renderSync(out, r, asJSON)
 		return true, 1, nil
 	}
@@ -166,7 +167,7 @@ func syncCommand(name string, args []string, out io.Writer) (handled bool, exitC
 	for i, a := range in.agents {
 		agentNames[i] = a.Name
 	}
-	result := tui.ReconcileResult{
+	result := reconcile.ReconcileResult{
 		InstalledSkills: skillNames,
 		InstalledAgents: agentNames,
 	}
