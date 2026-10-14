@@ -296,7 +296,7 @@ func TestRenderPromptCapture(t *testing.T) {
 	if h.TimeoutSec != copilothooks.TimeoutSeconds {
 		t.Errorf("TimeoutSec = %d, want %d", h.TimeoutSec, copilothooks.TimeoutSeconds)
 	}
-	for _, marker := range []string{copilothooks.SessionEventsDir, "events.jsonl", "prompt"} {
+	for _, marker := range []string{copilothooks.SessionEventsDir, "sessionId", ".jsonl", "unknown", "prompt"} {
 		if !strings.Contains(h.Bash, marker) {
 			t.Errorf("Bash script missing marker %q", marker)
 		}
@@ -329,7 +329,7 @@ func TestRenderPromptCapture_BashRunsCleanly(t *testing.T) {
 		t.Fatalf("run prompt capture script: %v\nstderr: %s", err, errOut.String())
 	}
 
-	eventsFile := filepath.Join(tmp, ".capiko", copilothooks.SessionEventsDir, "events.jsonl")
+	eventsFile := filepath.Join(tmp, ".capiko", copilothooks.SessionEventsDir, "test-123.jsonl")
 	data, err := os.ReadFile(eventsFile)
 	if err != nil {
 		t.Fatalf("read events file: %v", err)
@@ -340,6 +340,38 @@ func TestRenderPromptCapture_BashRunsCleanly(t *testing.T) {
 	}
 	if !strings.Contains(line, `"sessionId":"test-123"`) {
 		t.Errorf("event line missing payload: %s", line)
+	}
+}
+
+// TestRenderEventCapture_BashSessionID covers sessionId extraction edge cases
+// shared by the prompt-capture and tool-monitor scripts.
+func TestRenderEventCapture_BashSessionID(t *testing.T) {
+	script := copilothooks.RenderPromptCapture().Hooks[copilothooks.EventUserPromptSubmitted][0].Bash
+	cases := []struct {
+		name  string
+		stdin string
+		file  string
+	}{
+		{"missing_session_id", `{"prompt":"hi"}`, "unknown.jsonl"},
+		{"empty_session_id", `{"sessionId":"","prompt":"hi"}`, "unknown.jsonl"},
+		{"spaced_json", `{"sessionId": "abc-1","prompt":"hi"}`, "abc-1.jsonl"},
+		{"path_traversal_stripped", `{"sessionId":"../../evil","prompt":"hi"}`, "evil.jsonl"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			cmd := exec.Command("bash", "-c", script)
+			cmd.Env = append(os.Environ(), "HOME="+tmp)
+			cmd.Stdin = strings.NewReader(tc.stdin)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("run script: %v\n%s", err, out)
+			}
+			path := filepath.Join(tmp, ".capiko", copilothooks.SessionEventsDir, tc.file)
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("want session file %s: %v", tc.file, err)
+			}
+		})
 	}
 }
 
@@ -363,7 +395,7 @@ func TestRenderToolMonitor(t *testing.T) {
 	if h.TimeoutSec != copilothooks.TimeoutSeconds {
 		t.Errorf("TimeoutSec = %d, want %d", h.TimeoutSec, copilothooks.TimeoutSeconds)
 	}
-	for _, marker := range []string{copilothooks.SessionEventsDir, "events.jsonl", "tool_use"} {
+	for _, marker := range []string{copilothooks.SessionEventsDir, "sessionId", ".jsonl", "unknown", "tool_use"} {
 		if !strings.Contains(h.Bash, marker) {
 			t.Errorf("Bash script missing marker %q", marker)
 		}
@@ -396,7 +428,7 @@ func TestRenderToolMonitor_BashRunsCleanly(t *testing.T) {
 		t.Fatalf("run tool monitor script: %v\nstderr: %s", err, errOut.String())
 	}
 
-	eventsFile := filepath.Join(tmp, ".capiko", copilothooks.SessionEventsDir, "events.jsonl")
+	eventsFile := filepath.Join(tmp, ".capiko", copilothooks.SessionEventsDir, "test-456.jsonl")
 	data, err := os.ReadFile(eventsFile)
 	if err != nil {
 		t.Fatalf("read events file: %v", err)
