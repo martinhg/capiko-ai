@@ -273,7 +273,7 @@ exit 0
 
 // RenderPromptCapture renders the v1 prompt-capture hook file. It fires on
 // EventUserPromptSubmitted (every user prompt) and appends the full stdin
-// payload as a JSONL line to ~/.capiko/session-events/events.jsonl. The hook
+// payload as a JSONL line to ~/.capiko/sessions/{sessionId}.jsonl. The hook
 // is always-on when hooks are enabled — it is not user-togglable.
 func RenderPromptCapture() HookFile {
 	return HookFile{
@@ -292,7 +292,7 @@ func RenderPromptCapture() HookFile {
 
 // RenderToolMonitor renders the v1 tool-monitor hook file. It fires on
 // EventPostToolUse (every successful tool execution) and appends the full
-// stdin payload as a JSONL line to ~/.capiko/session-events/events.jsonl.
+// stdin payload as a JSONL line to ~/.capiko/sessions/{sessionId}.jsonl.
 // The hook is always-on when hooks are enabled — it is not user-togglable.
 func RenderToolMonitor() HookFile {
 	return HookFile{
@@ -311,26 +311,34 @@ func RenderToolMonitor() HookFile {
 
 // renderEventCaptureBashScript builds a generic event-capture script that
 // reads the full stdin payload and appends it as a JSONL line with an event
-// type tag and timestamp. The script always exits 0 (non-blocking).
+// type tag and timestamp to a per-session file. The session ID is extracted
+// with POSIX tools (no jq) and sanitized so it is safe as a filename; it falls
+// back to "unknown". The script always exits 0 (non-blocking).
 func renderEventCaptureBashScript(eventType string) string {
-	return fmt.Sprintf(`events_dir="$HOME/.capiko/%s"
-mkdir -p "$events_dir"
+	return fmt.Sprintf(`sessions_dir="$HOME/.capiko/%s"
+mkdir -p "$sessions_dir"
 ts="$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
 input="$(cat)"
-printf '{"event":"%s","ts":"%%s","payload":%%s}\n' "$ts" "$input" >> "$events_dir/events.jsonl"
+session_id="$(printf '%%s' "$input" | grep -o '"sessionId"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:[[:space:]]*"//;s/"$//' | tr -cd 'A-Za-z0-9_-')"
+if [ -z "$session_id" ]; then session_id="unknown"; fi
+printf '{"event":"%s","ts":"%%s","payload":%%s}\n' "$ts" "$input" >> "$sessions_dir/${session_id}.jsonl"
 exit 0
 `, SessionEventsDir, eventType)
 }
 
 // renderEventCapturePowerShellScript is the PowerShell-syntax equivalent of
-// renderEventCaptureBashScript: same JSONL append, same non-blocking exit 0.
+// renderEventCaptureBashScript: same per-session JSONL append, same
+// "unknown" fallback, same non-blocking exit 0.
 func renderEventCapturePowerShellScript(eventType string) string {
-	return fmt.Sprintf(`$eventsDir = Join-Path $env:USERPROFILE ".capiko" "%s"
-if (-not (Test-Path $eventsDir)) { New-Item -ItemType Directory -Path $eventsDir -Force | Out-Null }
+	return fmt.Sprintf(`$sessionsDir = Join-Path $env:USERPROFILE ".capiko" "%s"
+if (-not (Test-Path $sessionsDir)) { New-Item -ItemType Directory -Path $sessionsDir -Force | Out-Null }
 $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-$input = [Console]::In.ReadToEnd()
-$line = '{"event":"%s","ts":"' + $ts + '","payload":' + $input + '}'
-Add-Content -Path (Join-Path $eventsDir "events.jsonl") -Value $line
+$payload = [Console]::In.ReadToEnd()
+$sessionId = "unknown"
+if ($payload -match '"sessionId"\s*:\s*"([^"]*)"') { $sessionId = $Matches[1] -replace '[^A-Za-z0-9_-]', '' }
+if (-not $sessionId) { $sessionId = "unknown" }
+$line = '{"event":"%s","ts":"' + $ts + '","payload":' + $payload + '}'
+Add-Content -Path (Join-Path $sessionsDir "$sessionId.jsonl") -Value $line
 exit 0
 `, SessionEventsDir, eventType)
 }

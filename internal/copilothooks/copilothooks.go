@@ -65,9 +65,9 @@ const (
 	// ToolMonitorFile is the filename of the rendered tool-monitor hook
 	// file under copilot.Host.HooksDir.
 	ToolMonitorFile = "capiko-toolmonitor.json"
-	// SessionEventsDir is the subdirectory under ~/.capiko where session
+	// SessionEventsDir is the subdirectory under ~/.capiko where per-session
 	// event JSONL files are written by prompt-capture and tool-monitor hooks.
-	SessionEventsDir = "session-events"
+	SessionEventsDir = "sessions"
 )
 
 // HookFile is the v1 Copilot CLI hook configuration file shape. Hooks is an
