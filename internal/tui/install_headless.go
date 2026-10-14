@@ -99,7 +99,7 @@ func InstallAll(host *copilot.Host, catalog []skill.Skill, agentCatalog []agent.
 			return ReconcileResult{}, fmt.Errorf("loading state: %w", err)
 		}
 		if !st.ODD {
-			if err := applyODD(host, store, bkp, st.TriggerRules); err != nil {
+			if err := applyODD(host, store, bkp, st.TriggerRules, st.ModularODD); err != nil {
 				return ReconcileResult{}, fmt.Errorf("seeding ODD: %w", err)
 			}
 		}

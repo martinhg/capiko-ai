@@ -45,6 +45,60 @@ func Render(rddEnabled bool) string {
 	return b.String()
 }
 
+// Module is one ODD orchestrator module file.
+type Module struct {
+	Name    string // filename stem, e.g. "capiko-delegation"
+	Content string // full file content including frontmatter
+}
+
+// Module name stems for the modular layout.
+const (
+	ModuleDelegation = "capiko-delegation"
+	ModuleODDDetail  = "capiko-odd-detail"
+)
+
+// ModuleNames lists every module stem RenderModules can emit.
+func ModuleNames() []string { return []string{ModuleDelegation, ModuleODDDetail} }
+
+const moduleFrontmatter = "---\napplyTo: \"**\"\n---\n\n"
+
+// RenderCore builds only the core ODD block (protocol, task size and, with
+// RDD, risk tiers) for injection into copilot-instructions.md when the modular
+// layout is active.
+func RenderCore(rddEnabled bool) string {
+	var b strings.Builder
+
+	b.WriteString("## Implementation Routing\n\n")
+	b.WriteString("Organic Driven Development (ODD) is the predefined workflow of this orchestrator. Every request enters it, on every runtime, without the user asking for a workflow, a plan, or task tracking. Never describe this workflow only when asked about it: run it. Routes, delegation triggers, and reference detail live in the capiko-delegation and capiko-odd-detail instruction files.\n\n")
+
+	renderProtocol(&b, rddEnabled)
+	renderTaskSize(&b, rddEnabled)
+	if rddEnabled {
+		renderRiskTiers(&b)
+	}
+
+	return b.String()
+}
+
+// RenderModules returns the ODD module files for the modular layout.
+func RenderModules(rddEnabled bool) []Module {
+	var del strings.Builder
+	del.WriteString(moduleFrontmatter)
+	del.WriteString("## ODD Routes and Delegation\n\n")
+	renderRoutes(&del)
+	renderDelegationTriggers(&del)
+
+	var detail strings.Builder
+	detail.WriteString(moduleFrontmatter)
+	detail.WriteString("## ODD Reference Detail")
+	renderODD(&detail, rddEnabled)
+
+	return []Module{
+		{Name: ModuleDelegation, Content: del.String()},
+		{Name: ModuleODDDetail, Content: detail.String()},
+	}
+}
+
 func renderProtocol(b *strings.Builder, rdd bool) {
 	b.WriteString("### ODD protocol (MANDATORY, in this order, on every request)\n\n")
 	b.WriteString("1. **Authorize.** First establish whether the requested outcome explicitly authorizes a change. Investigation, explanation, review, audit, comparison, and solution-proposal or planning-only requests are read-only unless the user explicitly requests implementation or another mutation.\n")

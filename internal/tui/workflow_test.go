@@ -23,9 +23,13 @@ func TestSwitchToSDD_WritesSDDBlock(t *testing.T) {
 	bkp := backup.NewStore(t.TempDir())
 	svc := services{host: host, state: store, backup: bkp}
 
-	// Seed an ODD block first.
-	if err := applyODD(host, store, bkp, false); err != nil {
-		t.Fatalf("seed ODD: %v", err)
+	// Seed an ODD block in modular mode so module files exist.
+	if err := applyODD(host, store, bkp, false, true); err != nil {
+		t.Fatalf("seed ODD modular: %v", err)
+	}
+	modDir := filepath.Join(host.ConfigDir, "instructions")
+	if _, err := os.Stat(filepath.Join(modDir, moduleFileName("capiko-delegation"))); err != nil {
+		t.Fatalf("module should exist before switch: %v", err)
 	}
 
 	if err := switchToSDD(svc); err != nil {
@@ -42,6 +46,11 @@ func TestSwitchToSDD_WritesSDDBlock(t *testing.T) {
 	}
 	if strings.Contains(content, odd.MarkerStart) {
 		t.Error("ODD marker should be removed after switching to SDD")
+	}
+	for _, name := range odd.ModuleNames() {
+		if _, err := os.Stat(filepath.Join(modDir, moduleFileName(name))); !os.IsNotExist(err) {
+			t.Errorf("module %s should be cleaned up after switchToSDD", name)
+		}
 	}
 
 	st, err := store.Load()

@@ -11,6 +11,7 @@ import (
 	"github.com/martinhg/capiko-ai/internal/copilot"
 	"github.com/martinhg/capiko-ai/internal/instructions"
 	"github.com/martinhg/capiko-ai/internal/odd"
+	"github.com/martinhg/capiko-ai/internal/scoped"
 	"github.com/martinhg/capiko-ai/internal/sdd"
 )
 
@@ -114,6 +115,11 @@ func switchToSDD(svc services) error {
 	if err := removeBlock(svc.host, svc.backup, odd.MarkerStart, odd.MarkerEnd, "odd-remove"); err != nil {
 		return err
 	}
+	if svc.host != nil {
+		if err := cleanModules(scoped.Dir(svc.host.ConfigDir)); err != nil {
+			return err
+		}
+	}
 	if err := applySDD(svc.host, svc.state, svc.backup, sdd.DefaultAssignments(), sdd.DefaultEfforts(), false, nil); err != nil {
 		return err
 	}
@@ -127,13 +133,14 @@ func switchToODD(svc services) error {
 	if err := removeBlock(svc.host, svc.backup, sdd.MarkerStart, sdd.MarkerEnd, "sdd-remove"); err != nil {
 		return err
 	}
-	triggerRules := false
+	triggerRules, modular := false, false
 	if svc.state != nil {
 		if st, err := svc.state.Load(); err == nil {
 			triggerRules = st.TriggerRules
+			modular = st.ModularODD
 		}
 	}
-	if err := applyODD(svc.host, svc.state, svc.backup, triggerRules); err != nil {
+	if err := applyODD(svc.host, svc.state, svc.backup, triggerRules, modular); err != nil {
 		return err
 	}
 	if svc.state != nil {
