@@ -271,6 +271,70 @@ exit 0
 `
 }
 
+// RenderPromptCapture renders the v1 prompt-capture hook file. It fires on
+// EventUserPromptSubmitted (every user prompt) and appends the full stdin
+// payload as a JSONL line to ~/.capiko/session-events/events.jsonl. The hook
+// is always-on when hooks are enabled — it is not user-togglable.
+func RenderPromptCapture() HookFile {
+	return HookFile{
+		Version: SchemaVersion,
+		Hooks: map[string][]Hook{
+			EventUserPromptSubmitted: {{
+				Type:       "command",
+				Matcher:    "",
+				Bash:       renderEventCaptureBashScript("prompt"),
+				PowerShell: renderEventCapturePowerShellScript("prompt"),
+				TimeoutSec: TimeoutSeconds,
+			}},
+		},
+	}
+}
+
+// RenderToolMonitor renders the v1 tool-monitor hook file. It fires on
+// EventPostToolUse (every successful tool execution) and appends the full
+// stdin payload as a JSONL line to ~/.capiko/session-events/events.jsonl.
+// The hook is always-on when hooks are enabled — it is not user-togglable.
+func RenderToolMonitor() HookFile {
+	return HookFile{
+		Version: SchemaVersion,
+		Hooks: map[string][]Hook{
+			EventPostToolUse: {{
+				Type:       "command",
+				Matcher:    "",
+				Bash:       renderEventCaptureBashScript("tool_use"),
+				PowerShell: renderEventCapturePowerShellScript("tool_use"),
+				TimeoutSec: TimeoutSeconds,
+			}},
+		},
+	}
+}
+
+// renderEventCaptureBashScript builds a generic event-capture script that
+// reads the full stdin payload and appends it as a JSONL line with an event
+// type tag and timestamp. The script always exits 0 (non-blocking).
+func renderEventCaptureBashScript(eventType string) string {
+	return fmt.Sprintf(`events_dir="$HOME/.capiko/%s"
+mkdir -p "$events_dir"
+ts="$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
+input="$(cat)"
+printf '{"event":"%s","ts":"%%s","payload":%%s}\n' "$ts" "$input" >> "$events_dir/events.jsonl"
+exit 0
+`, SessionEventsDir, eventType)
+}
+
+// renderEventCapturePowerShellScript is the PowerShell-syntax equivalent of
+// renderEventCaptureBashScript: same JSONL append, same non-blocking exit 0.
+func renderEventCapturePowerShellScript(eventType string) string {
+	return fmt.Sprintf(`$eventsDir = Join-Path $env:USERPROFILE ".capiko" "%s"
+if (-not (Test-Path $eventsDir)) { New-Item -ItemType Directory -Path $eventsDir -Force | Out-Null }
+$ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+$input = [Console]::In.ReadToEnd()
+$line = '{"event":"%s","ts":"' + $ts + '","payload":' + $input + '}'
+Add-Content -Path (Join-Path $eventsDir "events.jsonl") -Value $line
+exit 0
+`, SessionEventsDir, eventType)
+}
+
 // renderPowerShellScript is the PowerShell-syntax equivalent of
 // renderBashScript, implementing the same four patterns and the same
 // permissionDecision contract (REQ-5.2). It is always rendered alongside the
