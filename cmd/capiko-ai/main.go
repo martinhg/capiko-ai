@@ -93,6 +93,16 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "report":
+			// Session report from the captured JSONL event logs.
+			_, exitCode, err := reportCommand(os.Args[1], os.Args[2:], os.Stdout)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "capiko-ai:", err)
+			}
+			if exitCode != 0 {
+				os.Exit(exitCode)
+			}
+			return
 		case "install":
 			// Headless additive-only install: writes every catalog skill and
 			// agent not already present, without launching the TUI.
