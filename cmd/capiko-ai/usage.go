@@ -17,6 +17,7 @@ var commands = map[string]string{
 	"help":           "Show this help message",
 	"install":        "Install all catalog skills and agents",
 	"purge":          "Remove ALL capiko data from the system",
+	"report":         "Report on captured Copilot sessions",
 	"review":         "Manage RDD review kill-switch mode",
 	"skill-registry": "Print the skill index for orchestrators",
 	"sync":           "Sync all managed skills and agents",
