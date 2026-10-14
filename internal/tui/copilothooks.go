@@ -82,6 +82,34 @@ func applyCopilotHooks(host *copilot.Host, store *state.Store, bkp *backup.Store
 		}
 	}
 
+	// Prompt capture hook — logs every user prompt to session events JSONL.
+	pcHf := copilothooks.RenderPromptCapture()
+	pcData, err := copilothooks.Marshal(pcHf)
+	if err != nil {
+		return err
+	}
+	pcTarget := filepath.Join(host.HooksDir, copilothooks.PromptCaptureFile)
+	pcWant := state.Checksum(string(pcData))
+	if copilothooks.HookFileChecksum(pcTarget) != pcWant {
+		if err := copilothooks.WriteHookFile(host.HooksDir, copilothooks.PromptCaptureFile, pcData); err != nil {
+			return err
+		}
+	}
+
+	// Tool monitor hook — logs every tool execution to session events JSONL.
+	tmHf := copilothooks.RenderToolMonitor()
+	tmData, err := copilothooks.Marshal(tmHf)
+	if err != nil {
+		return err
+	}
+	tmTarget := filepath.Join(host.HooksDir, copilothooks.ToolMonitorFile)
+	tmWant := state.Checksum(string(tmData))
+	if copilothooks.HookFileChecksum(tmTarget) != tmWant {
+		if err := copilothooks.WriteHookFile(host.HooksDir, copilothooks.ToolMonitorFile, tmData); err != nil {
+			return err
+		}
+	}
+
 	rec.Checksum = copilothooks.CombinedChecksum(host.HooksDir)
 	if len(rec.Presets) == 0 {
 		rec.Presets = []string{"guardrails"}
@@ -110,6 +138,12 @@ func disableCopilotHooks(host *copilot.Host, store *state.Store, bkp *backup.Sto
 		return err
 	}
 	if err := copilothooks.RemoveHookFile(host.HooksDir, copilothooks.SessionProbeFile); err != nil {
+		return err
+	}
+	if err := copilothooks.RemoveHookFile(host.HooksDir, copilothooks.PromptCaptureFile); err != nil {
+		return err
+	}
+	if err := copilothooks.RemoveHookFile(host.HooksDir, copilothooks.ToolMonitorFile); err != nil {
 		return err
 	}
 	if store != nil {

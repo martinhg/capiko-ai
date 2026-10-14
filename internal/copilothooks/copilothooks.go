@@ -53,6 +53,21 @@ const (
 	// SessionProbeFile is the filename of the rendered session-probe hook
 	// file under copilot.Host.HooksDir.
 	SessionProbeFile = "capiko-sessionprobe.json"
+	// EventUserPromptSubmitted is the hook event name fired on every user
+	// prompt, carrying the full prompt text in the stdin payload.
+	EventUserPromptSubmitted = "userPromptSubmitted"
+	// PromptCaptureFile is the filename of the rendered prompt-capture hook
+	// file under copilot.Host.HooksDir.
+	PromptCaptureFile = "capiko-promptcapture.json"
+	// EventPostToolUse is the hook event name fired after every successful
+	// tool execution, carrying tool name and result in the stdin payload.
+	EventPostToolUse = "postToolUse"
+	// ToolMonitorFile is the filename of the rendered tool-monitor hook
+	// file under copilot.Host.HooksDir.
+	ToolMonitorFile = "capiko-toolmonitor.json"
+	// SessionEventsDir is the subdirectory under ~/.capiko where session
+	// event JSONL files are written by prompt-capture and tool-monitor hooks.
+	SessionEventsDir = "session-events"
 )
 
 // HookFile is the v1 Copilot CLI hook configuration file shape. Hooks is an

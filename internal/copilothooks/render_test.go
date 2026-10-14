@@ -276,6 +276,140 @@ func TestRenderSessionCheck_BashRunsCleanly(t *testing.T) {
 	}
 }
 
+func TestRenderPromptCapture(t *testing.T) {
+	hf := copilothooks.RenderPromptCapture()
+
+	if hf.Version != copilothooks.SchemaVersion {
+		t.Errorf("Version = %d, want %d", hf.Version, copilothooks.SchemaVersion)
+	}
+	hooks, ok := hf.Hooks[copilothooks.EventUserPromptSubmitted]
+	if !ok || len(hooks) != 1 {
+		t.Fatalf("Hooks[%s] = %v, want exactly one entry", copilothooks.EventUserPromptSubmitted, hooks)
+	}
+	h := hooks[0]
+	if h.Type != "command" {
+		t.Errorf("Type = %q, want command", h.Type)
+	}
+	if h.Matcher != "" {
+		t.Errorf("Matcher = %q, want empty", h.Matcher)
+	}
+	if h.TimeoutSec != copilothooks.TimeoutSeconds {
+		t.Errorf("TimeoutSec = %d, want %d", h.TimeoutSec, copilothooks.TimeoutSeconds)
+	}
+	for _, marker := range []string{copilothooks.SessionEventsDir, "events.jsonl", "prompt"} {
+		if !strings.Contains(h.Bash, marker) {
+			t.Errorf("Bash script missing marker %q", marker)
+		}
+		if !strings.Contains(h.PowerShell, marker) {
+			t.Errorf("PowerShell script missing marker %q", marker)
+		}
+	}
+
+	data, err := copilothooks.Marshal(hf)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var round copilothooks.HookFile
+	if err := json.Unmarshal(data, &round); err != nil {
+		t.Fatalf("Marshal output is not valid JSON: %v", err)
+	}
+}
+
+func TestRenderPromptCapture_BashRunsCleanly(t *testing.T) {
+	tmp := t.TempDir()
+	hf := copilothooks.RenderPromptCapture()
+	script := hf.Hooks[copilothooks.EventUserPromptSubmitted][0].Bash
+
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Env = append(os.Environ(), "HOME="+tmp)
+	cmd.Stdin = strings.NewReader(`{"sessionId":"test-123","prompt":"hello world"}`)
+	var errOut bytes.Buffer
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("run prompt capture script: %v\nstderr: %s", err, errOut.String())
+	}
+
+	eventsFile := filepath.Join(tmp, ".capiko", copilothooks.SessionEventsDir, "events.jsonl")
+	data, err := os.ReadFile(eventsFile)
+	if err != nil {
+		t.Fatalf("read events file: %v", err)
+	}
+	line := strings.TrimSpace(string(data))
+	if !strings.Contains(line, `"event":"prompt"`) {
+		t.Errorf("event line missing event type: %s", line)
+	}
+	if !strings.Contains(line, `"sessionId":"test-123"`) {
+		t.Errorf("event line missing payload: %s", line)
+	}
+}
+
+func TestRenderToolMonitor(t *testing.T) {
+	hf := copilothooks.RenderToolMonitor()
+
+	if hf.Version != copilothooks.SchemaVersion {
+		t.Errorf("Version = %d, want %d", hf.Version, copilothooks.SchemaVersion)
+	}
+	hooks, ok := hf.Hooks[copilothooks.EventPostToolUse]
+	if !ok || len(hooks) != 1 {
+		t.Fatalf("Hooks[%s] = %v, want exactly one entry", copilothooks.EventPostToolUse, hooks)
+	}
+	h := hooks[0]
+	if h.Type != "command" {
+		t.Errorf("Type = %q, want command", h.Type)
+	}
+	if h.Matcher != "" {
+		t.Errorf("Matcher = %q, want empty", h.Matcher)
+	}
+	if h.TimeoutSec != copilothooks.TimeoutSeconds {
+		t.Errorf("TimeoutSec = %d, want %d", h.TimeoutSec, copilothooks.TimeoutSeconds)
+	}
+	for _, marker := range []string{copilothooks.SessionEventsDir, "events.jsonl", "tool_use"} {
+		if !strings.Contains(h.Bash, marker) {
+			t.Errorf("Bash script missing marker %q", marker)
+		}
+		if !strings.Contains(h.PowerShell, marker) {
+			t.Errorf("PowerShell script missing marker %q", marker)
+		}
+	}
+
+	data, err := copilothooks.Marshal(hf)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var round copilothooks.HookFile
+	if err := json.Unmarshal(data, &round); err != nil {
+		t.Fatalf("Marshal output is not valid JSON: %v", err)
+	}
+}
+
+func TestRenderToolMonitor_BashRunsCleanly(t *testing.T) {
+	tmp := t.TempDir()
+	hf := copilothooks.RenderToolMonitor()
+	script := hf.Hooks[copilothooks.EventPostToolUse][0].Bash
+
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Env = append(os.Environ(), "HOME="+tmp)
+	cmd.Stdin = strings.NewReader(`{"sessionId":"test-456","toolName":"bash","result":"ok"}`)
+	var errOut bytes.Buffer
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("run tool monitor script: %v\nstderr: %s", err, errOut.String())
+	}
+
+	eventsFile := filepath.Join(tmp, ".capiko", copilothooks.SessionEventsDir, "events.jsonl")
+	data, err := os.ReadFile(eventsFile)
+	if err != nil {
+		t.Fatalf("read events file: %v", err)
+	}
+	line := strings.TrimSpace(string(data))
+	if !strings.Contains(line, `"event":"tool_use"`) {
+		t.Errorf("event line missing event type: %s", line)
+	}
+	if !strings.Contains(line, `"toolName":"bash"`) {
+		t.Errorf("event line missing payload: %s", line)
+	}
+}
+
 func TestRenderGuardrails_Golden(t *testing.T) {
 	for _, tc := range []struct {
 		file    string

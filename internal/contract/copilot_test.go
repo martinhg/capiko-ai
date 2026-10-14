@@ -358,11 +358,23 @@ var knownHookEntryKeys = map[string]bool{
 }
 
 // knownHookEvents is the set of hook event names Copilot CLI v1 recognises.
+// Pinned against the 14-event inventory documented in the Copilot CLI hooks
+// reference (v1.0.81-5, 2026-08-20).
 var knownHookEvents = map[string]bool{
-	"preToolUse":   true,
-	"postToolUse":  true,
-	"sessionStart": true,
-	"sessionEnd":   true,
+	"sessionStart":          true,
+	"sessionEnd":            true,
+	"userPromptSubmitted":   true,
+	"userPromptTransformed": true,
+	"preToolUse":            true,
+	"postToolUse":           true,
+	"postToolUseFailure":    true,
+	"agentStop":             true,
+	"subagentStart":         true,
+	"subagentStop":          true,
+	"notification":          true,
+	"preCompact":            true,
+	"permissionRequest":     true,
+	"errorOccurred":         true,
 }
 
 func TestHookFiles_CopilotCLIContract(t *testing.T) {
@@ -374,6 +386,8 @@ func TestHookFiles_CopilotCLIContract(t *testing.T) {
 		{"guardrails-warn", mustRenderGuardrails(t, copilothooks.PostureWarn)},
 		{"session-check", copilothooks.RenderSessionCheck()},
 		{"session-probe", copilothooks.RenderSessionProbe()},
+		{"prompt-capture", copilothooks.RenderPromptCapture()},
+		{"tool-monitor", copilothooks.RenderToolMonitor()},
 	}
 
 	for _, tc := range hookFiles {
