@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.28.0](https://github.com/martinhg/capiko-ai/compare/v1.27.0...v1.28.0) (2026-10-16)
+
+
+### Features
+
+* **engram:** add upgrade command ([#248](https://github.com/martinhg/capiko-ai/issues/248)) ([7de9da6](https://github.com/martinhg/capiko-ai/commit/7de9da61a7ee33f037e5027d848e4a439473a687))
+* **hooks:** add prompt capture and tool monitor hooks ([#252](https://github.com/martinhg/capiko-ai/issues/252)) ([56e0c8e](https://github.com/martinhg/capiko-ai/commit/56e0c8e6478c9a17fc6ebb01e0104b4881948aef))
+* **memory:** expand engram protocol for v3 tools ([#251](https://github.com/martinhg/capiko-ai/issues/251)) ([dc92184](https://github.com/martinhg/capiko-ai/commit/dc92184589dd70e9ac5db46e474ea9bc6808bf1d))
+* **odd:** add modular orchestrator layout ([#250](https://github.com/martinhg/capiko-ai/issues/250)) ([6a7535b](https://github.com/martinhg/capiko-ai/commit/6a7535bcfbd367825c4b7523bdb3c2e6732f177a))
+* **odd:** add ODD routing block renderer and wiring ([#243](https://github.com/martinhg/capiko-ai/issues/243)) ([81bdc38](https://github.com/martinhg/capiko-ai/commit/81bdc38d58a9f386a105a768904ec5ae843a929a))
+* **odd:** add risk-proportionate review ([#249](https://github.com/martinhg/capiko-ai/issues/249)) ([e143545](https://github.com/martinhg/capiko-ai/commit/e1435451e04970bd5f16a537d0ea3552b18678c8))
+* **odd:** freeze SDD as legacy ([#246](https://github.com/martinhg/capiko-ai/issues/246)) ([2e371ad](https://github.com/martinhg/capiko-ai/commit/2e371adac2cac68666f09a5fa4fe878a7e331306))
+* **session:** add per-session JSONL event collector ([#253](https://github.com/martinhg/capiko-ai/issues/253)) ([364c3d9](https://github.com/martinhg/capiko-ai/commit/364c3d95faae5b9bf355f82eabb1b794c8ba8350))
+* **session:** add report command for session analytics ([#254](https://github.com/martinhg/capiko-ai/issues/254)) ([e0f3d24](https://github.com/martinhg/capiko-ai/commit/e0f3d242cae2bb7f9f642b62ee4bd6c0bc49bf1a))
+* **tui:** add engram lifecycle check and workflow selector ([#247](https://github.com/martinhg/capiko-ai/issues/247)) ([5044a7a](https://github.com/martinhg/capiko-ai/commit/5044a7a20e28cd3045cf3df1a57800cb5055f84a))
+
 ## [1.27.0](https://github.com/martinhg/capiko-ai/compare/v1.26.0...v1.27.0) (2026-10-13)
 
 
