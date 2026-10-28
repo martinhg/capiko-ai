@@ -3,7 +3,7 @@ module github.com/martinhg/capiko-ai
 go 1.26.9
 
 require (
-	charm.land/bubbletea/v2 v2.1.0
+	charm.land/bubbletea/v2 v2.1.1
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/x/ansi v0.11.9
 	golang.org/x/sys v0.49.0
