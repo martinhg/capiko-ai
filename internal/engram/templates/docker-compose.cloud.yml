@@ -13,7 +13,7 @@
 
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     container_name: engram-cloud-postgres
     environment:
       POSTGRES_USER: engram
